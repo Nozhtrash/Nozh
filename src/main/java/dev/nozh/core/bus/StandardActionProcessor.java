@@ -1,9 +1,14 @@
 package dev.nozh.core.bus;
 
+import dev.nozh.api.PerfSnapshot;
 import dev.nozh.core.NozhLogger;
+import dev.nozh.core.config.ConfigManager;
+import dev.nozh.core.config.NozhConfig;
+import dev.nozh.core.intelligence.SessionLearning;
 
 import java.util.Optional;
 import java.util.function.Consumer;
+import java.util.function.Supplier;
 
 /**
  * Standard implementation of ActionProcessor (Contract 2, Paso 2.4).
@@ -30,10 +35,22 @@ public final class StandardActionProcessor implements ActionProcessor {
 
     private final CapabilityExecutor executor;
     private final NozhLogger logger;
+    private final SessionLearning sessionLearning;
+    private final Supplier<PerfSnapshot> perfSnapshotSupplier;
 
     public StandardActionProcessor(CapabilityExecutor executor, NozhLogger logger) {
+        this(executor, logger, null, PerfSnapshot::empty);
+    }
+
+    public StandardActionProcessor(
+            CapabilityExecutor executor,
+            NozhLogger logger,
+            SessionLearning sessionLearning,
+            Supplier<PerfSnapshot> perfSnapshotSupplier) {
         this.executor = executor;
         this.logger = logger;
+        this.sessionLearning = sessionLearning;
+        this.perfSnapshotSupplier = perfSnapshotSupplier != null ? perfSnapshotSupplier : PerfSnapshot::empty;
     }
 
     @Override
@@ -69,6 +86,7 @@ public final class StandardActionProcessor implements ActionProcessor {
     private void processApply(Command.ApplyCapability cmd, long startedAt, Consumer<CommandExecutionReport> callback) {
         CapabilityId capability = cmd.capability();
         CapabilityValue value = cmd.value();
+        PerfSnapshot beforeSnapshot = perfSnapshotSupplier.get();
 
         // Store old value for potential rollback
         Optional<CapabilityValue> oldValue = Optional.empty();
@@ -147,6 +165,7 @@ public final class StandardActionProcessor implements ActionProcessor {
                 error,
                 rollbackReason);
 
+        recordLearningOutcome(capability, finalState, beforeSnapshot, perfSnapshotSupplier.get());
         callback.accept(report);
     }
 
@@ -197,6 +216,40 @@ public final class StandardActionProcessor implements ActionProcessor {
                 Optional.of("Benchmark not implemented yet (Phase 7)"),
                 Optional.empty());
         callback.accept(report);
+    }
+
+    private void recordLearningOutcome(
+            CapabilityId capability,
+            CommandLifecycle finalState,
+            PerfSnapshot beforeSnapshot,
+            PerfSnapshot afterSnapshot) {
+        if (sessionLearning == null || capability == null) {
+            return;
+        }
+
+        if (finalState != CommandLifecycle.SUCCESS) {
+            sessionLearning.recordFailure(capability);
+            return;
+        }
+
+        if (beforeSnapshot == null || afterSnapshot == null
+                || !beforeSnapshot.sufficientData() || !afterSnapshot.sufficientData()) {
+            sessionLearning.recordSuccess(capability, 0.0);
+            return;
+        }
+
+        double avgDelta = beforeSnapshot.avgFrametimeMs() - afterSnapshot.avgFrametimeMs();
+        double p95Delta = beforeSnapshot.p95FrametimeMs() - afterSnapshot.p95FrametimeMs();
+
+        NozhConfig config = ConfigManager.getConfig();
+        boolean improved = avgDelta >= config.improvementEpsilonAvgMs
+                || p95Delta >= config.improvementEpsilonP95Ms;
+
+        if (improved) {
+            sessionLearning.recordSuccess(capability, Math.max(0.0, avgDelta));
+        } else {
+            sessionLearning.recordFailure(capability);
+        }
     }
 
     /**
