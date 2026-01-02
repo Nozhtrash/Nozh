@@ -137,7 +137,7 @@ public final class GraphicsModeProvider implements CapabilityProvider {
 
         @Override
         public double expectedGainMs() {
-            return 3.0; // Significant gain
+            return 1.8; // Moderate gain
         }
 
         @Override

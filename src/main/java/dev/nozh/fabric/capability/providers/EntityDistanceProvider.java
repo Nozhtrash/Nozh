@@ -186,7 +186,7 @@ public final class EntityDistanceProvider implements CapabilityProvider {
             // - 75% → 50%: ~2-3 FPS
             //
             // Scenario-dependent: high gain in cities, low in plains
-            return 0.9;
+            return 0.8;
         }
 
         @Override
