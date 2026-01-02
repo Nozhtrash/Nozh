@@ -150,6 +150,24 @@ public record RuntimeState(
     }
 
     /**
+     * Update config-driven flags (immutable).
+     */
+    public RuntimeState withConfig(dev.nozh.core.config.NozhConfig config) {
+        return new RuntimeState(
+                config.enabled,
+                safeMode,
+                config.allowAutoTuning,
+                config.debugLogs,
+                governorDisabled, governorCooldownActive, governorLastActionTimestamp,
+                benchmarkRunning, benchmarkStartTimestamp,
+                pendingActionsCount, executionHistorySize, lastSnapshotHistorySize,
+                sessionChangesCount,
+                avgFrametimeMs, p95FrametimeMs, spikeCount,
+                sessionStartTime, stateVersion,
+                currentScenario);
+    }
+
+    /**
      * Create state from config (initialization).
      */
     public static RuntimeState fromConfig(dev.nozh.core.config.NozhConfig config) {
