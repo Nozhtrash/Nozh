@@ -8,8 +8,11 @@ import dev.nozh.core.matrix.ActionCandidate;
 import dev.nozh.core.matrix.ActionMatrix;
 import dev.nozh.core.matrix.ActionSuccessTracker;
 import dev.nozh.core.matrix.ConfidenceCalculator;
+import dev.nozh.core.compatibility.ModConflictDetector;
 import dev.nozh.core.state.RuntimeState;
 import dev.nozh.core.state.StateStore;
+import dev.nozh.core.state.ActionHistoryEntry;
+import dev.nozh.core.bus.CapabilityValue;
 
 import java.util.Optional;
 
@@ -36,6 +39,7 @@ public final class GovernorRunner {
     private final dev.nozh.core.monitoring.SystemMonitor systemMonitor;
     private final dev.nozh.core.monitoring.ChunkLoadMonitor chunkLoadMonitor;
     private final dev.nozh.core.context.ScenarioDetector scenarioDetector;
+    private final ModConflictDetector conflictDetector;
 
     private int tickCounter = 0;
     private static final int POLL_INTERVAL_TICKS = 100; // ~5 seconds at 20tps
@@ -59,6 +63,7 @@ public final class GovernorRunner {
         this.stateStore = stateStore;
         this.logger = logger;
         this.scenarioDetector = scenarioDetector;
+        this.conflictDetector = new ModConflictDetector();
 
         // Initialize intelligent components
         this.predictiveAnalyzer = new dev.nozh.core.governor.PredictiveAnalyzer();
@@ -115,6 +120,11 @@ public final class GovernorRunner {
 
         // 3. Detect performance bound from telemetry
         String currentBound = detectBound(state);
+        try {
+            stateStore.update(currentState -> currentState.withGovernorSnapshot(mode, currentBound));
+        } catch (Exception e) {
+            // Ignore update failure
+        }
 
         long now = System.currentTimeMillis();
 
@@ -148,6 +158,13 @@ public final class GovernorRunner {
         }
 
         ActionCandidate decision = decisionOpt.get();
+        String steward = conflictDetector.getSteward(decision.capabilityId());
+        try {
+            stateStore.update(currentState -> currentState.withDecision(decision.reason(), now, steward));
+        } catch (Exception e) {
+            // Ignore update failure
+        }
+        String actionSummary = formatActionSummary(decision);
 
         // Log decision
         logger.info("Governor decision: " + decision.reason());
@@ -166,6 +183,16 @@ public final class GovernorRunner {
                     predictiveAnalyzer.reset();
                 } else {
                     logger.warn("Governor action failed: " + report.error().orElse("unknown"));
+                }
+
+                ActionHistoryEntry entry = new ActionHistoryEntry(
+                        System.currentTimeMillis(),
+                        actionSummary,
+                        report.finalState());
+                try {
+                    stateStore.update(currentState -> currentState.withRecentAction(entry, 5));
+                } catch (Exception e) {
+                    logger.warn("Failed to update action history: " + e.getMessage());
                 }
             });
 
@@ -237,5 +264,35 @@ public final class GovernorRunner {
 
         // Default auto mode
         return dev.nozh.core.governor.GovernorMode.AUTO_CONSERVATIVE;
+    }
+
+    private String formatActionSummary(ActionCandidate decision) {
+        if (decision == null) {
+            return "";
+        }
+        String value = formatCapabilityValue(decision.targetValue());
+        if (value.isEmpty()) {
+            return decision.capabilityId().name();
+        }
+        return decision.capabilityId().name() + "=" + value;
+    }
+
+    private String formatCapabilityValue(CapabilityValue value) {
+        if (value == null) {
+            return "";
+        }
+        if (value instanceof CapabilityValue.IntValue intValue) {
+            return Integer.toString(intValue.value());
+        }
+        if (value instanceof CapabilityValue.EnumValue enumValue) {
+            return enumValue.name();
+        }
+        if (value instanceof CapabilityValue.BoolValue boolValue) {
+            return Boolean.toString(boolValue.value());
+        }
+        if (value instanceof CapabilityValue.FloatValue floatValue) {
+            return Float.toString(floatValue.value());
+        }
+        return value.toString();
     }
 }

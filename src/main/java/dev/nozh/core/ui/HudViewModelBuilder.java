@@ -1,13 +1,13 @@
 package dev.nozh.core.ui;
 
+import dev.nozh.core.bus.CommandLifecycle;
 import dev.nozh.core.capability.CapabilityProvider;
 import dev.nozh.core.capability.ProviderRegistry;
 import dev.nozh.core.capability.ProviderStatus;
-import dev.nozh.core.governor.GovernorMode;
 import dev.nozh.core.issues.Issue;
 import dev.nozh.core.issues.IssueSeverity;
-import dev.nozh.core.issues.ParanoiaLevel;
 import dev.nozh.core.preset.HardwareTier;
+import dev.nozh.core.state.ActionHistoryEntry;
 import dev.nozh.core.state.RuntimeState;
 import dev.nozh.core.telemetry.TelemetrySnapshot;
 
@@ -87,30 +87,37 @@ public final class HudViewModelBuilder {
             }
         }
 
-        // TODO: Get from RuntimeState when DecisionReport is integrated
-        String lastDecisionReason = "";
-        long lastDecisionTimestamp = 0;
+        String lastDecisionReason = state.lastDecisionReason();
+        long lastDecisionTimestamp = state.lastDecisionTimestamp();
+        String directorSteward = state.lastDecisionSteward();
+        String currentBound = state.currentBound();
 
-        // TODO: Get from RuntimeState when Benchmark is integrated
-        boolean benchmarkRunning = false;
-        String benchmarkValidity = "NONE";
+        boolean benchmarkRunning = state.benchmarkRunning();
+        String benchmarkValidity = state.benchmarkValidity();
 
-        // TODO: Get from RuntimeState execution history
-        List<String> historyEntries = List.of();
+        List<HudViewModel.ActionHistoryEntryView> recentActions = new ArrayList<>();
+        List<ActionHistoryEntry> stateActions = state.recentActions();
+        if (stateActions != null) {
+            for (ActionHistoryEntry entry : stateActions) {
+                recentActions.add(new HudViewModel.ActionHistoryEntryView(
+                        entry.timestampMillis(),
+                        entry.actionSummary(),
+                        formatOutcome(entry.outcome())));
+            }
+        }
 
-        // TODO: Get actual bound from state (for now, placeholder)
-        String currentBound = "BALANCED";
-
-        // TODO: Get governor mode from state (for now, default)
-        GovernorMode governorMode = GovernorMode.AUTO_CONSERVATIVE;
-
-        // TODO: Get paranoia level from state (for now, default)
-        ParanoiaLevel paranoiaLevel = ParanoiaLevel.NORMAL;
+        String lastActionSummary = "";
+        String lastActionOutcome = "";
+        if (!recentActions.isEmpty()) {
+            HudViewModel.ActionHistoryEntryView lastEntry = recentActions.get(recentActions.size() - 1);
+            lastActionSummary = lastEntry.actionSummary();
+            lastActionOutcome = lastEntry.outcome();
+        }
 
         return new HudViewModel(
-                true, // systemEnabled (TODO: from config)
-                governorMode,
-                paranoiaLevel,
+                state.enabled(),
+                state.governorMode(),
+                state.paranoiaLevel(),
                 tier != null ? tier : HardwareTier.MEDIUM,
                 uptimeSeconds,
                 currentBound,
@@ -133,13 +140,36 @@ public final class HudViewModelBuilder {
 
                 lastDecisionReason,
                 lastDecisionTimestamp,
+                directorSteward,
+                lastActionSummary,
+                lastActionOutcome,
+                state.currentScenario(),
 
                 benchmarkRunning,
                 benchmarkValidity,
 
                 providerVMs,
                 issues != null ? new ArrayList<>(issues) : List.of(),
-                historyEntries);
+                recentActions);
+    }
+
+    private static String formatOutcome(CommandLifecycle outcome) {
+        if (outcome == null) {
+            return "";
+        }
+        if (outcome == CommandLifecycle.SUCCESS) {
+            return "SUCCESS";
+        }
+        if (outcome == CommandLifecycle.ROLLED_BACK) {
+            return "ROLLBACK";
+        }
+        if (outcome == CommandLifecycle.FAILED) {
+            return "FAILED";
+        }
+        if (outcome == CommandLifecycle.ABORTED) {
+            return "ABORTED";
+        }
+        return outcome.name();
     }
 
     private HudViewModelBuilder() {

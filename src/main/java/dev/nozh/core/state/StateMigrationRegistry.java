@@ -1,8 +1,11 @@
 package dev.nozh.core.state;
 
 import dev.nozh.NozhConstants;
+import dev.nozh.core.governor.GovernorMode;
+import dev.nozh.core.issues.ParanoiaLevel;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -18,22 +21,55 @@ import java.util.Map;
  */
 public final class StateMigrationRegistry {
 
-    private static final int CURRENT_VERSION = 1; // Current state version
+    private static final int CURRENT_VERSION = 3; // Current state version
 
     private final Map<Integer, StateMigrator> migrators = new HashMap<>();
 
     public StateMigrationRegistry() {
-        // Register migrators here as versions evolve
-        // Example (when v2 comes):
-        // registerMigrator(1, oldState -> {
-        // // Migrate v1 -> v2
-        // return new RuntimeState(
-        // oldState.enabled(),
-        // ... existing fields ...
-        // false, // NEW: benchmarkRunning
-        // 2 // NEW: stateVersion
-        // );
-        // });
+        registerMigrator(2, oldState -> {
+            GovernorMode mode = oldState.governorMode() != null
+                    ? oldState.governorMode()
+                    : GovernorMode.OFF;
+            ParanoiaLevel paranoia = oldState.paranoiaLevel() != null
+                    ? oldState.paranoiaLevel()
+                    : ParanoiaLevel.NORMAL;
+            String bound = oldState.currentBound() != null ? oldState.currentBound() : "BALANCED";
+            String reason = oldState.lastDecisionReason() != null ? oldState.lastDecisionReason() : "";
+            String steward = oldState.lastDecisionSteward() != null ? oldState.lastDecisionSteward() : "NOZH";
+            String validity = oldState.benchmarkValidity() != null ? oldState.benchmarkValidity() : "NONE";
+            List<ActionHistoryEntry> recentActions = oldState.recentActions() != null
+                    ? oldState.recentActions()
+                    : List.of();
+
+            return new RuntimeState(
+                    oldState.enabled(),
+                    oldState.safeMode(),
+                    oldState.autoTuning(),
+                    oldState.debugLogs(),
+                    oldState.governorDisabled(),
+                    oldState.governorCooldownActive(),
+                    oldState.governorLastActionTimestamp(),
+                    oldState.benchmarkRunning(),
+                    validity,
+                    oldState.benchmarkStartTimestamp(),
+                    oldState.pendingActionsCount(),
+                    oldState.executionHistorySize(),
+                    oldState.lastSnapshotHistorySize(),
+                    oldState.sessionChangesCount(),
+                    oldState.avgFrametimeMs(),
+                    oldState.p95FrametimeMs(),
+                    oldState.spikeCount(),
+                    oldState.sessionStartTime(),
+                    CURRENT_VERSION,
+                    oldState.currentScenario(),
+                    mode,
+                    paranoia,
+                    bound,
+                    reason,
+                    oldState.lastDecisionTimestamp(),
+                    steward,
+                    recentActions);
+        });
 
         NozhConstants.LOGGER.debug("StateMigrationRegistry initialized (current version: {})", CURRENT_VERSION);
     }
