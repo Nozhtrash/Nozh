@@ -9,6 +9,8 @@
  */
 package dev.nozh.core.state;
 
+import java.util.Optional;
+
 /**
  * Runtime state (Contract 1).
  *
@@ -29,6 +31,7 @@ public record RuntimeState(
         long governorLastActionTimestamp,
         boolean benchmarkRunning,
         long benchmarkStartTimestamp,
+        Optional<PendingAction> pendingAction,
         int pendingActionsCount,
         int executionHistorySize,
         int lastSnapshotHistorySize,
@@ -55,6 +58,7 @@ public record RuntimeState(
                 0L, // governorLastActionTimestamp
                 false, // benchmarkRunning
                 0L, // benchmarkStartTimestamp
+                Optional.empty(), // pendingAction
                 0, // pendingActionsCount
                 0, // executionHistorySize
                 0, // lastSnapshotHistorySize
@@ -70,17 +74,39 @@ public record RuntimeState(
     /**
      * Update after governor action (immutable).
      */
-    public RuntimeState withGovernorAction(long timestamp) {
+    public RuntimeState withGovernorAction(long timestamp, PendingAction pendingAction) {
+        Optional<PendingAction> pending = Optional.ofNullable(pendingAction);
         return new RuntimeState(
                 enabled, safeMode, autoTuning, debugLogs,
                 governorDisabled,
                 true, // governorCooldownActive = true after action
                 timestamp, // governorLastActionTimestamp
                 benchmarkRunning, benchmarkStartTimestamp,
-                pendingActionsCount,
+                pending,
+                pending.isPresent() ? 1 : 0,
                 executionHistorySize + 1, // increment history
                 lastSnapshotHistorySize,
                 sessionChangesCount + 1, // increment changes
+                avgFrametimeMs, p95FrametimeMs, spikeCount,
+                sessionStartTime, stateVersion,
+                currentScenario);
+    }
+
+    /**
+     * Clear any pending action (immutable).
+     */
+    public RuntimeState withPendingActionCleared() {
+        return new RuntimeState(
+                enabled, safeMode, autoTuning, debugLogs,
+                governorDisabled,
+                governorCooldownActive,
+                governorLastActionTimestamp,
+                benchmarkRunning, benchmarkStartTimestamp,
+                Optional.empty(),
+                0,
+                executionHistorySize,
+                lastSnapshotHistorySize,
+                sessionChangesCount,
                 avgFrametimeMs, p95FrametimeMs, spikeCount,
                 sessionStartTime, stateVersion,
                 currentScenario);
@@ -95,6 +121,7 @@ public record RuntimeState(
                 running ? true : governorDisabled, // disable governor during benchmark
                 governorCooldownActive, governorLastActionTimestamp,
                 running, startTime,
+                pendingAction,
                 pendingActionsCount, executionHistorySize, lastSnapshotHistorySize,
                 sessionChangesCount,
                 avgFrametimeMs, p95FrametimeMs, spikeCount,
@@ -110,6 +137,7 @@ public record RuntimeState(
                 enabled, safeMode, autoTuning, debugLogs,
                 governorDisabled, governorCooldownActive, governorLastActionTimestamp,
                 benchmarkRunning, benchmarkStartTimestamp,
+                pendingAction,
                 pendingActionsCount, executionHistorySize, lastSnapshotHistorySize,
                 sessionChangesCount,
                 avg, p95, spikes,
@@ -127,6 +155,7 @@ public record RuntimeState(
                 false, // governorCooldownActive = false
                 governorLastActionTimestamp,
                 benchmarkRunning, benchmarkStartTimestamp,
+                pendingAction,
                 pendingActionsCount, executionHistorySize, lastSnapshotHistorySize,
                 sessionChangesCount,
                 avgFrametimeMs, p95FrametimeMs, spikeCount,
@@ -142,6 +171,7 @@ public record RuntimeState(
                 enabled, safeMode, autoTuning, debugLogs,
                 governorDisabled, governorCooldownActive, governorLastActionTimestamp,
                 benchmarkRunning, benchmarkStartTimestamp,
+                pendingAction,
                 pendingActionsCount, executionHistorySize, lastSnapshotHistorySize,
                 sessionChangesCount,
                 avgFrametimeMs, p95FrametimeMs, spikeCount,
@@ -163,6 +193,7 @@ public record RuntimeState(
                 0L, // governorLastActionTimestamp
                 false, // benchmarkRunning (runtime only)
                 0L, // benchmarkStartTimestamp
+                Optional.empty(), // pendingAction
                 0, // pendingActionsCount
                 0, // executionHistorySize
                 0, // lastSnapshotHistorySize

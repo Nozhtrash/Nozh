@@ -4,10 +4,14 @@ import dev.nozh.core.NozhLogger;
 import dev.nozh.core.bus.ActionBus;
 import dev.nozh.core.bus.Command;
 import dev.nozh.core.capability.ProviderRegistry;
+import dev.nozh.core.config.ConfigManager;
+import dev.nozh.core.config.NozhConfig;
+import dev.nozh.core.intelligence.SessionLearning;
 import dev.nozh.core.matrix.ActionCandidate;
 import dev.nozh.core.matrix.ActionMatrix;
 import dev.nozh.core.matrix.ActionSuccessTracker;
 import dev.nozh.core.matrix.ConfidenceCalculator;
+import dev.nozh.core.state.PendingAction;
 import dev.nozh.core.state.RuntimeState;
 import dev.nozh.core.state.StateStore;
 
@@ -30,6 +34,8 @@ public final class GovernorRunner {
     private final ActionBus actionBus;
     private final NozhLogger logger;
     private final StateStore stateStore;
+    private final ProviderRegistry providerRegistry;
+    private final SessionLearning sessionLearning;
 
     // Intelligent components
     private final dev.nozh.core.governor.PredictiveAnalyzer predictiveAnalyzer;
@@ -46,7 +52,7 @@ public final class GovernorRunner {
             ActionBus actionBus,
             StateStore stateStore,
             NozhLogger logger,
-            dev.nozh.core.intelligence.SessionLearning sessionLearning,
+            SessionLearning sessionLearning,
             dev.nozh.core.context.ScenarioDetector scenarioDetector) {
         ActionMatrix matrix = new ActionMatrix(
                 registry,
@@ -59,6 +65,8 @@ public final class GovernorRunner {
         this.stateStore = stateStore;
         this.logger = logger;
         this.scenarioDetector = scenarioDetector;
+        this.providerRegistry = registry;
+        this.sessionLearning = sessionLearning;
 
         // Initialize intelligent components
         this.predictiveAnalyzer = new dev.nozh.core.governor.PredictiveAnalyzer();
@@ -90,6 +98,21 @@ public final class GovernorRunner {
 
         // Get state snapshot (now contains latest scenario)
         RuntimeState state = stateStore.snapshotSafe();
+        long now = System.currentTimeMillis();
+        NozhConfig config = ConfigManager.getConfig();
+
+        if (state.pendingAction().isPresent()) {
+            PendingAction pending = state.pendingAction().get();
+            long elapsed = now - pending.timestampMillis();
+            if (elapsed < config.rollbackWindowMillis) {
+                logger.debug(String.format("Pending evaluation in progress (%dms/%dms)",
+                        elapsed, config.rollbackWindowMillis));
+                return;
+            }
+
+            evaluatePendingAction(state, pending, config, now);
+            return;
+        }
 
         // Feed current frametime to predictive analyzer
         if (state.avgFrametimeMs() > 0) {
@@ -115,8 +138,6 @@ public final class GovernorRunner {
 
         // 3. Detect performance bound from telemetry
         String currentBound = detectBound(state);
-
-        long now = System.currentTimeMillis();
 
         // 4. Check cooldown (NO CASCADE) with adaptive window
         long lastActionTimestamp = state.governorLastActionTimestamp();
@@ -154,6 +175,15 @@ public final class GovernorRunner {
 
         // Dispatch via ActionBus
         if (decision.targetValue() != null) {
+            Optional<dev.nozh.core.bus.CapabilityValue> previousValue = providerRegistry.get(decision.capabilityId())
+                    .flatMap(provider -> provider.getCurrentValueSafe());
+            PendingAction pending = new PendingAction(
+                    now,
+                    decision.capabilityId(),
+                    previousValue,
+                    decision.targetValue(),
+                    state.avgFrametimeMs(),
+                    state.p95FrametimeMs());
             Command cmd = new Command.ApplyCapability(
                     decision.capabilityId(),
                     decision.targetValue());
@@ -171,7 +201,7 @@ public final class GovernorRunner {
 
             // Update state after action dispatch
             try {
-                stateStore.update(currentState -> currentState.withGovernorAction(now));
+                stateStore.update(currentState -> currentState.withGovernorAction(now, pending));
             } catch (Exception e) {
                 logger.warn("Failed to update state after governor action: " + e.getMessage());
             }
@@ -237,5 +267,48 @@ public final class GovernorRunner {
 
         // Default auto mode
         return dev.nozh.core.governor.GovernorMode.AUTO_CONSERVATIVE;
+    }
+
+    private void evaluatePendingAction(RuntimeState state, PendingAction pending, NozhConfig config, long now) {
+        double currentAvg = state.avgFrametimeMs();
+        double currentP95 = state.p95FrametimeMs();
+
+        boolean telemetryValid = currentAvg >= 0
+                && currentP95 >= 0
+                && pending.baselineAvgMs() >= 0
+                && pending.baselineP95Ms() >= 0;
+
+        boolean worsened = !telemetryValid
+                || currentAvg > pending.baselineAvgMs() + config.improvementEpsilonAvgMs
+                || currentP95 > pending.baselineP95Ms() + config.improvementEpsilonP95Ms;
+
+        if (worsened) {
+            logger.warn(String.format(
+                    "Pending action worsened telemetry (avg %.2f→%.2f, p95 %.2f→%.2f), rolling back",
+                    pending.baselineAvgMs(), currentAvg, pending.baselineP95Ms(), currentP95));
+            Command rollbackCommand = pending.previousValue()
+                    .map(previous -> new Command.ApplyCapability(pending.capability(), previous))
+                    .orElseGet(() -> new Command.ResetCapability(pending.capability()));
+            actionBus.dispatch(rollbackCommand, report -> {
+                if (report.succeeded()) {
+                    logger.info("Rollback action succeeded");
+                } else {
+                    logger.warn("Rollback action failed: " + report.error().orElse("unknown"));
+                }
+            });
+            sessionLearning.recordFailure(pending.capability());
+        } else {
+            double gainMs = Math.max(0.0, pending.baselineAvgMs() - currentAvg);
+            logger.info(String.format(
+                    "Pending action improved telemetry (avg %.2f→%.2f, p95 %.2f→%.2f)",
+                    pending.baselineAvgMs(), currentAvg, pending.baselineP95Ms(), currentP95));
+            sessionLearning.recordSuccess(pending.capability(), gainMs);
+        }
+
+        try {
+            stateStore.update(currentState -> currentState.withPendingActionCleared());
+        } catch (Exception e) {
+            logger.warn("Failed to clear pending governor action: " + e.getMessage());
+        }
     }
 }
