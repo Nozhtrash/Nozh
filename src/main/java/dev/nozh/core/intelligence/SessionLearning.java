@@ -7,7 +7,12 @@ import com.google.gson.GsonBuilder;
 
 import java.io.File;
 import java.io.FileReader;
-import java.io.FileWriter;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
+import java.nio.file.StandardOpenOption;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -24,13 +29,22 @@ import java.util.Map;
 public final class SessionLearning {
 
     private static final String STATS_FILE = "session_stats.json";
+    private static final String STATS_TMP_FILE = "session_stats.json.tmp";
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
+    private static final long SAVE_INTERVAL_MILLIS = 60000;
 
     private final Map<String, ActionStats> history = new HashMap<>();
     private final File statsFile;
+    private final Path statsPath;
+    private final Path tmpPath;
+    private int lastSavedHash = 0;
+    private long lastSaveMillis = 0;
+    private boolean dirty = false;
 
     public SessionLearning(File configDir) {
         this.statsFile = new File(configDir, STATS_FILE);
+        this.statsPath = statsFile.toPath();
+        this.tmpPath = new File(configDir, STATS_TMP_FILE).toPath();
         load();
     }
 
@@ -47,6 +61,7 @@ public final class SessionLearning {
         stats.lastSuccessTime = System.currentTimeMillis();
         stats.totalFpsGain += fpsGainMs;
         stats.avgFpsGain = stats.totalFpsGain / stats.successCount;
+        dirty = true;
     }
 
     /**
@@ -60,6 +75,7 @@ public final class SessionLearning {
         stats.totalAttempts++;
         stats.failureCount++;
         stats.lastFailureTime = System.currentTimeMillis();
+        dirty = true;
     }
 
     /**
@@ -124,21 +140,71 @@ public final class SessionLearning {
      * Called on shutdown or periodically.
      */
     public void save() {
+        saveInternal(true);
+    }
+
+    /**
+     * Save stats to disk if the interval has elapsed.
+     */
+    public void saveIfDue() {
+        saveInternal(false);
+    }
+
+    private void saveInternal(boolean force) {
         try {
-            // Ensure parent directory exists
+            long now = System.currentTimeMillis();
+            if (!force) {
+                if (!dirty || now - lastSaveMillis < SAVE_INTERVAL_MILLIS) {
+                    return;
+                }
+            }
+
             File parent = statsFile.getParentFile();
             if (parent != null && !parent.exists()) {
                 parent.mkdirs();
             }
 
-            // Write JSON
-            try (FileWriter writer = new FileWriter(statsFile)) {
-                GSON.toJson(history, writer);
+            String json = GSON.toJson(history);
+            int currentHash = json.hashCode();
+            if (!force && currentHash == lastSavedHash) {
+                dirty = false;
+                lastSaveMillis = now;
+                return;
             }
 
+            Files.writeString(
+                    tmpPath,
+                    json,
+                    StandardCharsets.UTF_8,
+                    StandardOpenOption.CREATE,
+                    StandardOpenOption.TRUNCATE_EXISTING,
+                    StandardOpenOption.WRITE);
+
+            Files.move(
+                    tmpPath,
+                    statsPath,
+                    StandardCopyOption.REPLACE_EXISTING,
+                    StandardCopyOption.ATOMIC_MOVE);
+
+            lastSavedHash = currentHash;
+            lastSaveMillis = now;
+            dirty = false;
+
             NozhConstants.LOGGER.info("Session learning stats saved ({} entries)", history.size());
-        } catch (Exception e) {
+        } catch (IOException e) {
             NozhConstants.LOGGER.warn("Failed to save session stats: {}", e.getMessage());
+
+            try {
+                Files.deleteIfExists(tmpPath);
+            } catch (IOException cleanup) {
+            }
+
+            try {
+                String json = GSON.toJson(history);
+                Files.writeString(statsPath, json, StandardCharsets.UTF_8,
+                        StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.WRITE);
+            } catch (IOException ignored) {
+            }
         }
     }
 
@@ -159,6 +225,8 @@ public final class SessionLearning {
 
             if (loaded != null) {
                 history.putAll(loaded);
+                lastSavedHash = GSON.toJson(history).hashCode();
+                lastSaveMillis = System.currentTimeMillis();
                 NozhConstants.LOGGER.info("Session learning loaded ({} entries)", history.size());
             }
         } catch (Exception e) {
