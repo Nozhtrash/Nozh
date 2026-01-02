@@ -36,6 +36,8 @@ public record RuntimeState(
         double avgFrametimeMs,
         double p95FrametimeMs,
         int spikeCount,
+        String lastDecisionReason,
+        long lastDecisionTimestamp,
         long sessionStartTime,
         int stateVersion,
         dev.nozh.core.context.Scenario currentScenario) {
@@ -62,6 +64,8 @@ public record RuntimeState(
                 -1.0, // avgFrametimeMs (sentinel)
                 -1.0, // p95FrametimeMs (sentinel)
                 0, // spikeCount
+                "",
+                0L,
                 System.currentTimeMillis(), // sessionStartTime
                 CURRENT_VERSION,
                 dev.nozh.core.context.Scenario.STANDARD);
@@ -82,6 +86,8 @@ public record RuntimeState(
                 lastSnapshotHistorySize,
                 sessionChangesCount + 1, // increment changes
                 avgFrametimeMs, p95FrametimeMs, spikeCount,
+                lastDecisionReason,
+                lastDecisionTimestamp,
                 sessionStartTime, stateVersion,
                 currentScenario);
     }
@@ -98,6 +104,8 @@ public record RuntimeState(
                 pendingActionsCount, executionHistorySize, lastSnapshotHistorySize,
                 sessionChangesCount,
                 avgFrametimeMs, p95FrametimeMs, spikeCount,
+                lastDecisionReason,
+                lastDecisionTimestamp,
                 sessionStartTime, stateVersion,
                 currentScenario);
     }
@@ -113,6 +121,8 @@ public record RuntimeState(
                 pendingActionsCount, executionHistorySize, lastSnapshotHistorySize,
                 sessionChangesCount,
                 avg, p95, spikes,
+                lastDecisionReason,
+                lastDecisionTimestamp,
                 sessionStartTime, stateVersion,
                 currentScenario);
     }
@@ -130,6 +140,8 @@ public record RuntimeState(
                 pendingActionsCount, executionHistorySize, lastSnapshotHistorySize,
                 sessionChangesCount,
                 avgFrametimeMs, p95FrametimeMs, spikeCount,
+                lastDecisionReason,
+                lastDecisionTimestamp,
                 sessionStartTime, stateVersion,
                 currentScenario);
     }
@@ -145,8 +157,27 @@ public record RuntimeState(
                 pendingActionsCount, executionHistorySize, lastSnapshotHistorySize,
                 sessionChangesCount,
                 avgFrametimeMs, p95FrametimeMs, spikeCount,
+                lastDecisionReason,
+                lastDecisionTimestamp,
                 sessionStartTime, stateVersion,
                 scenario);
+    }
+
+    /**
+     * Update last decision (immutable).
+     */
+    public RuntimeState withDecision(String reason, long timestamp) {
+        return new RuntimeState(
+                enabled, safeMode, autoTuning, debugLogs,
+                governorDisabled, governorCooldownActive, governorLastActionTimestamp,
+                benchmarkRunning, benchmarkStartTimestamp,
+                pendingActionsCount, executionHistorySize, lastSnapshotHistorySize,
+                sessionChangesCount,
+                avgFrametimeMs, p95FrametimeMs, spikeCount,
+                reason != null ? reason : "",
+                timestamp,
+                sessionStartTime, stateVersion,
+                currentScenario);
     }
 
     /**
@@ -170,6 +201,8 @@ public record RuntimeState(
                 -1.0, // avgFrametimeMs
                 -1.0, // p95FrametimeMs
                 0, // spikeCount
+                "",
+                0L,
                 System.currentTimeMillis(),
                 CURRENT_VERSION,
                 dev.nozh.core.context.Scenario.STANDARD);

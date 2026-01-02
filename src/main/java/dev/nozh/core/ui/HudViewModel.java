@@ -64,7 +64,8 @@ public record HudViewModel(
     public record ProviderViewModel(
             String capabilityId,
             ProviderStatus status,
-            String statusReason // Empty string if no reason
+            String statusReason, // Empty string if no reason
+            String steward
     ) {
     }
 

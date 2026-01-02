@@ -3,6 +3,7 @@ package dev.nozh.core.ui;
 import dev.nozh.core.capability.CapabilityProvider;
 import dev.nozh.core.capability.ProviderRegistry;
 import dev.nozh.core.capability.ProviderStatus;
+import dev.nozh.core.compat.CompatService;
 import dev.nozh.core.governor.GovernorMode;
 import dev.nozh.core.issues.Issue;
 import dev.nozh.core.issues.IssueSeverity;
@@ -70,7 +71,8 @@ public final class HudViewModelBuilder {
             providerVMs.add(new HudViewModel.ProviderViewModel(
                     provider.id().toString(),
                     status,
-                    provider.statusReason().orElse("")));
+                    provider.statusReason().orElse(""),
+                    CompatService.getSteward(provider.id())));
         }
 
         // Issues summary
@@ -87,9 +89,8 @@ public final class HudViewModelBuilder {
             }
         }
 
-        // TODO: Get from RuntimeState when DecisionReport is integrated
-        String lastDecisionReason = "";
-        long lastDecisionTimestamp = 0;
+        String lastDecisionReason = state.lastDecisionReason();
+        long lastDecisionTimestamp = state.lastDecisionTimestamp();
 
         // TODO: Get from RuntimeState when Benchmark is integrated
         boolean benchmarkRunning = false;
