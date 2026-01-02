@@ -1,0 +1,121 @@
+/**
+ * NOZH - Adaptive Performance Optimization
+ * Copyright (c) 2025 NOZH Project
+ * 
+ * Licensed under the MIT License.
+ * 
+ * This file defines a CORE ARCHITECTURAL CONTRACT.
+ * Changes here affect system-wide invariants.
+ * 
+ * Read docs/v0.2-alpha.md before modifying.
+ */
+package dev.nozh.core.governor;
+
+import dev.nozh.core.matrix.ActionCandidate;
+import dev.nozh.core.matrix.ActionMatrix;
+import dev.nozh.core.state.RuntimeState;
+
+import java.util.List;
+import java.util.Optional;
+
+/**
+ * Simulation governor (Contract 6).
+ * 
+ * WHY THIS EXISTS:
+ * SimulationGovernor makes decisions WITHOUT side effects (pure function).
+ * It takes state + mode + bound, returns Optional<ActionCandidate>.
+ * NO execution happens here. This separation enables:
+ * - Testing without Minecraft
+ * - Deterministic replays for debugging
+ * - Confidence scoring based on past decisions
+ * 
+ * CRITICAL RULE: NO CASCADE
+ * 
+ * WHY NO CASCADE MATTERS:
+ * "Cascade" = multiple actions in quick succession. This is FATAL because:
+ * 1. Can't measure individual action effects (frametime needs time to
+ * stabilize)
+ * 2. Causes flapping (system oscillates: particles on → off → on → off)
+ * 3. User sees rapid changes, blames mod for instability
+ * 4. Confidence scoring breaks (can't tell which action helped/hurt)
+ * 
+ * HOW NO CASCADE WORKS:
+ * - Maximum 1 action per observation window (45s)
+ * - Must wait for observation window before next decision
+ * - Never acts if cooldown active
+ * 
+ * Example scenario if NO CASCADE was removed:
+ * - Tick 1: Reduce particles (FPS improves slightly)
+ * - Tick 2: Governor sees improvement, tries to reduce clouds
+ * - Tick 3: Clouds reduction tanks FPS (unexpected shader interaction)
+ * - Tick 4: Governor panics, tries to restore particles
+ * - Result: Flapping, user confusion, system looks broken
+ * 
+ * PURE - no MC dependencies.
+ */
+public final class SimulationGovernor {
+
+        private final ActionMatrix actionMatrix;
+        private final AdaptiveWindowCalculator windowCalculator;
+
+        public SimulationGovernor(ActionMatrix actionMatrix) {
+                this.actionMatrix = actionMatrix;
+                this.windowCalculator = new AdaptiveWindowCalculator();
+        }
+
+        /**
+         * Make a governor decision.
+         * 
+         * @param state        Current runtime state
+         * @param mode         Governor mode
+         * @param currentBound Performance bound
+         * @param nowMillis    Current timestamp
+         * @return Best action candidate, or empty if no valid action
+         */
+        public Optional<ActionCandidate> decide(
+                        RuntimeState state,
+                        GovernorMode mode,
+                        String currentBound,
+                        long nowMillis) {
+                // OFF mode → no decisions
+                if (mode == GovernorMode.OFF) {
+                        return Optional.empty();
+                }
+
+                // Get policy
+                ModePolicy policy = ModePolicy.forMode(mode);
+
+                // Generate candidates
+                List<ActionCandidate> candidates = actionMatrix.generateCandidates(policy, currentBound);
+
+                if (candidates.isEmpty()) {
+                        return Optional.empty();
+                }
+
+                // Return best candidate (already sorted by ActionMatrix)
+                return Optional.of(candidates.get(0));
+        }
+
+        /**
+         * Check if governor can act (not in cooldown).
+         * Uses adaptive observation window based on FPS stability.
+         */
+        public boolean canAct(RuntimeState state, long lastActionTimestamp, long nowMillis) {
+                if (lastActionTimestamp == 0) {
+                        return true; // Never acted before
+                }
+
+                // Calculate adaptive window based on FPS variance
+                long adaptiveWindow = windowCalculator.calculateWindow(state);
+
+                long timeSinceLastAction = nowMillis - lastActionTimestamp;
+                return timeSinceLastAction >= adaptiveWindow;
+        }
+
+        /**
+         * Get current observation window (for logging/debugging).
+         */
+        public long getObservationWindow(RuntimeState state) {
+                return windowCalculator.calculateWindow(state);
+        }
+}

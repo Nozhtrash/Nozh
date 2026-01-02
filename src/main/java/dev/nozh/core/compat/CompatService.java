@@ -1,0 +1,86 @@
+package dev.nozh.core.compat;
+
+import net.fabricmc.loader.api.FabricLoader;
+import net.minecraft.text.Text;
+import java.util.ArrayList;
+import java.util.List;
+
+/**
+ * Service to detect other optimization mods and provide compatibility warnings.
+ * Safe, read-only, no hard dependencies.
+ * 
+ * Phase 9: Detailed detection + i18n
+ */
+public class CompatService {
+
+    public record CompatReport(
+            List<String> performanceMods,
+            List<String> shaderMods,
+            List<String> worldGenMods,
+            List<String> diagnosicMods,
+            List<Text> hints) {
+    }
+
+    public static CompatReport generateReport() {
+        List<String> perf = new ArrayList<>();
+        List<String> shaders = new ArrayList<>();
+        List<String> world = new ArrayList<>();
+        List<String> diag = new ArrayList<>();
+        List<Text> hints = new ArrayList<>();
+
+        // Performance
+        check(perf, "sodium", "Sodium");
+        check(perf, "sodium-extra", "Sodium Extra");
+        check(perf, "lithium", "Lithium");
+        check(perf, "starlight", "Starlight");
+        check(perf, "ferritecore", "FerriteCore");
+        check(perf, "modernfix", "ModernFix");
+        check(perf, "entityculling", "EntityCulling");
+        check(perf, "immediatelyfast", "ImmediatelyFast");
+        check(perf, "dynamic_fps", "Dynamic FPS");
+        check(perf, "threadtweak", "ThreadTweak");
+        check(perf, "krypton", "Krypton");
+        check(perf, "gpumemleakfix", "GpuMemLeakFix");
+        check(perf, "nvidium", "Nvidium");
+
+        // Shaders
+        check(shaders, "iris", "Iris");
+        check(shaders, "oculus", "Oculus");
+
+        // WorldGen
+        check(world, "terralith", "Terralith");
+        check(world, "distant-horizons", "Distant Horizons");
+
+        // Diagnostics
+        check(diag, "spark", "spark");
+        check(diag, "notenoughcrashes", "Not Enough Crashes");
+        check(diag, "neruina", "Neruina");
+        check(diag, "observable", "Observable");
+
+        // Hints & Risks (Translatable)
+        if (!shaders.isEmpty()) {
+            hints.add(Text.translatable("nozh.hint.shaders"));
+        }
+        if (FabricLoader.getInstance().isModLoaded("distant-horizons")) {
+            hints.add(Text.translatable("nozh.hint.distant_horizons"));
+        }
+        if (FabricLoader.getInstance().isModLoaded("dynamic_fps")) {
+            hints.add(Text.translatable("nozh.hint.dynamic_fps"));
+        }
+        if (FabricLoader.getInstance().isModLoaded("sodium-extra")) {
+            hints.add(Text.translatable("nozh.hint.sodium_extra"));
+        }
+        if (!perf.contains("sodium") && !shaders.contains("iris")) {
+            // Maybe a hint suggesting sodium? No, "Non-Goals": we don't fix user's setup,
+            // we governs.
+        }
+
+        return new CompatReport(perf, shaders, world, diag, hints);
+    }
+
+    private static void check(List<String> list, String modid, String name) {
+        if (FabricLoader.getInstance().isModLoaded(modid)) {
+            list.add(name);
+        }
+    }
+}

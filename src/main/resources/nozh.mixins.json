@@ -1,0 +1,15 @@
+{
+    "required": false,
+    "package": "dev.nozh.mixin",
+    "compatibilityLevel": "JAVA_17",
+    "mixins": [],
+    "client": [
+        "MixinEntityRenderDispatcher",
+        "MixinBlockEntityRenderDispatcher",
+        "MixinClientChunkManager",
+        "MixinParticleManager"
+    ],
+    "injectors": {
+        "defaultRequire": 1
+    }
+}

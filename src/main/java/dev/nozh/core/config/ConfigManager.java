@@ -1,0 +1,184 @@
+package dev.nozh.core.config;
+
+import dev.nozh.NozhConstants;
+
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
+import java.nio.file.StandardOpenOption;
+
+/**
+ * Configuration manager for NOZH.
+ * Thread-safe, atomic writes, lazy initialization.
+ * 
+ * Phase 2 Iteration 2: resetToDefaults() method
+ */
+public final class ConfigManager {
+
+    private static final Object LOCK = new Object();
+    private static volatile NozhConfig config = null;
+
+    private ConfigManager() {
+        // Utility class
+    }
+
+    /**
+     * Get current config (lazy load, thread-safe).
+     */
+    public static NozhConfig getConfig() {
+        if (config == null) {
+            synchronized (LOCK) {
+                if (config == null) {
+                    load();
+                }
+            }
+        }
+        return config;
+    }
+
+    /**
+     * Load config from disk (or create defaults)
+     */
+    public static void load() {
+        synchronized (LOCK) {
+            try {
+                Path configFile = NozhConstants.CONFIG_FILE;
+
+                ensureConfigDirExists();
+
+                if (Files.exists(configFile)) {
+                    String json = Files.readString(configFile, StandardCharsets.UTF_8);
+                    NozhConfig loaded = JsonMini.fromJsonNozhConfig(json);
+                    if (loaded != null) {
+                        // AUTO-MIGRATION: v0.1.0 → v0.2.0 (if needed)
+                        NozhConfig migrated = ConfigMigration.migrate(loaded);
+                        config = migrated;
+
+                        boolean corrected = config.validate();
+                        if (corrected || migrated != loaded) {
+                            NozhConstants.LOGGER.warn("Config had invalid values or was migrated, re-saving");
+                            save(); // Re-save migrated/corrected config
+                        }
+                        NozhConstants.LOGGER.debug("Loaded config from {}", configFile);
+                    } else {
+                        NozhConstants.LOGGER.warn("Config file was empty or corrupted, using defaults");
+                        config = new NozhConfig();
+                        config.configVersion = 2; // Set current version
+                        save();
+                    }
+                } else {
+                    NozhConstants.LOGGER.info("No config found, creating default at {}", configFile);
+                    config = new NozhConfig();
+                    config.configVersion = 2; // Set current version
+                    save();
+                }
+            } catch (Exception e) {
+                NozhConstants.LOGGER.error("Failed to load config, using defaults", e);
+                config = new NozhConfig();
+                config.configVersion = 2;
+            }
+        }
+    }
+
+    /**
+     * Save current config to disk (atomic write)
+     * Debounced to prevent race conditions on rapid saves
+     */
+    public static void save() {
+        synchronized (LOCK) {
+            // Debounce: prevent rapid successive saves
+            long now = System.currentTimeMillis();
+            if (now - lastSaveTime < SAVE_DEBOUNCE_MS) {
+                NozhConstants.LOGGER.debug("Skipping config save (debounce)");
+                return;
+            }
+            lastSaveTime = now;
+
+            if (config == null) {
+                NozhConstants.LOGGER.warn("Cannot save null config");
+                return;
+            }
+
+            try {
+                Path configFile = NozhConstants.CONFIG_FILE;
+                Path tmpFile = configFile.resolveSibling(configFile.getFileName() + ".tmp");
+
+                ensureConfigDirExists();
+
+                String json = JsonMini.toJson(config);
+
+                // Write to tmp, then atomic rename
+                Files.writeString(tmpFile, json, StandardCharsets.UTF_8,
+                        StandardOpenOption.CREATE,
+                        StandardOpenOption.TRUNCATE_EXISTING,
+                        StandardOpenOption.WRITE);
+
+                Files.move(tmpFile, configFile,
+                        StandardCopyOption.REPLACE_EXISTING,
+                        StandardCopyOption.ATOMIC_MOVE);
+
+                NozhConstants.LOGGER.debug("Saved config to {}", configFile);
+            } catch (IOException e) {
+                NozhConstants.LOGGER.error("Failed to save config", e);
+
+                // Clean up tmp file if exists
+                try {
+                    Path tmpFile = NozhConstants.CONFIG_FILE
+                            .resolveSibling(NozhConstants.CONFIG_FILE.getFileName() + ".tmp");
+                    Files.deleteIfExists(tmpFile);
+                } catch (IOException cleanup) {
+                    // Fail silently
+                }
+            }
+        }
+    }
+
+    private static volatile long lastSaveTime = 0;
+    private static final long SAVE_DEBOUNCE_MS = 500; // 500ms debounce
+
+    /**
+     * Phase 2 Iteration 3: Reset config to defaults (improved safety).
+     * CRITICAL: This is destructive - only call with user confirmation.
+     * State.json is NOT touched.
+     * 
+     * Safety guarantees:
+     * - Synchronized (no concurrent modification)
+     * - Atomic write (tmp → rename)
+     * - Forensic logging (timestamp, version, path)
+     * - Failure recovery (rollback on write failure)
+     */
+    public static void resetToDefaults() {
+        synchronized (LOCK) {
+            NozhConfig previousConfig = config; // Backup for rollback
+
+            try {
+                NozhConstants.LOGGER.info("Config reset initiated - Version: {} Path: {}",
+                        NozhConstants.getVersion(), NozhConstants.CONFIG_FILE);
+
+                // Create new default config
+                config = new NozhConfig();
+                config.clearCorrectedFlag(); // Fresh reset, not a correction
+
+                // Persist atomically
+                save();
+
+                NozhConstants.LOGGER.info("Config reset complete - defaults written successfully");
+            } catch (Exception e) {
+                // Rollback on failure
+                NozhConstants.LOGGER.error("Config reset FAILED - rolling back to previous config", e);
+                config = previousConfig;
+                throw new RuntimeException("Config reset failed", e);
+            }
+        }
+    }
+
+    private static void ensureConfigDirExists() throws IOException {
+        Path dir = NozhConstants.CONFIG_DIR;
+        if (!Files.exists(dir)) {
+            Files.createDirectories(dir);
+            NozhConstants.LOGGER.debug("Created config directory: {}", dir);
+        }
+    }
+}

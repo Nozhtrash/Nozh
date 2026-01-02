@@ -1,0 +1,14 @@
+build/
+.gradle/
+.idea/
+*.iml
+*.ipr
+*.iws
+.settings/
+bin/
+run/
+.vscode/
+.DS_Store
+*.json
+!src/main/resources/**/*.json
+!fabric.mod.json

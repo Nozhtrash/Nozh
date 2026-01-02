@@ -1,0 +1,53 @@
+package dev.nozh;
+
+import net.fabricmc.loader.api.FabricLoader;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.nio.file.Path;
+
+/**
+ * Shared constants for NOZH mod
+ */
+public final class NozhConstants {
+
+    public static final String MOD_ID = "nozh";
+    public static final String MOD_NAME = "NOZH";
+
+    // Dynamic version from mod metadata (not hardcoded)
+    private static String cachedVersion = null;
+
+    public static final Logger LOGGER = LoggerFactory.getLogger(MOD_NAME);
+
+    /**
+     * Get mod version dynamically from Fabric metadata.
+     * Cached for performance.
+     */
+    public static String getVersion() {
+        if (cachedVersion == null) {
+            cachedVersion = FabricLoader.getInstance()
+                    .getModContainer(MOD_ID)
+                    .map(container -> container.getMetadata().getVersion().getFriendlyString())
+                    .orElse("UNKNOWN");
+        }
+        return cachedVersion;
+    }
+
+    // Config paths
+    public static final Path CONFIG_DIR = FabricLoader.getInstance().getConfigDir().resolve(MOD_ID);
+    public static final Path CONFIG_FILE = CONFIG_DIR.resolve("nozh.json");
+    public static final Path STATE_FILE = CONFIG_DIR.resolve("state.json");
+    public static final Path STATE_TMP_FILE = CONFIG_DIR.resolve("state.tmp");
+
+    // Crash loop guard thresholds
+    public static final int MAX_BOOT_ATTEMPTS_BEFORE_SAFE_MODE = 3;
+    public static final int TICKS_BEFORE_STABLE = 200; // ~10 seconds
+
+    // Profiler defaults
+    public static final int DEFAULT_RING_BUFFER_SIZE = 300; // ~5 seconds at 60fps
+    public static final int STATS_UPDATE_INTERVAL_FRAMES = 30; // Update stats every 30 frames
+
+    private NozhConstants() {
+        // Utility class
+    }
+}
