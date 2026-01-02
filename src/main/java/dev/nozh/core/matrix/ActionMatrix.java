@@ -13,6 +13,7 @@ import dev.nozh.core.governor.ModePolicy;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Locale;
 
 /**
  * Action matrix generator (Contract 6).
@@ -172,7 +173,7 @@ public final class ActionMatrix {
      * - BALANCED → conservative reductions
      */
     private String generateTargetValue(CapabilityId id, String bound, ProviderMetadata metadata) {
-        String capName = id.name();
+        String capName = id.name().toLowerCase(Locale.ROOT);
 
         // CPU-bound heuristics
         if ("CPU".equals(bound)) {
