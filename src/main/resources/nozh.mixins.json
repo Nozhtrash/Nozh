@@ -4,6 +4,8 @@
     "compatibilityLevel": "JAVA_17",
     "mixins": [],
     "client": [
+        "MixinKeyboard",
+        "MixinMouse",
         "MixinEntityRenderDispatcher",
         "MixinBlockEntityRenderDispatcher",
         "MixinClientChunkManager",

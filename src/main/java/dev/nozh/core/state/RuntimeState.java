@@ -38,8 +38,9 @@ public record RuntimeState(
         int spikeCount,
         long sessionStartTime,
         int stateVersion,
-        dev.nozh.core.context.Scenario currentScenario) {
-    private static final int CURRENT_VERSION = 2; // Bump version
+        dev.nozh.core.context.Scenario currentScenario,
+        double scenarioConfidence) {
+    private static final int CURRENT_VERSION = 3; // Bump version
 
     /**
      * Create default initial state.
@@ -64,7 +65,8 @@ public record RuntimeState(
                 0, // spikeCount
                 System.currentTimeMillis(), // sessionStartTime
                 CURRENT_VERSION,
-                dev.nozh.core.context.Scenario.STANDARD);
+                dev.nozh.core.context.Scenario.STANDARD,
+                0.5);
     }
 
     /**
@@ -83,7 +85,7 @@ public record RuntimeState(
                 sessionChangesCount + 1, // increment changes
                 avgFrametimeMs, p95FrametimeMs, spikeCount,
                 sessionStartTime, stateVersion,
-                currentScenario);
+                currentScenario, scenarioConfidence);
     }
 
     /**
@@ -99,7 +101,7 @@ public record RuntimeState(
                 sessionChangesCount,
                 avgFrametimeMs, p95FrametimeMs, spikeCount,
                 sessionStartTime, stateVersion,
-                currentScenario);
+                currentScenario, scenarioConfidence);
     }
 
     /**
@@ -114,7 +116,7 @@ public record RuntimeState(
                 sessionChangesCount,
                 avg, p95, spikes,
                 sessionStartTime, stateVersion,
-                currentScenario);
+                currentScenario, scenarioConfidence);
     }
 
     /**
@@ -131,13 +133,13 @@ public record RuntimeState(
                 sessionChangesCount,
                 avgFrametimeMs, p95FrametimeMs, spikeCount,
                 sessionStartTime, stateVersion,
-                currentScenario);
+                currentScenario, scenarioConfidence);
     }
 
     /**
      * Update current scenario (immutable).
      */
-    public RuntimeState withScenario(dev.nozh.core.context.Scenario scenario) {
+    public RuntimeState withScenario(dev.nozh.core.context.Scenario scenario, double confidence) {
         return new RuntimeState(
                 enabled, safeMode, autoTuning, debugLogs,
                 governorDisabled, governorCooldownActive, governorLastActionTimestamp,
@@ -146,7 +148,7 @@ public record RuntimeState(
                 sessionChangesCount,
                 avgFrametimeMs, p95FrametimeMs, spikeCount,
                 sessionStartTime, stateVersion,
-                scenario);
+                scenario, confidence);
     }
 
     /**
@@ -172,6 +174,7 @@ public record RuntimeState(
                 0, // spikeCount
                 System.currentTimeMillis(),
                 CURRENT_VERSION,
-                dev.nozh.core.context.Scenario.STANDARD);
+                dev.nozh.core.context.Scenario.STANDARD,
+                0.5);
     }
 }

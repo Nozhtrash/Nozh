@@ -18,7 +18,7 @@ import java.util.Map;
  */
 public final class StateMigrationRegistry {
 
-    private static final int CURRENT_VERSION = 1; // Current state version
+    private static final int CURRENT_VERSION = 3; // Current state version
 
     private final Map<Integer, StateMigrator> migrators = new HashMap<>();
 

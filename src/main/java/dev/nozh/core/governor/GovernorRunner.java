@@ -81,9 +81,11 @@ public final class GovernorRunner {
 
     private void runGovernorLoop() {
         // 1. Detect scenario and update state reference
-        dev.nozh.core.context.Scenario currentScenario = scenarioDetector.detect();
+        dev.nozh.core.context.ScenarioSnapshot scenarioSnapshot = scenarioDetector.detect();
         try {
-            stateStore.update(s -> s.withScenario(currentScenario));
+            stateStore.update(s -> s.withScenario(
+                    scenarioSnapshot.scenario(),
+                    scenarioSnapshot.confidence()));
         } catch (Exception e) {
             // Ignore update failure
         }
@@ -224,15 +226,27 @@ public final class GovernorRunner {
             return dev.nozh.core.governor.GovernorMode.MANUAL_ASSIST;
         }
 
-        // Scenario-based overrides
-        if (state.currentScenario() == dev.nozh.core.context.Scenario.COMBAT) {
-            // Combat requires max FPS -> Aggressive
-            return dev.nozh.core.governor.GovernorMode.AUTO_AGGRESSIVE;
-        }
+        // Scenario-based overrides (with confidence gating)
+        double scenarioConfidence = state.scenarioConfidence();
+        if (scenarioConfidence >= 0.55) {
+            dev.nozh.core.context.Scenario scenario = state.currentScenario();
+            if (scenario == dev.nozh.core.context.Scenario.COMBAT) {
+                // Combat requires max FPS -> Aggressive
+                return dev.nozh.core.governor.GovernorMode.AUTO_AGGRESSIVE;
+            }
 
-        if (state.currentScenario() == dev.nozh.core.context.Scenario.MINING) {
-            // Mining usually stable
-            return dev.nozh.core.governor.GovernorMode.AUTO_CONSERVATIVE;
+            if (scenario == dev.nozh.core.context.Scenario.MINING) {
+                // Mining usually stable
+                return dev.nozh.core.governor.GovernorMode.AUTO_CONSERVATIVE;
+            }
+
+            if (scenario == dev.nozh.core.context.Scenario.BUILDING) {
+                return dev.nozh.core.governor.GovernorMode.AUTO_CONSERVATIVE;
+            }
+
+            if (scenario == dev.nozh.core.context.Scenario.AFK) {
+                return dev.nozh.core.governor.GovernorMode.AUTO_CONSERVATIVE;
+            }
         }
 
         // Default auto mode
