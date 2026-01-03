@@ -90,7 +90,8 @@ public class NozhModClient implements ClientModInitializer {
                 capabilityExecutor,
                 logger,
                 sessionLearning,
-                () -> perfManager != null ? perfManager.getSnapshot() : dev.nozh.api.PerfSnapshot.empty());
+                () -> perfManager != null ? perfManager.getSnapshot() : dev.nozh.api.PerfSnapshot.empty(),
+                successTracker);
 
         // Create ScenarioDetector (Fabric implementation)
         dev.nozh.core.context.ScenarioDetector scenarioDetector = new dev.nozh.fabric.context.FabricScenarioDetector();

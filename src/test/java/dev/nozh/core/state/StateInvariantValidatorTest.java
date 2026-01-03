@@ -18,6 +18,7 @@ class StateInvariantValidatorTest {
                 return new PendingAction(
                                 System.currentTimeMillis(),
                                 null,
+                                new dev.nozh.core.bus.Command.ResetCapability(null),
                                 Optional.empty(),
                                 null,
                                 16.0,

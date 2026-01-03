@@ -3,6 +3,7 @@ package dev.nozh.core.bus;
 import dev.nozh.api.PerfSnapshot;
 import dev.nozh.core.NozhLogger;
 import dev.nozh.core.intelligence.SessionLearning;
+import dev.nozh.core.matrix.ActionSuccessTracker;
 
 import java.util.Optional;
 import java.util.function.Consumer;
@@ -35,9 +36,23 @@ public final class StandardActionProcessor implements ActionProcessor {
     private final NozhLogger logger;
     private final SessionLearning sessionLearning;
     private final Supplier<PerfSnapshot> perfSnapshotSupplier;
+    private final ActionSuccessTracker successTracker;
 
     public StandardActionProcessor(CapabilityExecutor executor, NozhLogger logger) {
-        this(executor, logger, null, PerfSnapshot::empty);
+        this(executor, logger, null, PerfSnapshot::empty, null);
+    }
+
+    public StandardActionProcessor(
+            CapabilityExecutor executor,
+            NozhLogger logger,
+            SessionLearning sessionLearning,
+            Supplier<PerfSnapshot> perfSnapshotSupplier,
+            ActionSuccessTracker successTracker) {
+        this.executor = executor;
+        this.logger = logger;
+        this.sessionLearning = sessionLearning;
+        this.perfSnapshotSupplier = perfSnapshotSupplier != null ? perfSnapshotSupplier : PerfSnapshot::empty;
+        this.successTracker = successTracker;
     }
 
     public StandardActionProcessor(
@@ -45,10 +60,7 @@ public final class StandardActionProcessor implements ActionProcessor {
             NozhLogger logger,
             SessionLearning sessionLearning,
             Supplier<PerfSnapshot> perfSnapshotSupplier) {
-        this.executor = executor;
-        this.logger = logger;
-        this.sessionLearning = sessionLearning;
-        this.perfSnapshotSupplier = perfSnapshotSupplier != null ? perfSnapshotSupplier : PerfSnapshot::empty;
+        this(executor, logger, sessionLearning, perfSnapshotSupplier, null);
     }
 
     @Override
@@ -85,6 +97,9 @@ public final class StandardActionProcessor implements ActionProcessor {
         CapabilityId capability = cmd.capability();
         CapabilityValue value = cmd.value();
         PerfSnapshot beforeSnapshot = perfSnapshotSupplier.get();
+        if (successTracker != null) {
+            successTracker.recordPreActionSnapshot(capability, beforeSnapshot);
+        }
 
         // Store old value for potential rollback
         Optional<CapabilityValue> oldValue = Optional.empty();
