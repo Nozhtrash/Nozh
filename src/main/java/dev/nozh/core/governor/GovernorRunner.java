@@ -338,11 +338,13 @@ public final class GovernorRunner {
             }
 
             sessionLearning.recordFailure(pending.capability());
+            successTracker.recordFailure(pending.capability());
         } else {
             // Success: avg <= baseline - epsilon
             double gainAvg = Math.max(0, pending.baselineAvgMs() - avg);
             double gainP95 = Math.max(0, pending.baselineP95Ms() - p95);
             sessionLearning.recordSuccess(pending.capability(), Math.max(gainAvg, gainP95));
+            successTracker.recordSuccess(pending.capability());
         }
         // Clear pending action
         try {
