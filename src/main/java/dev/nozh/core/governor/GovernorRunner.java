@@ -152,6 +152,7 @@ public final class GovernorRunner {
         }
 
         GovernorMode mode = determineMode(state);
+        mode = ModePolicy.enforceManualPreference(mode, state.autoTuning() && config.allowAutoTuning);
         if (mode == GovernorMode.MANUAL_ASSIST && state.suggestedAction().isPresent()) {
             logger.debug("Manual assist active: suggestion pending, awaiting user confirmation");
             return;

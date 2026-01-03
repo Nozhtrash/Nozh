@@ -295,6 +295,7 @@ public final class NozhCommands {
         config.enabled = true;
         config.allowAutoTuning = true;
         ConfigManager.saveAndNotify();
+        StateStore.getInstance().update(state -> state.withConfig(config));
 
         source.sendFeedback(Text.translatable("nozh.enable.success"));
     }
@@ -303,6 +304,7 @@ public final class NozhCommands {
         NozhConfig config = ConfigManager.getConfig();
         config.enabled = false;
         ConfigManager.saveAndNotify();
+        StateStore.getInstance().update(state -> state.withConfig(config));
 
         source.sendFeedback(Text.translatable("nozh.disable.success"));
     }
