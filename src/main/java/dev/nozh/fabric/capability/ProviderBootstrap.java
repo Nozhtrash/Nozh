@@ -41,6 +41,7 @@ public final class ProviderBootstrap {
         registry.register(new SmoothLightingProvider(options));
         registry.register(new FogProvider(options));
         registry.register(new DistortionEffectProvider(options));
+        registry.register(new DynamicLightingProvider());
 
         // Enabled for GOD MODE
         registry.register(new ArmorStandProvider(options));

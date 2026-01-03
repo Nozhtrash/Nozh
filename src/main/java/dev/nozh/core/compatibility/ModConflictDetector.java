@@ -39,6 +39,7 @@ public final class ModConflictDetector {
         checkForMod("entityculling");
         checkForMod("moreculling");
         checkForMod("enhancedblockentities");
+        checkForMod("lambdynlights");
         checkForMod("dynamic-fps");
         checkForMod("bobby");
         checkForMod("c2me");
@@ -107,6 +108,7 @@ public final class ModConflictDetector {
                     installedMods.contains("sodium-extra") ||
                     installedMods.contains("iris") ||
                     installedMods.contains("canvas");
+            case DYNAMIC_LIGHTING -> installedMods.contains("lambdynlights");
 
             default -> false; // No known conflicts
         };
@@ -145,6 +147,7 @@ public final class ModConflictDetector {
             case CLOUDS -> installedMods.contains("iris") ? "Iris" : "Sodium";
             case ENTITY_DISTANCE -> installedMods.contains("entityculling") ? "Entity Culling" : "Sodium";
             case FOG -> installedMods.contains("sodium-extra") ? "Sodium Extra" : "Sodium/Iris";
+            case DYNAMIC_LIGHTING -> "LambDynamicLights";
             default -> "External Mod";
         };
     }

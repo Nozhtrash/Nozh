@@ -188,6 +188,12 @@ public class NozhModClient implements ClientModInitializer {
             }
         });
 
+        ClientPlayConnectionEvents.JOIN.register((handler, sender, client) -> {
+            if (governorRunner != null) {
+                governorRunner.captureBaselineSettings();
+            }
+        });
+
         // === COMMANDS & SHUTDOWN ===
 
         // Register commands

@@ -61,27 +61,33 @@ public final class ConfigManager {
                         config = migrated;
 
                         boolean corrected = config.validate();
+                        boolean hardwareUpdated = ensureHardwareProfile(config);
                         if (corrected || migrated != loaded) {
                             NozhConstants.LOGGER.warn("Config had invalid values or was migrated, re-saving");
                             saveNowSilently(); // Re-save migrated/corrected config
+                        } else if (hardwareUpdated) {
+                            saveNowSilently();
                         }
                         NozhConstants.LOGGER.debug("Loaded config from {}", configFile);
                     } else {
                         NozhConstants.LOGGER.warn("Config file was empty or corrupted, using defaults");
                         config = new NozhConfig();
                         config.configVersion = 2; // Set current version
+                        ensureHardwareProfile(config);
                         saveNowSilently();
                     }
                 } else {
                     NozhConstants.LOGGER.info("No config found, creating default at {}", configFile);
                     config = new NozhConfig();
                     config.configVersion = 2; // Set current version
+                    ensureHardwareProfile(config);
                     saveNowSilently();
                 }
             } catch (Exception e) {
                 NozhConstants.LOGGER.error("Failed to load config, using defaults", e);
                 config = new NozhConfig();
                 config.configVersion = 2;
+                ensureHardwareProfile(config);
             }
         }
         snapshot = config;
@@ -178,6 +184,14 @@ public final class ConfigManager {
 
     private static volatile long lastSaveTime = 0;
     private static final long SAVE_DEBOUNCE_MS = 500; // 500ms debounce
+
+    private static boolean ensureHardwareProfile(NozhConfig config) {
+        if (config.hardwareProfile == null || config.hardwareProfile.isBlank()) {
+            config.hardwareProfile = HardwareProfiler.buildProfile();
+            return true;
+        }
+        return false;
+    }
 
     /**
      * Phase 2 Iteration 3: Reset config to defaults (improved safety).

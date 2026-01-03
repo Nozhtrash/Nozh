@@ -12,11 +12,12 @@ import dev.nozh.core.matrix.ActionCandidate;
 import dev.nozh.core.matrix.ActionMatrix;
 import dev.nozh.core.matrix.ActionSuccessTracker;
 import dev.nozh.core.matrix.ConfidenceCalculator;
+import dev.nozh.core.governor.OptimizationProfile;
+import dev.nozh.core.compatibility.CompatibilityMatrix;
 import dev.nozh.core.compatibility.ModConflictDetector;
 import dev.nozh.core.state.RuntimeState;
 import dev.nozh.core.state.StateStore;
 import dev.nozh.core.state.PendingAction;
-import dev.nozh.core.state.ActionHistoryEntry;
 import dev.nozh.core.bus.CapabilityValue;
 
 import dev.nozh.core.monitoring.ChunkLoadMonitor;
@@ -59,7 +60,8 @@ public final class GovernorRunner {
                 registry,
                 successTracker,
                 new ConfidenceCalculator(),
-                sessionLearning);
+                sessionLearning,
+                new CompatibilityMatrix());
 
         this.governor = new SimulationGovernor(matrix);
         this.actionBus = actionBus;
@@ -97,17 +99,21 @@ public final class GovernorRunner {
         long now = System.currentTimeMillis();
         NozhConfig config = ConfigManager.getConfig();
 
+        refreshCurrentSettings();
         RuntimeState state = stateStore.snapshotSafe();
+        syncBaselineIfNeeded(state);
 
         // === Pending evaluation ===
         if (state.pendingAction().isPresent()) {
             PendingAction pending = state.pendingAction().get();
             long elapsed = now - pending.timestampMillis();
+            long evaluationWindow = config.benchmarkModeEnabled ? config.benchmarkMicroIntervalMillis
+                    : config.rollbackWindowMillis;
 
-            if (elapsed < config.rollbackWindowMillis) {
+            if (elapsed < evaluationWindow) {
                 logger.debug(String.format(
                         "Pending evaluation in progress (%dms/%dms)",
-                        elapsed, config.rollbackWindowMillis));
+                        elapsed, evaluationWindow));
                 return;
             }
 
@@ -153,13 +159,23 @@ public final class GovernorRunner {
 
         // 4. Check cooldown (NO CASCADE) with adaptive window
         long lastActionTimestamp = state.governorLastActionTimestamp();
-        if (!governor.canAct(state, lastActionTimestamp, now)) {
-            long windowMs = governor.getObservationWindow(state);
+        boolean benchmarkMode = config.benchmarkModeEnabled;
+        if (!governor.canAct(state, lastActionTimestamp, now, benchmarkMode, config.benchmarkMicroIntervalMillis)) {
+            long windowMs = benchmarkMode ? config.benchmarkMicroIntervalMillis : governor.getObservationWindow(state);
             logger.debug(String.format("Governor in cooldown, skipping decision (window: %dms)", windowMs));
             return;
         }
 
-        Optional<ActionCandidate> decisionOpt = governor.decide(state, mode, bound, now);
+        Optional<ActionCandidate> decisionOpt = governor.decide(
+                state,
+                mode,
+                bound,
+                now,
+                OptimizationProfile.fromConfig(config.optimizationProfile),
+                config.targetFps,
+                config.reverseEpsilonMs,
+                state.baselineSettings(),
+                state.currentSettings());
 
         if (decisionOpt.isEmpty()) {
             return;
@@ -224,6 +240,7 @@ public final class GovernorRunner {
                 if (report.succeeded()) {
                     logger.info("Governor action succeeded");
                     predictiveAnalyzer.reset();
+                    refreshCurrentSettings();
                 } else {
                     logger.warn("Governor action failed: " +
                             report.error().orElse("unknown"));
@@ -248,6 +265,45 @@ public final class GovernorRunner {
         } else {
             logger.info("Governor PASSIVE: yield decision, no action dispatched");
         }
+    }
+
+    private void syncBaselineIfNeeded(RuntimeState state) {
+        if (state.baselineSettings() != null && !state.baselineSettings().isEmpty()) {
+            return;
+        }
+        refreshBaselineSettings();
+        refreshCurrentSettings();
+    }
+
+    private void refreshBaselineSettings() {
+        java.util.Map<dev.nozh.core.bus.CapabilityId, dev.nozh.core.bus.CapabilityValue> baseline = new java.util.EnumMap<>(
+                dev.nozh.core.bus.CapabilityId.class);
+        for (var provider : providerRegistry.getAllProviders()) {
+            provider.getCurrentValueSafe().ifPresent(value -> baseline.put(provider.id(), value));
+        }
+        try {
+            stateStore.update(state -> state.withBaselineSettings(baseline));
+        } catch (Exception e) {
+            logger.warn("Failed to store baseline settings: " + e.getMessage());
+        }
+    }
+
+    private void refreshCurrentSettings() {
+        java.util.Map<dev.nozh.core.bus.CapabilityId, dev.nozh.core.bus.CapabilityValue> current = new java.util.EnumMap<>(
+                dev.nozh.core.bus.CapabilityId.class);
+        for (var provider : providerRegistry.getAllProviders()) {
+            provider.getCurrentValueSafe().ifPresent(value -> current.put(provider.id(), value));
+        }
+        try {
+            stateStore.update(state -> state.withCurrentSettings(current));
+        } catch (Exception e) {
+            logger.warn("Failed to store current settings: " + e.getMessage());
+        }
+    }
+
+    public void captureBaselineSettings() {
+        refreshBaselineSettings();
+        refreshCurrentSettings();
     }
 
     private String detectBound(RuntimeState state) {
@@ -305,6 +361,29 @@ public final class GovernorRunner {
     }
 
     private void evaluatePendingAction(RuntimeState state, PendingAction pending, NozhConfig config) {
+        Optional<CapabilityValue> currentValue = providerRegistry.get(pending.capability())
+                .flatMap(provider -> provider.getCurrentValueSafe());
+        if (currentValue.isPresent() && !currentValue.get().equals(pending.newValue())) {
+            logger.warn("Detected inconsistency for " + pending.capability() + ", applying safe fallback");
+            pending.command()
+                    .inverse(pending.previousValue())
+                    .ifPresentOrElse(rollback -> actionBus.dispatch(rollback, r -> {
+                        if (r.succeeded()) {
+                            logger.info("Safe fallback rollback succeeded");
+                        } else {
+                            logger.warn("Safe fallback rollback failed");
+                        }
+                    }), () -> logger.warn("Safe fallback rollback unavailable"));
+            sessionLearning.recordFailure(pending.capability());
+            successTracker.recordFailure(pending.capability());
+            try {
+                stateStore.update(RuntimeState::withPendingActionCleared);
+            } catch (Exception e) {
+                logger.warn("Failed to clear pending action after fallback");
+            }
+            successTracker.clearDecisionSnapshot(pending.capability());
+            return;
+        }
         double avg = state.avgFrametimeMs();
         double p95 = state.p95FrametimeMs();
 

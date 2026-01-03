@@ -9,10 +9,11 @@
  */
 package dev.nozh.core.state;
 
-import java.util.Optional;
+import dev.nozh.core.bus.CapabilityId;
+import dev.nozh.core.bus.CapabilityValue;
 
-import java.util.ArrayList;
-import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 
 /**
  * Runtime state (Contract 1).
@@ -51,8 +52,10 @@ public record RuntimeState(
         long sessionStartTime,
         int stateVersion,
         dev.nozh.core.context.Scenario currentScenario,
-        double scenarioConfidence) {
-    private static final int CURRENT_VERSION = 4; // Bump version
+        double scenarioConfidence,
+        Map<CapabilityId, CapabilityValue> baselineSettings,
+        Map<CapabilityId, CapabilityValue> currentSettings) {
+    private static final int CURRENT_VERSION = 5; // Bump version
 
     /**
      * Create default initial state.
@@ -82,7 +85,9 @@ public record RuntimeState(
                 0, // spikeCount
                 "", 0L, // lastDecisionReason, lastDecisionTimestamp
                 System.currentTimeMillis(), CURRENT_VERSION,
-                dev.nozh.core.context.Scenario.STANDARD, 0.5);
+                dev.nozh.core.context.Scenario.STANDARD, 0.5,
+                Map.of(),
+                Map.of());
     }
 
     /**
@@ -104,7 +109,8 @@ public record RuntimeState(
                 avgFrametimeMs, p95FrametimeMs, tickTimeAvg, tickTimeP95, spikeCount,
                 lastDecisionReason, lastDecisionTimestamp,
                 sessionStartTime, stateVersion,
-                currentScenario, scenarioConfidence);
+                currentScenario, scenarioConfidence,
+                baselineSettings, currentSettings);
     }
 
     public RuntimeState withAppliedSuggestion(long timestamp, PendingAction pending) {
@@ -123,7 +129,8 @@ public record RuntimeState(
                 avgFrametimeMs, p95FrametimeMs, tickTimeAvg, tickTimeP95, spikeCount,
                 lastDecisionReason, lastDecisionTimestamp,
                 sessionStartTime, stateVersion,
-                currentScenario, scenarioConfidence);
+                currentScenario, scenarioConfidence,
+                baselineSettings, currentSettings);
     }
 
     /**
@@ -145,7 +152,8 @@ public record RuntimeState(
                 avgFrametimeMs, p95FrametimeMs, tickTimeAvg, tickTimeP95, spikeCount,
                 lastDecisionReason, lastDecisionTimestamp,
                 sessionStartTime, stateVersion,
-                currentScenario, scenarioConfidence);
+                currentScenario, scenarioConfidence,
+                baselineSettings, currentSettings);
     }
 
     /**
@@ -167,7 +175,8 @@ public record RuntimeState(
                 avgFrametimeMs, p95FrametimeMs, tickTimeAvg, tickTimeP95, spikeCount,
                 lastDecisionReason, lastDecisionTimestamp,
                 sessionStartTime, stateVersion,
-                currentScenario, scenarioConfidence);
+                currentScenario, scenarioConfidence,
+                baselineSettings, currentSettings);
     }
 
     /**
@@ -189,7 +198,8 @@ public record RuntimeState(
                 avgFrametimeMs, p95FrametimeMs, tickTimeAvg, tickTimeP95, spikeCount,
                 lastDecisionReason, lastDecisionTimestamp,
                 sessionStartTime, stateVersion,
-                currentScenario, scenarioConfidence);
+                currentScenario, scenarioConfidence,
+                baselineSettings, currentSettings);
     }
 
     /**
@@ -221,7 +231,8 @@ public record RuntimeState(
                 avgFrametimeMs, p95FrametimeMs, tickTimeAvg, tickTimeP95, spikeCount,
                 lastDecisionReason, lastDecisionTimestamp,
                 sessionStartTime, stateVersion,
-                currentScenario, scenarioConfidence);
+                currentScenario, scenarioConfidence,
+                baselineSettings, currentSettings);
     }
 
     /**
@@ -237,7 +248,8 @@ public record RuntimeState(
                 avg, p95, tickAvg, tickP95, spikes,
                 lastDecisionReason, lastDecisionTimestamp,
                 sessionStartTime, stateVersion,
-                currentScenario, scenarioConfidence);
+                currentScenario, scenarioConfidence,
+                baselineSettings, currentSettings);
     }
 
     /**
@@ -255,7 +267,8 @@ public record RuntimeState(
                 avgFrametimeMs, p95FrametimeMs, tickTimeAvg, tickTimeP95, spikeCount,
                 lastDecisionReason, lastDecisionTimestamp,
                 sessionStartTime, stateVersion,
-                currentScenario, scenarioConfidence);
+                currentScenario, scenarioConfidence,
+                baselineSettings, currentSettings);
     }
 
     /**
@@ -271,7 +284,8 @@ public record RuntimeState(
                 avgFrametimeMs, p95FrametimeMs, tickTimeAvg, tickTimeP95, spikeCount,
                 lastDecisionReason, lastDecisionTimestamp,
                 sessionStartTime, stateVersion,
-                scenario, confidence);
+                scenario, confidence,
+                baselineSettings, currentSettings);
     }
 
     // REMOVED: withGovernorSnapshot() - uses deleted GovernorMode and ParanoiaLevel
@@ -298,7 +312,8 @@ public record RuntimeState(
                 avgFrametimeMs, p95FrametimeMs, tickTimeAvg, tickTimeP95, spikeCount,
                 lastDecisionReason, lastDecisionTimestamp,
                 sessionStartTime, stateVersion,
-                currentScenario, scenarioConfidence);
+                currentScenario, scenarioConfidence,
+                baselineSettings, currentSettings);
     }
 
     /**
@@ -317,7 +332,8 @@ public record RuntimeState(
                 reason != null ? reason : "",
                 timestamp,
                 sessionStartTime, stateVersion,
-                currentScenario, scenarioConfidence);
+                currentScenario, scenarioConfidence,
+                baselineSettings, currentSettings);
     }
 
     public RuntimeState withPendingSuggestion(PendingAction suggestion) {
@@ -332,7 +348,8 @@ public record RuntimeState(
                 avgFrametimeMs, p95FrametimeMs, tickTimeAvg, tickTimeP95, spikeCount,
                 lastDecisionReason, lastDecisionTimestamp,
                 sessionStartTime, stateVersion,
-                currentScenario, scenarioConfidence);
+                currentScenario, scenarioConfidence,
+                baselineSettings, currentSettings);
     }
 
     public RuntimeState withPendingSuggestionCleared() {
@@ -347,7 +364,8 @@ public record RuntimeState(
                 avgFrametimeMs, p95FrametimeMs, tickTimeAvg, tickTimeP95, spikeCount,
                 lastDecisionReason, lastDecisionTimestamp,
                 sessionStartTime, stateVersion,
-                currentScenario, scenarioConfidence);
+                currentScenario, scenarioConfidence,
+                baselineSettings, currentSettings);
     }
 
     /**
@@ -380,6 +398,38 @@ public record RuntimeState(
                 System.currentTimeMillis(),
                 CURRENT_VERSION,
                 dev.nozh.core.context.Scenario.STANDARD,
-                0.5);
+                0.5,
+                Map.of(),
+                Map.of());
+    }
+
+    public RuntimeState withBaselineSettings(Map<CapabilityId, CapabilityValue> baseline) {
+        return new RuntimeState(
+                enabled, safeMode, autoTuning, debugLogs,
+                governorDisabled, governorCooldownActive, governorLastActionTimestamp,
+                benchmarkRunning, benchmarkValidity, benchmarkStartTimestamp,
+                pendingAction, suggestedAction, pendingActionsCount, executionHistorySize, lastSnapshotHistorySize,
+                sessionChangesCount,
+                avgFrametimeMs, p95FrametimeMs, tickTimeAvg, tickTimeP95, spikeCount,
+                lastDecisionReason, lastDecisionTimestamp,
+                sessionStartTime, stateVersion,
+                currentScenario, scenarioConfidence,
+                baseline,
+                currentSettings);
+    }
+
+    public RuntimeState withCurrentSettings(Map<CapabilityId, CapabilityValue> settings) {
+        return new RuntimeState(
+                enabled, safeMode, autoTuning, debugLogs,
+                governorDisabled, governorCooldownActive, governorLastActionTimestamp,
+                benchmarkRunning, benchmarkValidity, benchmarkStartTimestamp,
+                pendingAction, suggestedAction, pendingActionsCount, executionHistorySize, lastSnapshotHistorySize,
+                sessionChangesCount,
+                avgFrametimeMs, p95FrametimeMs, tickTimeAvg, tickTimeP95, spikeCount,
+                lastDecisionReason, lastDecisionTimestamp,
+                sessionStartTime, stateVersion,
+                currentScenario, scenarioConfidence,
+                baselineSettings,
+                settings);
     }
 }

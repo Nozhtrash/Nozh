@@ -17,10 +17,11 @@ import java.util.Optional;
  * - Version 2 (adds benchmarkRunning): Migrator adds benchmarkRunning=false
  * - Version 3 (adds confidence tracking): Migrator adds confidence fields
  * - Version 4 (adds pending suggestion): Migrator adds suggestion field
+ * - Version 5 (adds baseline/current settings): Migrator adds settings maps
  */
 public final class StateMigrationRegistry {
 
-    private static final int CURRENT_VERSION = 4; // Current state version
+    private static final int CURRENT_VERSION = 5; // Current state version
 
     private final Map<Integer, StateMigrator> migrators = new HashMap<>();
 
@@ -68,9 +69,11 @@ public final class StateMigrationRegistry {
                     oldState.spikeCount(),
                     "", 0L, // lastDecisionReason, lastDecisionTimestamp default
                     oldState.sessionStartTime(),
-                    4, // Target version is 4
+                    5, // Target version is 5
                     dev.nozh.core.context.Scenario.STANDARD,
-                    0.5);
+                    0.5,
+                    java.util.Map.of(),
+                    java.util.Map.of());
         });
 
         registerMigrator(3, oldState -> new RuntimeState(
@@ -98,9 +101,42 @@ public final class StateMigrationRegistry {
                 oldState.lastDecisionReason(),
                 oldState.lastDecisionTimestamp(),
                 oldState.sessionStartTime(),
-                4,
+                5,
                 oldState.currentScenario(),
-                oldState.scenarioConfidence()));
+                oldState.scenarioConfidence(),
+                java.util.Map.of(),
+                java.util.Map.of()));
+
+        registerMigrator(4, oldState -> new RuntimeState(
+                oldState.enabled(),
+                oldState.safeMode(),
+                oldState.autoTuning(),
+                oldState.debugLogs(),
+                oldState.governorDisabled(),
+                oldState.governorCooldownActive(),
+                oldState.governorLastActionTimestamp(),
+                oldState.benchmarkRunning(),
+                oldState.benchmarkValidity(),
+                oldState.benchmarkStartTimestamp(),
+                oldState.pendingAction(),
+                oldState.suggestedAction(),
+                oldState.pendingActionsCount(),
+                oldState.executionHistorySize(),
+                oldState.lastSnapshotHistorySize(),
+                oldState.sessionChangesCount(),
+                oldState.avgFrametimeMs(),
+                oldState.p95FrametimeMs(),
+                oldState.tickTimeAvg(),
+                oldState.tickTimeP95(),
+                oldState.spikeCount(),
+                oldState.lastDecisionReason(),
+                oldState.lastDecisionTimestamp(),
+                oldState.sessionStartTime(),
+                5,
+                oldState.currentScenario(),
+                oldState.scenarioConfidence(),
+                java.util.Map.of(),
+                java.util.Map.of()));
 
         NozhConstants.LOGGER.debug("StateMigrationRegistry initialized (current version: {})", CURRENT_VERSION);
     }

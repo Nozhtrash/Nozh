@@ -32,6 +32,13 @@ public class NozhConfig {
 
     // Performance Targets
     public int targetFps = 60;
+    public String optimizationProfile = "BALANCED";
+    public double reverseEpsilonMs = 1.5;
+
+    // Benchmark & Calibration
+    public boolean benchmarkModeEnabled = false;
+    public int benchmarkMicroIntervalMillis = 5000;
+    public String hardwareProfile = "";
 
     // Limits & Cooldowns
     public int historyMaxEntries = 50;
@@ -68,6 +75,23 @@ public class NozhConfig {
         // targetFps: 30-240
         if (targetFps < 30 || targetFps > 240) {
             targetFps = clamp(targetFps, 30, 240);
+            corrected = true;
+        }
+
+        if (optimizationProfile == null
+                || (!optimizationProfile.equalsIgnoreCase("BALANCED")
+                        && !optimizationProfile.equalsIgnoreCase("AGGRESSIVE"))) {
+            optimizationProfile = "BALANCED";
+            corrected = true;
+        }
+
+        if (reverseEpsilonMs < 0.0 || reverseEpsilonMs > 8.0) {
+            reverseEpsilonMs = clamp(reverseEpsilonMs, 0.0, 8.0);
+            corrected = true;
+        }
+
+        if (benchmarkMicroIntervalMillis < 1000 || benchmarkMicroIntervalMillis > 30000) {
+            benchmarkMicroIntervalMillis = clamp(benchmarkMicroIntervalMillis, 1000, 30000);
             corrected = true;
         }
 

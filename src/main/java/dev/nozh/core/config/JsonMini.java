@@ -25,6 +25,9 @@ public final class JsonMini {
                 "  \"showHud\": " + c.showHud + ",\n" +
 
                 "  \"targetFps\": " + c.targetFps + ",\n" +
+                "  \"optimizationProfile\": \"" + (c.optimizationProfile == null ? "BALANCED" : c.optimizationProfile)
+                + "\",\n" +
+                "  \"reverseEpsilonMs\": " + c.reverseEpsilonMs + ",\n" +
 
                 "  \"allowAutoTuning\": " + c.allowAutoTuning + ",\n" +
                 "  \"allowGameplayImpactActions\": " + c.allowGameplayImpactActions + ",\n" +
@@ -40,7 +43,10 @@ public final class JsonMini {
                 "  \"cooldownActionMillis\": " + c.cooldownActionMillis + ",\n" +
                 "  \"cooldownGlobalMinIntervalMillis\": " + c.cooldownGlobalMinIntervalMillis + ",\n" +
                 "  \"maxChangesPerSession\": " + c.maxChangesPerSession + ",\n" +
-                "  \"evalPeriodTicks\": " + c.evalPeriodTicks + "\n" +
+                "  \"evalPeriodTicks\": " + c.evalPeriodTicks + ",\n" +
+                "  \"benchmarkModeEnabled\": " + c.benchmarkModeEnabled + ",\n" +
+                "  \"benchmarkMicroIntervalMillis\": " + c.benchmarkMicroIntervalMillis + ",\n" +
+                "  \"hardwareProfile\": \"" + (c.hardwareProfile == null ? "" : c.hardwareProfile) + "\"\n" +
                 "}\n";
     }
 
@@ -104,6 +110,8 @@ public final class JsonMini {
 
             // Targets
             c.targetFps = getInt(json, "targetFps", c.targetFps);
+            c.optimizationProfile = getString(json, "optimizationProfile", c.optimizationProfile);
+            c.reverseEpsilonMs = getDouble(json, "reverseEpsilonMs", c.reverseEpsilonMs);
 
             // Toggles
             c.allowAutoTuning = getBool(json, "allowAutoTuning", c.allowAutoTuning);
@@ -138,6 +146,10 @@ public final class JsonMini {
 
             c.maxChangesPerSession = getInt(json, "maxChangesPerSession", c.maxChangesPerSession);
             c.evalPeriodTicks = getInt(json, "evalPeriodTicks", c.evalPeriodTicks);
+            c.benchmarkModeEnabled = getBool(json, "benchmarkModeEnabled", c.benchmarkModeEnabled);
+            c.benchmarkMicroIntervalMillis = getInt(json, "benchmarkMicroIntervalMillis",
+                    c.benchmarkMicroIntervalMillis);
+            c.hardwareProfile = getString(json, "hardwareProfile", c.hardwareProfile);
 
         } catch (Exception e) {
             // Log if possible, otherwise rely on validate() default

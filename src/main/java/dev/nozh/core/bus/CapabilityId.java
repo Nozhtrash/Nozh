@@ -32,6 +32,9 @@ public enum CapabilityId {
     RESOLUTION_SCALE,
     DISTORTION_EFFECT_SCALE,
 
+    // Advanced Lighting
+    DYNAMIC_LIGHTING,
+
     // God Mode: Precise Entity Control
     ARMOR_STANDS,
     ITEM_FRAMES,

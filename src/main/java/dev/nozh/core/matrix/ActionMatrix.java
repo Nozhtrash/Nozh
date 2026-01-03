@@ -10,10 +10,12 @@ import dev.nozh.core.capability.ProviderStatus;
 import dev.nozh.core.capability.SafetyLevel;
 import dev.nozh.core.context.Scenario;
 import dev.nozh.core.governor.ModePolicy;
+import dev.nozh.core.governor.OptimizationProfile;
 
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Action matrix generator (Contract 6).
@@ -34,7 +36,7 @@ public final class ActionMatrix {
     private final ProviderRegistry registry;
     private final ActionSuccessTracker successTracker;
     private final ConfidenceCalculator confidenceCalculator;
-    private final dev.nozh.core.compatibility.ModConflictDetector conflictDetector;
+    private final dev.nozh.core.compatibility.CompatibilityMatrix compatibilityMatrix;
     private final dev.nozh.core.intelligence.SessionLearning sessionLearning;
 
     public ActionMatrix(
@@ -50,17 +52,17 @@ public final class ActionMatrix {
             ActionSuccessTracker successTracker,
             ConfidenceCalculator confidenceCalculator,
             dev.nozh.core.intelligence.SessionLearning sessionLearning,
-            dev.nozh.core.compatibility.ModConflictDetector conflictDetector) {
+            dev.nozh.core.compatibility.CompatibilityMatrix compatibilityMatrix) {
         this.registry = registry;
         this.successTracker = successTracker;
         this.confidenceCalculator = confidenceCalculator;
         this.sessionLearning = sessionLearning;
-        this.conflictDetector = conflictDetector != null ? conflictDetector : createConflictDetectorSafe();
+        this.compatibilityMatrix = compatibilityMatrix != null ? compatibilityMatrix : createCompatibilityMatrixSafe();
     }
 
-    private static dev.nozh.core.compatibility.ModConflictDetector createConflictDetectorSafe() {
+    private static dev.nozh.core.compatibility.CompatibilityMatrix createCompatibilityMatrixSafe() {
         try {
-            return new dev.nozh.core.compatibility.ModConflictDetector();
+            return new dev.nozh.core.compatibility.CompatibilityMatrix();
         } catch (Throwable e) {
             // Tests don't have FabricLoader available
             return null;
@@ -75,7 +77,11 @@ public final class ActionMatrix {
      * @param scenario     Current scenario (combat/building/etc.)
      * @return Sorted candidates (best first), may be empty
      */
-    public List<ActionCandidate> generateCandidates(ModePolicy policy, String currentBound, Scenario scenario) {
+    public List<ActionCandidate> generateCandidates(
+            ModePolicy policy,
+            String currentBound,
+            Scenario scenario,
+            OptimizationProfile profile) {
         List<ActionCandidate> candidates = new ArrayList<>();
         List<ActionCandidate> yieldCandidates = new ArrayList<>();
         long now = System.currentTimeMillis();
@@ -100,6 +106,12 @@ public final class ActionMatrix {
                 continue;
             }
 
+            if (compatibilityMatrix != null && compatibilityMatrix.isBlockedByDependencies(metadata)) {
+                yieldCandidates.add(ActionCandidate.yield(id,
+                        compatibilityMatrix.getDependencySteward(metadata)));
+                continue;
+            }
+
             // Calculate confidence
             double historicalSuccess = successTracker.getSuccessRate(id);
             long lastSuccess = successTracker.getLastSuccessMillis(id);
@@ -121,7 +133,7 @@ public final class ActionMatrix {
             }
 
             // Generate target value based on bound + provider type
-            CapabilityValue targetValue = generateTargetValue(id, currentBound, scenario);
+            CapabilityValue targetValue = generateTargetValue(id, currentBound, scenario, profile);
 
             // Skip if no target value could be determined
             if (targetValue == null) {
@@ -129,9 +141,9 @@ public final class ActionMatrix {
             }
 
             // INTEGRATION: Conflict Detection
-            if (conflictDetector != null && conflictDetector.hasConflict(id)) {
+            if (compatibilityMatrix != null && compatibilityMatrix.isExternallyManaged(id, metadata)) {
                 // If another mod handles this, we should not touch it
-                yieldCandidates.add(ActionCandidate.yield(id, conflictDetector.getSteward(id)));
+                yieldCandidates.add(ActionCandidate.yield(id, compatibilityMatrix.getSteward(id)));
                 continue;
             }
 
@@ -183,6 +195,75 @@ public final class ActionMatrix {
         return candidates;
     }
 
+    public List<ActionCandidate> generateReverseCandidates(
+            ModePolicy policy,
+            Scenario scenario,
+            OptimizationProfile profile,
+            Map<CapabilityId, CapabilityValue> baselineSettings,
+            Map<CapabilityId, CapabilityValue> currentSettings) {
+        List<ActionCandidate> candidates = new ArrayList<>();
+        long now = System.currentTimeMillis();
+
+        for (CapabilityProvider provider : registry.getAllProviders()) {
+            CapabilityId id = provider.id();
+            ProviderMetadata metadata = provider.metadata();
+
+            if (!policy.allowedTiers().contains(determineTier(metadata))) {
+                continue;
+            }
+
+            CapabilityValue baseline = baselineSettings.get(id);
+            CapabilityValue current = currentSettings.get(id);
+            if (baseline == null || current == null) {
+                continue;
+            }
+
+            if (!isQualityIncrease(id, current, baseline)) {
+                continue;
+            }
+
+            if (compatibilityMatrix != null && compatibilityMatrix.isExternallyManaged(id, metadata)) {
+                continue;
+            }
+
+            double historicalSuccess = successTracker.getSuccessRate(id);
+            long lastSuccess = successTracker.getLastSuccessMillis(id);
+            long lastFailure = successTracker.getLastFailureMillis(id);
+            boolean envChanged = successTracker.isEnvironmentChanged(id);
+
+            double confidence = confidenceCalculator.calculate(
+                    1.0,
+                    historicalSuccess,
+                    provider.status(),
+                    lastSuccess,
+                    lastFailure,
+                    envChanged,
+                    now);
+
+            if (confidence < policy.minConfidence()) {
+                continue;
+            }
+
+            candidates.add(new ActionCandidate(
+                    id,
+                    baseline,
+                    determineTier(metadata),
+                    0.0,
+                    metadata.safetyLevel(),
+                    metadata.rollbackGuarantee(),
+                    metadata.gameplayImpact(),
+                    metadata.visualImpact(),
+                    confidence,
+                    String.format("%s → restore baseline (%s profile)", id.name(), profile.name())));
+        }
+
+        candidates.sort(Comparator
+                .comparingInt(ActionCandidate::tier)
+                .thenComparing(Comparator.comparingDouble(ActionCandidate::confidenceScore).reversed()));
+
+        return candidates;
+    }
+
     private int determineTier(ProviderMetadata metadata) {
         // Simple tier logic based on impact
         if (metadata.gameplayImpact() == ImpactLevel.HIGH ||
@@ -210,10 +291,12 @@ public final class ActionMatrix {
     private CapabilityValue generateTargetValue(
             CapabilityId id,
             String bound,
-            Scenario scenario) {
+            Scenario scenario,
+            OptimizationProfile profile) {
         boolean cpuBound = "CPU".equals(bound);
         boolean gpuBound = "GPU".equals(bound);
         boolean balanced = "BALANCED".equals(bound);
+        boolean aggressive = profile != null && profile.isAggressive();
 
         boolean combat = scenario == Scenario.COMBAT;
         boolean mining = scenario == Scenario.MINING;
@@ -228,10 +311,10 @@ public final class ActionMatrix {
                     return new CapabilityValue.EnumValue("MINIMAL");
                 }
                 if (cpuBound) {
-                    return new CapabilityValue.EnumValue("MINIMAL");
+                    return new CapabilityValue.EnumValue(aggressive ? "MINIMAL" : "DECREASED");
                 }
                 if (gpuBound || balanced) {
-                    return new CapabilityValue.EnumValue("DECREASED");
+                    return new CapabilityValue.EnumValue(aggressive ? "MINIMAL" : "DECREASED");
                 }
             }
             case CLOUDS -> {
@@ -239,58 +322,58 @@ public final class ActionMatrix {
                     return new CapabilityValue.EnumValue("OFF");
                 }
                 if (gpuBound || balanced) {
-                    return new CapabilityValue.EnumValue("FAST");
+                    return new CapabilityValue.EnumValue(aggressive ? "OFF" : "FAST");
                 }
             }
             case ENTITY_SHADOWS -> {
                 if (combat || gpuBound || cpuBound) {
-                    return new CapabilityValue.EnumValue("OFF");
+                    return new CapabilityValue.BoolValue(false);
                 }
             }
             case RENDER_DISTANCE -> {
                 if (mining) {
-                    return new CapabilityValue.IntValue(6);
+                    return new CapabilityValue.IntValue(aggressive ? 4 : 6);
                 }
                 if (gpuBound || combat) {
-                    return new CapabilityValue.IntValue(8);
+                    return new CapabilityValue.IntValue(aggressive ? 6 : 8);
                 }
                 if (cpuBound) {
-                    return new CapabilityValue.IntValue(10);
+                    return new CapabilityValue.IntValue(aggressive ? 8 : 10);
                 }
             }
             case SIMULATION_DISTANCE -> {
                 if (cpuBound || combat || mining) {
-                    return new CapabilityValue.IntValue(6);
+                    return new CapabilityValue.IntValue(aggressive ? 4 : 6);
                 }
                 if (balanced && !building) {
-                    return new CapabilityValue.IntValue(7);
+                    return new CapabilityValue.IntValue(aggressive ? 5 : 7);
                 }
             }
             case ENTITY_DISTANCE -> {
                 if (combat || afk || loading) {
-                    return new CapabilityValue.IntValue(70);
+                    return new CapabilityValue.IntValue(aggressive ? 60 : 70);
                 }
                 if (gpuBound) {
-                    return new CapabilityValue.IntValue(75);
+                    return new CapabilityValue.IntValue(aggressive ? 60 : 75);
                 }
                 if (cpuBound && !building) {
-                    return new CapabilityValue.IntValue(80);
+                    return new CapabilityValue.IntValue(aggressive ? 65 : 80);
                 }
             }
             case BIOME_BLEND -> {
                 if (combat || gpuBound) {
-                    return new CapabilityValue.IntValue(2);
+                    return new CapabilityValue.IntValue(aggressive ? 1 : 2);
                 }
                 if (cpuBound || balanced) {
-                    return new CapabilityValue.IntValue(3);
+                    return new CapabilityValue.IntValue(aggressive ? 2 : 3);
                 }
             }
             case MIPMAP_LEVEL -> {
                 if (combat || gpuBound) {
-                    return new CapabilityValue.IntValue(2);
+                    return new CapabilityValue.IntValue(aggressive ? 1 : 2);
                 }
                 if (balanced && !building) {
-                    return new CapabilityValue.IntValue(3);
+                    return new CapabilityValue.IntValue(aggressive ? 2 : 3);
                 }
             }
             case VSYNC -> {
@@ -300,10 +383,10 @@ public final class ActionMatrix {
             }
             case FOG -> {
                 if (combat || gpuBound) {
-                    return new CapabilityValue.IntValue(8);
+                    return new CapabilityValue.IntValue(aggressive ? 6 : 8);
                 }
                 if (balanced && !building) {
-                    return new CapabilityValue.IntValue(10);
+                    return new CapabilityValue.IntValue(aggressive ? 8 : 10);
                 }
             }
             case GRAPHICS_MODE -> {
@@ -312,6 +395,11 @@ public final class ActionMatrix {
                 }
                 if (balanced && !building) {
                     return new CapabilityValue.EnumValue("FAST");
+                }
+            }
+            case SMOOTH_LIGHTING -> {
+                if (combat || gpuBound || cpuBound) {
+                    return new CapabilityValue.EnumValue("OFF");
                 }
             }
             case ARMOR_STANDS -> {
@@ -334,6 +422,34 @@ public final class ActionMatrix {
                     return new CapabilityValue.BoolValue(false);
                 }
             }
+            case FPS_CAP -> {
+                if (menu || afk) {
+                    return new CapabilityValue.IntValue(60);
+                }
+                if (gpuBound && !combat) {
+                    return new CapabilityValue.IntValue(90);
+                }
+            }
+            case RESOLUTION_SCALE -> {
+                if (gpuBound || loading) {
+                    return new CapabilityValue.FloatValue(aggressive ? 0.6f : 0.8f);
+                }
+            }
+            case DISTORTION_EFFECT_SCALE -> {
+                if (gpuBound || loading) {
+                    return new CapabilityValue.FloatValue(aggressive ? 0.0f : 0.5f);
+                }
+            }
+            case DYNAMIC_LIGHTING -> {
+                if (combat || gpuBound || cpuBound || loading) {
+                    return new CapabilityValue.BoolValue(false);
+                }
+            }
+            case CHUNK_LOADING -> {
+                if (loading || cpuBound) {
+                    return new CapabilityValue.EnumValue(aggressive ? "AGGRESSIVE" : "BALANCED");
+                }
+            }
             default -> {
             }
         }
@@ -349,5 +465,59 @@ public final class ActionMatrix {
     private double scoreCandidate(ActionCandidate candidate, double maxExpectedGain) {
         double normalizedGain = maxExpectedGain > 0 ? candidate.expectedGainMs() / maxExpectedGain : 0.0;
         return (candidate.confidenceScore() * CONFIDENCE_WEIGHT) + (normalizedGain * EXPECTED_GAIN_WEIGHT);
+    }
+
+    private boolean isQualityIncrease(CapabilityId id, CapabilityValue current, CapabilityValue baseline) {
+        if (current.equals(baseline)) {
+            return false;
+        }
+        return switch (id) {
+            case PARTICLES -> compareEnum(current, baseline, List.of("MINIMAL", "DECREASED", "ALL"));
+            case CLOUDS -> compareEnum(current, baseline, List.of("OFF", "FAST", "FANCY"));
+            case GRAPHICS_MODE -> compareEnum(current, baseline, List.of("FAST", "FANCY", "FABULOUS"));
+            case ENTITY_SHADOWS, ARMOR_STANDS, ITEM_FRAMES, BLOCK_ENTITIES, ANIMATIONS, VSYNC, DYNAMIC_LIGHTING ->
+                    compareBool(current, baseline);
+            case RENDER_DISTANCE, SIMULATION_DISTANCE, ENTITY_DISTANCE, BIOME_BLEND, MIPMAP_LEVEL, FOG ->
+                    compareInt(current, baseline);
+            case RESOLUTION_SCALE, DISTORTION_EFFECT_SCALE -> compareFloat(current, baseline);
+            default -> false;
+        };
+    }
+
+    private boolean compareEnum(CapabilityValue current, CapabilityValue baseline, List<String> ordering) {
+        if (!(current instanceof CapabilityValue.EnumValue currentEnum)
+                || !(baseline instanceof CapabilityValue.EnumValue baselineEnum)) {
+            return false;
+        }
+        int currentIndex = ordering.indexOf(currentEnum.name());
+        int baselineIndex = ordering.indexOf(baselineEnum.name());
+        if (currentIndex < 0 || baselineIndex < 0) {
+            return false;
+        }
+        return baselineIndex > currentIndex;
+    }
+
+    private boolean compareBool(CapabilityValue current, CapabilityValue baseline) {
+        if (!(current instanceof CapabilityValue.BoolValue currentBool)
+                || !(baseline instanceof CapabilityValue.BoolValue baselineBool)) {
+            return false;
+        }
+        return baselineBool.value() && !currentBool.value();
+    }
+
+    private boolean compareInt(CapabilityValue current, CapabilityValue baseline) {
+        if (!(current instanceof CapabilityValue.IntValue currentInt)
+                || !(baseline instanceof CapabilityValue.IntValue baselineInt)) {
+            return false;
+        }
+        return baselineInt.value() > currentInt.value();
+    }
+
+    private boolean compareFloat(CapabilityValue current, CapabilityValue baseline) {
+        if (!(current instanceof CapabilityValue.FloatValue currentFloat)
+                || !(baseline instanceof CapabilityValue.FloatValue baselineFloat)) {
+            return false;
+        }
+        return baselineFloat.value() > currentFloat.value();
     }
 }
