@@ -1,5 +1,9 @@
 package dev.nozh.core.state;
 
+import dev.nozh.api.PerfSnapshot;
+import dev.nozh.core.bus.CapabilityId;
+import dev.nozh.core.bus.CapabilityValue;
+import dev.nozh.core.bus.Command;
 import dev.nozh.core.context.Scenario;
 import org.junit.jupiter.api.Test;
 
@@ -17,12 +21,16 @@ class StateInvariantValidatorTest {
         private PendingAction samplePending() {
                 return new PendingAction(
                                 System.currentTimeMillis(),
-                                null,
-                                new dev.nozh.core.bus.Command.ResetCapability(null),
+                                0L,
+                                CapabilityId.PARTICLES,
+                                new Command.ResetCapability(CapabilityId.PARTICLES),
                                 Optional.empty(),
-                                null,
+                                new CapabilityValue.EnumValue("OFF"),
                                 16.0,
-                                18.0);
+                                18.0,
+                                Scenario.STANDARD,
+                                0.5,
+                                PerfSnapshot.empty());
         }
 
         // === Invariant 1: SafeMode → NoAutoTuning ===
@@ -46,9 +54,12 @@ class StateInvariantValidatorTest {
                                 state.pendingActionsCount(),
                                 state.executionHistorySize(),
                                 state.lastSnapshotHistorySize(),
+                                state.actionHistory(),
                                 state.sessionChangesCount(),
                                 state.avgFrametimeMs(),
                                 state.p95FrametimeMs(),
+                                state.p99FrametimeMs(),
+                                state.frametimeStddevMs(),
                                 state.tickTimeAvg(),
                                 state.tickTimeP95(),
                                 state.spikeCount(),
@@ -57,7 +68,9 @@ class StateInvariantValidatorTest {
                                 state.sessionStartTime(),
                                 state.stateVersion(),
                                 state.currentScenario(),
-                                state.scenarioConfidence());
+                                state.scenarioConfidence(),
+                                state.baselineSettings(),
+                                state.currentSettings());
 
                 ValidationResult result = StateInvariantValidator.validate(state);
                 assertTrue(result.isInvalid());
@@ -84,9 +97,12 @@ class StateInvariantValidatorTest {
                                 state.pendingActionsCount(),
                                 state.executionHistorySize(),
                                 state.lastSnapshotHistorySize(),
+                                state.actionHistory(),
                                 state.sessionChangesCount(),
                                 state.avgFrametimeMs(),
                                 state.p95FrametimeMs(),
+                                state.p99FrametimeMs(),
+                                state.frametimeStddevMs(),
                                 state.tickTimeAvg(),
                                 state.tickTimeP95(),
                                 state.spikeCount(),
@@ -95,7 +111,9 @@ class StateInvariantValidatorTest {
                                 state.sessionStartTime(),
                                 state.stateVersion(),
                                 state.currentScenario(),
-                                state.scenarioConfidence());
+                                state.scenarioConfidence(),
+                                state.baselineSettings(),
+                                state.currentSettings());
 
                 ValidationResult result = StateInvariantValidator.validate(state);
                 assertTrue(result.isValid(), "SafeMode without AutoTuning should be valid");
@@ -123,9 +141,12 @@ class StateInvariantValidatorTest {
                                 base.pendingActionsCount(),
                                 base.executionHistorySize(),
                                 base.lastSnapshotHistorySize(),
+                                base.actionHistory(),
                                 base.sessionChangesCount(),
                                 base.avgFrametimeMs(),
                                 base.p95FrametimeMs(),
+                                base.p99FrametimeMs(),
+                                base.frametimeStddevMs(),
                                 base.tickTimeAvg(),
                                 base.tickTimeP95(),
                                 base.spikeCount(),
@@ -134,7 +155,9 @@ class StateInvariantValidatorTest {
                                 base.sessionStartTime(),
                                 base.stateVersion(),
                                 base.currentScenario(),
-                                base.scenarioConfidence());
+                                base.scenarioConfidence(),
+                                base.baselineSettings(),
+                                base.currentSettings());
 
                 ValidationResult result = StateInvariantValidator.validate(state);
                 assertTrue(result.isInvalid());
@@ -161,9 +184,12 @@ class StateInvariantValidatorTest {
                                 state.pendingActionsCount(),
                                 state.executionHistorySize(),
                                 state.lastSnapshotHistorySize(),
+                                state.actionHistory(),
                                 state.sessionChangesCount(),
                                 state.avgFrametimeMs(),
                                 state.p95FrametimeMs(),
+                                state.p99FrametimeMs(),
+                                state.frametimeStddevMs(),
                                 state.tickTimeAvg(),
                                 state.tickTimeP95(),
                                 state.spikeCount(),
@@ -172,7 +198,9 @@ class StateInvariantValidatorTest {
                                 state.sessionStartTime(),
                                 state.stateVersion(),
                                 state.currentScenario(),
-                                state.scenarioConfidence());
+                                state.scenarioConfidence(),
+                                state.baselineSettings(),
+                                state.currentSettings());
 
                 assertTrue(StateInvariantValidator.validate(state).isValid());
         }
@@ -196,9 +224,12 @@ class StateInvariantValidatorTest {
                                 3, // pendingActionsCount > 0
                                 state.executionHistorySize(),
                                 state.lastSnapshotHistorySize(),
+                                state.actionHistory(),
                                 state.sessionChangesCount(),
                                 state.avgFrametimeMs(),
                                 state.p95FrametimeMs(),
+                                state.p99FrametimeMs(),
+                                state.frametimeStddevMs(),
                                 state.tickTimeAvg(),
                                 state.tickTimeP95(),
                                 state.spikeCount(),
@@ -207,7 +238,9 @@ class StateInvariantValidatorTest {
                                 state.sessionStartTime(),
                                 state.stateVersion(),
                                 state.currentScenario(),
-                                state.scenarioConfidence());
+                                state.scenarioConfidence(),
+                                state.baselineSettings(),
+                                state.currentSettings());
 
                 ValidationResult result = StateInvariantValidator.validate(state);
                 assertTrue(result.isInvalid());
@@ -234,9 +267,12 @@ class StateInvariantValidatorTest {
                                 3, // pendingActionsCount > 0
                                 state.executionHistorySize(),
                                 state.lastSnapshotHistorySize(),
+                                state.actionHistory(),
                                 state.sessionChangesCount(),
                                 state.avgFrametimeMs(),
                                 state.p95FrametimeMs(),
+                                state.p99FrametimeMs(),
+                                state.frametimeStddevMs(),
                                 state.tickTimeAvg(),
                                 state.tickTimeP95(),
                                 state.spikeCount(),
@@ -245,7 +281,9 @@ class StateInvariantValidatorTest {
                                 state.sessionStartTime(),
                                 state.stateVersion(),
                                 state.currentScenario(),
-                                state.scenarioConfidence());
+                                state.scenarioConfidence(),
+                                state.baselineSettings(),
+                                state.currentSettings());
 
                 assertTrue(StateInvariantValidator.validate(state).isValid());
         }
@@ -271,9 +309,12 @@ class StateInvariantValidatorTest {
                                 state.pendingActionsCount(),
                                 5, // executionHistorySize = 5
                                 10, // lastSnapshotHistorySize = 10 (VIOLATION: decreased)
+                                state.actionHistory(),
                                 state.sessionChangesCount(),
                                 state.avgFrametimeMs(),
                                 state.p95FrametimeMs(),
+                                state.p99FrametimeMs(),
+                                state.frametimeStddevMs(),
                                 state.tickTimeAvg(),
                                 state.tickTimeP95(),
                                 state.spikeCount(),
@@ -282,7 +323,9 @@ class StateInvariantValidatorTest {
                                 state.sessionStartTime(),
                                 state.stateVersion(),
                                 state.currentScenario(),
-                                state.scenarioConfidence());
+                                state.scenarioConfidence(),
+                                state.baselineSettings(),
+                                state.currentSettings());
 
                 ValidationResult result = StateInvariantValidator.validate(state);
 
@@ -311,9 +354,12 @@ class StateInvariantValidatorTest {
                                 state.pendingActionsCount(),
                                 15, // executionHistorySize = 15
                                 10, // lastSnapshotHistorySize = 10 (OK: increased)
+                                state.actionHistory(),
                                 state.sessionChangesCount(),
                                 state.avgFrametimeMs(),
                                 state.p95FrametimeMs(),
+                                state.p99FrametimeMs(),
+                                state.frametimeStddevMs(),
                                 state.tickTimeAvg(),
                                 state.tickTimeP95(),
                                 state.spikeCount(),
@@ -322,7 +368,9 @@ class StateInvariantValidatorTest {
                                 state.sessionStartTime(),
                                 state.stateVersion(),
                                 state.currentScenario(),
-                                state.scenarioConfidence());
+                                state.scenarioConfidence(),
+                                state.baselineSettings(),
+                                state.currentSettings());
 
                 ValidationResult result = StateInvariantValidator.validate(state);
                 assertTrue(result.isValid(), "History size increase should be valid");
@@ -349,9 +397,12 @@ class StateInvariantValidatorTest {
                                 5, // pendingActionsCount > 0 (VIOLATION 3)
                                 state.executionHistorySize(),
                                 state.lastSnapshotHistorySize(),
+                                state.actionHistory(),
                                 state.sessionChangesCount(),
                                 state.avgFrametimeMs(),
                                 state.p95FrametimeMs(),
+                                state.p99FrametimeMs(),
+                                state.frametimeStddevMs(),
                                 state.tickTimeAvg(),
                                 state.tickTimeP95(),
                                 state.spikeCount(),
@@ -360,7 +411,9 @@ class StateInvariantValidatorTest {
                                 state.sessionStartTime(),
                                 state.stateVersion(),
                                 state.currentScenario(),
-                                state.scenarioConfidence());
+                                state.scenarioConfidence(),
+                                state.baselineSettings(),
+                                state.currentSettings());
 
                 ValidationResult result = StateInvariantValidator.validate(state);
                 assertTrue(result.isInvalid());
@@ -399,10 +452,13 @@ class StateInvariantValidatorTest {
 
                                 15,
                                 10,
+                                base.actionHistory(),
                                 base.sessionChangesCount(),
 
                                 base.avgFrametimeMs(),
                                 base.p95FrametimeMs(),
+                                base.p99FrametimeMs(),
+                                base.frametimeStddevMs(),
                                 base.tickTimeAvg(),
                                 base.tickTimeP95(),
                                 base.spikeCount(),
@@ -411,7 +467,9 @@ class StateInvariantValidatorTest {
                                 base.sessionStartTime(),
                                 base.stateVersion(),
                                 base.currentScenario(),
-                                base.scenarioConfidence());
+                                base.scenarioConfidence(),
+                                base.baselineSettings(),
+                                base.currentSettings());
 
                 assertTrue(StateInvariantValidator.validate(state).isValid());
         }

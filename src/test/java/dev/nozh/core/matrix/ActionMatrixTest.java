@@ -14,6 +14,7 @@ import dev.nozh.core.capability.SafetyLevel;
 import dev.nozh.core.capability.SideEffects;
 import dev.nozh.core.context.Scenario;
 import dev.nozh.core.governor.ModePolicy;
+import dev.nozh.core.governor.OptimizationProfile;
 import dev.nozh.core.intelligence.SessionLearning;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -49,7 +50,7 @@ class ActionMatrixTest {
                 new SessionLearning(tempDir.toFile()));
 
         List<ActionCandidate> candidates = matrix.generateCandidates(ModePolicy.manualAssist(), "CPU",
-                Scenario.STANDARD);
+                Scenario.STANDARD, OptimizationProfile.BALANCED);
 
         Map<CapabilityId, ActionCandidate> byId = byId(candidates);
         assertEquals(3, byId.size());
@@ -74,7 +75,7 @@ class ActionMatrixTest {
                 new SessionLearning(tempDir.toFile()));
 
         List<ActionCandidate> candidates = matrix.generateCandidates(ModePolicy.manualAssist(), "GPU",
-                Scenario.STANDARD);
+                Scenario.STANDARD, OptimizationProfile.BALANCED);
 
         Map<CapabilityId, ActionCandidate> byId = byId(candidates);
         assertEquals(3, byId.size());
@@ -96,7 +97,7 @@ class ActionMatrixTest {
                 new SessionLearning(tempDir.toFile()));
 
         List<ActionCandidate> candidates = matrix.generateCandidates(ModePolicy.manualAssist(), "BALANCED",
-                Scenario.STANDARD);
+                Scenario.STANDARD, OptimizationProfile.BALANCED);
 
         Map<CapabilityId, ActionCandidate> byId = byId(candidates);
         assertEquals(2, byId.size());
@@ -130,7 +131,7 @@ class ActionMatrixTest {
                 learning);
 
         List<ActionCandidate> candidates = matrix.generateCandidates(ModePolicy.manualAssist(), "CPU",
-                Scenario.STANDARD);
+                Scenario.STANDARD, OptimizationProfile.BALANCED);
 
         Map<CapabilityId, ActionCandidate> byId = byId(candidates);
         assertEquals(1, byId.size());
@@ -152,7 +153,7 @@ class ActionMatrixTest {
                 new SessionLearning(tempDir.toFile()));
 
         List<ActionCandidate> candidates = matrix.generateCandidates(ModePolicy.manualAssist(), "BALANCED",
-                Scenario.COMBAT);
+                Scenario.COMBAT, OptimizationProfile.BALANCED);
 
         Map<CapabilityId, ActionCandidate> byId = byId(candidates);
         assertEquals("MINIMAL", candidateValue(byId.get(CapabilityId.PARTICLES)));

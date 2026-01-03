@@ -23,9 +23,12 @@ public final class TestStates {
                 state.pendingActionsCount(),
                 state.executionHistorySize(),
                 state.lastSnapshotHistorySize(),
+                state.actionHistory(),
                 state.sessionChangesCount(),
                 state.avgFrametimeMs(),
                 state.p95FrametimeMs(),
+                state.p99FrametimeMs(),
+                state.frametimeStddevMs(),
                 state.tickTimeAvg(),
                 state.tickTimeP95(),
                 state.spikeCount(),
@@ -34,6 +37,8 @@ public final class TestStates {
                 state.sessionStartTime(),
                 state.stateVersion(),
                 state.currentScenario(),
-                state.scenarioConfidence());
+                state.scenarioConfidence(),
+                state.baselineSettings(),
+                state.currentSettings());
     }
 }

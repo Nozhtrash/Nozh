@@ -9,9 +9,12 @@ import dev.nozh.core.config.ConfigManager;
 import dev.nozh.core.config.ConfigSyncService;
 import dev.nozh.core.capability.ProviderRegistry;
 import dev.nozh.core.governor.GovernorRunner;
+import dev.nozh.core.governor.ActionOutcome;
 import dev.nozh.core.matrix.ActionSuccessTracker;
 import dev.nozh.core.safety.CrashLoopGuard;
 import dev.nozh.core.state.PendingAction;
+import dev.nozh.core.state.RuntimeState;
+import dev.nozh.core.state.ActionHistoryEntry;
 import dev.nozh.core.state.StateStore;
 import dev.nozh.fabric.FabricNozhLogger;
 import dev.nozh.fabric.capability.MinecraftOptionsAdapter;
@@ -308,6 +311,16 @@ public class NozhModClient implements ClientModInitializer {
         PendingAction pending = state.suggestedAction().get();
         var command = pending.command();
         long now = System.currentTimeMillis();
+        int maxHistoryEntries = ConfigManager.getConfig() != null ? ConfigManager.getConfig().historyMaxEntries : 50;
+        ActionHistoryEntry actionEntry = new ActionHistoryEntry(
+                now,
+                pending.capability().name() + "=" + pending.newValue(),
+                pending.scenario(),
+                pending.scenarioConfidence(),
+                pending.baselineSnapshot(),
+                dev.nozh.api.PerfSnapshot.empty(),
+                ActionOutcome.NEUTRAL,
+                false);
 
         actionBus.dispatch(command, report -> {
             if (report.succeeded()) {
@@ -325,8 +338,7 @@ public class NozhModClient implements ClientModInitializer {
         });
 
         StateStore.getInstance().update(currentState -> currentState
-                .withGovernorAction(now, pending)
-                .withSuggestedActionCleared());
+                .withAppliedSuggestion(now, pending, actionEntry, maxHistoryEntries));
     }
 
     private static void notifyClient(MinecraftClient client, Text title, Text message) {

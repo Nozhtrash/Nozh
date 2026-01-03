@@ -4,7 +4,6 @@ import dev.nozh.NozhConstants;
 import dev.nozh.core.compat.CompatService;
 import dev.nozh.core.config.ConfigManager;
 import dev.nozh.core.config.NozhConfig;
-import dev.nozh.core.state.PendingAction;
 import dev.nozh.core.state.RuntimeState;
 import dev.nozh.core.state.StateStore;
 import dev.nozh.core.safety.CrashLoopGuard;
@@ -66,6 +65,12 @@ public final class NozhCommands {
                                         runApplySuggestion(context.getSource());
                                         return 1;
                                     }))
+                            .then(ClientCommandManager.literal("suggestion")
+                                    .then(ClientCommandManager.literal("clear")
+                                            .executes(context -> {
+                                                runClearSuggestion(context.getSource());
+                                                return 1;
+                                            })))
                             .then(ClientCommandManager.literal("telemetry")
                                     .then(ClientCommandManager.literal("export")
                                             .then(ClientCommandManager.literal("csv")
@@ -315,6 +320,7 @@ public final class NozhCommands {
         NozhModClient.applySuggestedAction(client);
     }
 
+    private static void runClearSuggestion(FabricClientCommandSource source) {
         RuntimeState state = StateStore.getInstance().snapshotSafe();
         if (state.suggestedAction().isEmpty()) {
             source.sendFeedback(Text.translatable("nozh.suggestion.clear.none"));
@@ -338,24 +344,5 @@ public final class NozhCommands {
         } catch (Exception e) {
             source.sendFeedback(Text.translatable("nozh.telemetry.export.failed", e.getMessage()));
         }
-    }
-
-        PendingAction pending = state.suggestedAction().get();
-        Command command = new Command.ApplyCapability(pending.capability(), pending.newValue());
-        long now = System.currentTimeMillis();
-
-        actionBus.dispatch(command, report -> {
-            if (report.succeeded()) {
-                source.sendFeedback(Text.literal("Applied suggested change"));
-            } else {
-                String reason = report.error().orElse("unknown");
-                source.sendFeedback(Text.literal("Failed to apply suggestion: " + reason));
-                StateStore.getInstance().update(RuntimeState::withPendingActionCleared);
-            }
-        });
-
-        StateStore.getInstance().update(currentState -> currentState
-                .withGovernorAction(now, pending)
-                .withSuggestedActionCleared());
     }
 }
