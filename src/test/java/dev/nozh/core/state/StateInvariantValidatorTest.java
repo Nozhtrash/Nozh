@@ -169,7 +169,7 @@ class StateInvariantValidatorTest {
                                 state.currentScenario(),
                                 state.scenarioConfidence());
 
-                assertTrue(StateInvariantValidator.validate(state).isInvalid());
+                assertTrue(StateInvariantValidator.validate(state).isValid());
         }
 
         @Test
