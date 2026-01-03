@@ -14,7 +14,6 @@ import dev.nozh.core.governor.ModePolicy;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
-import java.util.Locale;
 
 /**
  * Action matrix generator (Contract 6).
@@ -175,18 +174,13 @@ public final class ActionMatrix {
      * - GPU bound → reduce render distance/shadows
      * - BALANCED → conservative reductions
      */
-    private String generateTargetValue(CapabilityId id, String bound, ProviderMetadata metadata) {
-        String capName = id.name().toLowerCase(Locale.ROOT);
-
-        // CPU-bound heuristics
-        if ("CPU".equals(bound)) {
-            if ("particles".equals(capName))
-                return "MINIMAL";
-            if ("clouds".equals(capName))
-                return "OFF";
-            if ("entity_shadows".equals(capName))
-                return "OFF";
-        }
+    private CapabilityValue generateTargetValue(
+            CapabilityId id,
+            String bound,
+            Scenario scenario) {
+        boolean cpuBound = "CPU".equals(bound);
+        boolean gpuBound = "GPU".equals(bound);
+        boolean balanced = "BALANCED".equals(bound);
 
         boolean combat = scenario == Scenario.COMBAT;
         boolean mining = scenario == Scenario.MINING;
