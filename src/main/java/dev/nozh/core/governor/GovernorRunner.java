@@ -131,6 +131,14 @@ public final class GovernorRunner {
         }
 
         GovernorMode mode = determineMode(state);
+        if (state.safeMode()) {
+            logger.debug("Safe mode active: skipping governor decision");
+            return;
+        }
+        if (mode == GovernorMode.MANUAL_ASSIST && state.suggestedAction().isPresent()) {
+            logger.debug("Manual assist active: suggestion pending, awaiting user confirmation");
+            return;
+        }
         String bound = detectBound(state);
 
         // 3. Detect performance bound from telemetry
@@ -165,20 +173,45 @@ public final class GovernorRunner {
             logger.warn("Failed to update state decision: " + e.getMessage());
         }
 
-        // Dispatch via ActionBus
-        if (decision.targetValue() != null) {
+        // Manual Assist: stage suggestion only
+        if (mode == GovernorMode.MANUAL_ASSIST && decision.targetValue() != null) {
             Optional<dev.nozh.core.bus.CapabilityValue> previousValue = providerRegistry.get(decision.capabilityId())
                     .flatMap(provider -> provider.getCurrentValueSafe());
+            Command cmd = new Command.ApplyCapability(
+                    decision.capabilityId(),
+                    decision.targetValue());
             PendingAction pending = new PendingAction(
                     now,
                     decision.capabilityId(),
+                    cmd,
                     previousValue,
                     decision.targetValue(),
                     state.avgFrametimeMs(),
                     state.p95FrametimeMs());
+            try {
+                stateStore.update(currentState -> currentState.withSuggestedAction(pending));
+            } catch (Exception e) {
+                logger.warn("Failed to store suggested action: " + e.getMessage());
+            }
+            logger.info("Governor suggestion queued for manual assist: " + actionSummary);
+            return;
+        }
+
+        // Dispatch via ActionBus
+        if (decision.targetValue() != null) {
+            Optional<dev.nozh.core.bus.CapabilityValue> previousValue = providerRegistry.get(decision.capabilityId())
+                    .flatMap(provider -> provider.getCurrentValueSafe());
             Command cmd = new Command.ApplyCapability(
                     decision.capabilityId(),
                     decision.targetValue());
+            PendingAction pending = new PendingAction(
+                    now,
+                    decision.capabilityId(),
+                    cmd,
+                    previousValue,
+                    decision.targetValue(),
+                    state.avgFrametimeMs(),
+                    state.p95FrametimeMs());
 
             actionBus.dispatch(cmd, report -> {
                 if (report.succeeded()) {
@@ -266,16 +299,20 @@ public final class GovernorRunner {
 
     private void evaluatePendingAction(RuntimeState state, PendingAction pending, NozhConfig config) {
         double avg = state.avgFrametimeMs();
-        // double p95 = state.p95FrametimeMs(); // Not strictly using p95 decision yet,
-        // focusing on avg latency gain
+        double p95 = state.p95FrametimeMs();
 
         // Strict Evaluation:
         // 1. Worsened: Avg increased significantly ( > baseline + epsilon)
         // 2. Ineffective: Avg didn't decrease enough ( > baseline - epsilon)
         // Goal: avg < baseline - epsilon
 
-        boolean worsened = avg > pending.baselineAvgMs() + config.improvementEpsilonAvgMs;
-        boolean ineffective = avg > pending.baselineAvgMs() - config.improvementEpsilonAvgMs;
+        boolean avgWorsened = avg > pending.baselineAvgMs() + config.improvementEpsilonAvgMs;
+        boolean avgIneffective = avg > pending.baselineAvgMs() - config.improvementEpsilonAvgMs;
+        boolean p95Worsened = p95 > pending.baselineP95Ms() + config.improvementEpsilonP95Ms;
+        boolean p95Ineffective = p95 > pending.baselineP95Ms() - config.improvementEpsilonP95Ms;
+
+        boolean worsened = avgWorsened || p95Worsened;
+        boolean ineffective = avgIneffective || p95Ineffective;
 
         if (worsened || ineffective) {
             if (config.rollbackEnabled) {
@@ -297,8 +334,9 @@ public final class GovernorRunner {
             sessionLearning.recordFailure(pending.capability());
         } else {
             // Success: avg <= baseline - epsilon
-            double gain = Math.max(0, pending.baselineAvgMs() - avg);
-            sessionLearning.recordSuccess(pending.capability(), gain);
+            double gainAvg = Math.max(0, pending.baselineAvgMs() - avg);
+            double gainP95 = Math.max(0, pending.baselineP95Ms() - p95);
+            sessionLearning.recordSuccess(pending.capability(), Math.max(gainAvg, gainP95));
         }
         // Clear pending action
         try {
