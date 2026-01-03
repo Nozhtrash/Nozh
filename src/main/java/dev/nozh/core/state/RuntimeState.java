@@ -9,6 +9,12 @@
  */
 package dev.nozh.core.state;
 
+import dev.nozh.core.governor.GovernorMode;
+import dev.nozh.core.issues.ParanoiaLevel;
+
+import java.util.ArrayList;
+import java.util.List;
+
 /**
  * Runtime state (Contract 1).
  *
@@ -28,13 +34,17 @@ public record RuntimeState(
         boolean governorCooldownActive,
         long governorLastActionTimestamp,
         boolean benchmarkRunning,
+        String benchmarkValidity,
         long benchmarkStartTimestamp,
+        Optional<PendingAction> pendingAction,
         int pendingActionsCount,
         int executionHistorySize,
         int lastSnapshotHistorySize,
         int sessionChangesCount,
         double avgFrametimeMs,
         double p95FrametimeMs,
+        double tickTimeAvg,
+        double tickTimeP95,
         int spikeCount,
         long sessionStartTime,
         int stateVersion,
@@ -55,13 +65,17 @@ public record RuntimeState(
                 false, // governorCooldownActive
                 0L, // governorLastActionTimestamp
                 false, // benchmarkRunning
+                "NONE", // benchmarkValidity
                 0L, // benchmarkStartTimestamp
+                Optional.empty(), // pendingAction
                 0, // pendingActionsCount
                 0, // executionHistorySize
                 0, // lastSnapshotHistorySize
                 0, // sessionChangesCount
                 -1.0, // avgFrametimeMs (sentinel)
                 -1.0, // p95FrametimeMs (sentinel)
+                -1.0, // tickTimeAvg (sentinel)
+                -1.0, // tickTimeP95 (sentinel)
                 0, // spikeCount
                 System.currentTimeMillis(), // sessionStartTime
                 CURRENT_VERSION,
@@ -72,34 +86,69 @@ public record RuntimeState(
     /**
      * Update after governor action (immutable).
      */
-    public RuntimeState withGovernorAction(long timestamp) {
+    public RuntimeState withGovernorAction(long timestamp, PendingAction pendingAction) {
+        Optional<PendingAction> pending = Optional.ofNullable(pendingAction);
         return new RuntimeState(
                 enabled, safeMode, autoTuning, debugLogs,
                 governorDisabled,
                 true, // governorCooldownActive = true after action
                 timestamp, // governorLastActionTimestamp
-                benchmarkRunning, benchmarkStartTimestamp,
+                benchmarkRunning, benchmarkValidity, benchmarkStartTimestamp,
                 pendingActionsCount,
                 executionHistorySize + 1, // increment history
                 lastSnapshotHistorySize,
                 sessionChangesCount + 1, // increment changes
-                avgFrametimeMs, p95FrametimeMs, spikeCount,
+                avgFrametimeMs, p95FrametimeMs, tickTimeAvg, tickTimeP95, spikeCount,
                 sessionStartTime, stateVersion,
                 currentScenario, scenarioConfidence);
+    }
+
+    /**
+     * Clear any pending action (immutable).
+     */
+    public RuntimeState withPendingActionCleared() {
+        return new RuntimeState(
+                enabled, safeMode, autoTuning, debugLogs,
+                governorDisabled,
+                governorCooldownActive,
+                governorLastActionTimestamp,
+                benchmarkRunning, benchmarkStartTimestamp,
+                Optional.empty(),
+                0,
+                executionHistorySize,
+                lastSnapshotHistorySize,
+                sessionChangesCount,
+                avgFrametimeMs, p95FrametimeMs, spikeCount,
+                sessionStartTime, stateVersion,
+                currentScenario,
+                governorMode,
+                paranoiaLevel,
+                currentBound,
+                lastDecisionReason,
+                lastDecisionTimestamp,
+                lastDecisionSteward,
+                recentActions);
     }
 
     /**
      * Update benchmark status (immutable).
      */
     public RuntimeState withBenchmarkStatus(boolean running, long startTime) {
+        return withBenchmarkStatus(running, startTime, benchmarkValidity);
+    }
+
+    /**
+     * Update benchmark status (immutable) with validity.
+     */
+    public RuntimeState withBenchmarkStatus(boolean running, long startTime, String validity) {
         return new RuntimeState(
                 enabled, safeMode, autoTuning, debugLogs,
                 running ? true : governorDisabled, // disable governor during benchmark
                 governorCooldownActive, governorLastActionTimestamp,
-                running, startTime,
+                running, validity, startTime,
                 pendingActionsCount, executionHistorySize, lastSnapshotHistorySize,
                 sessionChangesCount,
-                avgFrametimeMs, p95FrametimeMs, spikeCount,
+                avgFrametimeMs, p95FrametimeMs, tickTimeAvg, tickTimeP95, spikeCount,
                 sessionStartTime, stateVersion,
                 currentScenario, scenarioConfidence);
     }
@@ -107,14 +156,14 @@ public record RuntimeState(
     /**
      * Update telemetry metrics (immutable).
      */
-    public RuntimeState withTelemetry(double avg, double p95, int spikes) {
+    public RuntimeState withTelemetry(double avg, double p95, int spikes, double tickAvg, double tickP95) {
         return new RuntimeState(
                 enabled, safeMode, autoTuning, debugLogs,
                 governorDisabled, governorCooldownActive, governorLastActionTimestamp,
-                benchmarkRunning, benchmarkStartTimestamp,
+                benchmarkRunning, benchmarkValidity, benchmarkStartTimestamp,
                 pendingActionsCount, executionHistorySize, lastSnapshotHistorySize,
                 sessionChangesCount,
-                avg, p95, spikes,
+                avg, p95, tickAvg, tickP95, spikes,
                 sessionStartTime, stateVersion,
                 currentScenario, scenarioConfidence);
     }
@@ -128,10 +177,10 @@ public record RuntimeState(
                 governorDisabled,
                 false, // governorCooldownActive = false
                 governorLastActionTimestamp,
-                benchmarkRunning, benchmarkStartTimestamp,
+                benchmarkRunning, benchmarkValidity, benchmarkStartTimestamp,
                 pendingActionsCount, executionHistorySize, lastSnapshotHistorySize,
                 sessionChangesCount,
-                avgFrametimeMs, p95FrametimeMs, spikeCount,
+                avgFrametimeMs, p95FrametimeMs, tickTimeAvg, tickTimeP95, spikeCount,
                 sessionStartTime, stateVersion,
                 currentScenario, scenarioConfidence);
     }
@@ -143,7 +192,106 @@ public record RuntimeState(
         return new RuntimeState(
                 enabled, safeMode, autoTuning, debugLogs,
                 governorDisabled, governorCooldownActive, governorLastActionTimestamp,
+                benchmarkRunning, benchmarkValidity, benchmarkStartTimestamp,
+                pendingActionsCount, executionHistorySize, lastSnapshotHistorySize,
+                sessionChangesCount,
+                avgFrametimeMs, p95FrametimeMs, spikeCount,
+                sessionStartTime, stateVersion,
+                scenario,
+                governorMode,
+                paranoiaLevel,
+                currentBound,
+                lastDecisionReason,
+                lastDecisionTimestamp,
+                lastDecisionSteward,
+                recentActions);
+    }
+
+    /**
+     * Update governor snapshot info (immutable).
+     */
+    public RuntimeState withGovernorSnapshot(GovernorMode mode, String bound) {
+        return new RuntimeState(
+                enabled, safeMode, autoTuning, debugLogs,
+                governorDisabled, governorCooldownActive, governorLastActionTimestamp,
+                benchmarkRunning, benchmarkValidity, benchmarkStartTimestamp,
+                pendingActionsCount, executionHistorySize, lastSnapshotHistorySize,
+                sessionChangesCount,
+                avgFrametimeMs, p95FrametimeMs, spikeCount,
+                sessionStartTime, stateVersion,
+                currentScenario,
+                mode,
+                paranoiaLevel,
+                bound,
+                lastDecisionReason,
+                lastDecisionTimestamp,
+                lastDecisionSteward,
+                recentActions);
+    }
+
+    /**
+     * Update last decision summary (immutable).
+     */
+    public RuntimeState withDecision(String reasonKey, long timestampMillis, String steward) {
+        return new RuntimeState(
+                enabled, safeMode, autoTuning, debugLogs,
+                governorDisabled, governorCooldownActive, governorLastActionTimestamp,
+                benchmarkRunning, benchmarkValidity, benchmarkStartTimestamp,
+                pendingActionsCount, executionHistorySize, lastSnapshotHistorySize,
+                sessionChangesCount,
+                avgFrametimeMs, p95FrametimeMs, tickTimeAvg, tickTimeP95, spikeCount,
+                sessionStartTime, stateVersion,
+                currentScenario,
+                governorMode,
+                paranoiaLevel,
+                currentBound,
+                reasonKey,
+                timestampMillis,
+                steward,
+                recentActions);
+    }
+
+    /**
+     * Add an action history entry (immutable).
+     */
+    public RuntimeState withRecentAction(ActionHistoryEntry entry, int maxEntries) {
+        List<ActionHistoryEntry> updated = new ArrayList<>(recentActions);
+        updated.add(entry);
+
+        if (updated.size() > maxEntries) {
+            updated = new ArrayList<>(updated.subList(updated.size() - maxEntries, updated.size()));
+        }
+
+        return new RuntimeState(
+                enabled, safeMode, autoTuning, debugLogs,
+                governorDisabled, governorCooldownActive, governorLastActionTimestamp,
+                benchmarkRunning, benchmarkValidity, benchmarkStartTimestamp,
+                pendingActionsCount, executionHistorySize, lastSnapshotHistorySize,
+                sessionChangesCount,
+                avgFrametimeMs, p95FrametimeMs, spikeCount,
+                sessionStartTime, stateVersion,
+                currentScenario,
+                governorMode,
+                paranoiaLevel,
+                currentBound,
+                lastDecisionReason,
+                lastDecisionTimestamp,
+                lastDecisionSteward,
+                List.copyOf(updated));
+    }
+
+    /**
+     * Update config-driven flags (immutable).
+     */
+    public RuntimeState withConfig(dev.nozh.core.config.NozhConfig config) {
+        return new RuntimeState(
+                config.enabled,
+                safeMode,
+                config.allowAutoTuning,
+                config.debugLogs,
+                governorDisabled, governorCooldownActive, governorLastActionTimestamp,
                 benchmarkRunning, benchmarkStartTimestamp,
+                pendingAction,
                 pendingActionsCount, executionHistorySize, lastSnapshotHistorySize,
                 sessionChangesCount,
                 avgFrametimeMs, p95FrametimeMs, spikeCount,
@@ -155,6 +303,15 @@ public record RuntimeState(
      * Create state from config (initialization).
      */
     public static RuntimeState fromConfig(dev.nozh.core.config.NozhConfig config) {
+        GovernorMode mode;
+        if (!config.enabled) {
+            mode = GovernorMode.OFF;
+        } else if (!config.allowAutoTuning) {
+            mode = GovernorMode.MANUAL_ASSIST;
+        } else {
+            mode = GovernorMode.AUTO_CONSERVATIVE;
+        }
+
         return new RuntimeState(
                 config.enabled,
                 config.safeModeForce, // safeMode from config
@@ -164,13 +321,17 @@ public record RuntimeState(
                 false, // governorCooldownActive (runtime only)
                 0L, // governorLastActionTimestamp
                 false, // benchmarkRunning (runtime only)
+                "NONE", // benchmarkValidity
                 0L, // benchmarkStartTimestamp
+                Optional.empty(), // pendingAction
                 0, // pendingActionsCount
                 0, // executionHistorySize
                 0, // lastSnapshotHistorySize
                 0, // sessionChangesCount
                 -1.0, // avgFrametimeMs
                 -1.0, // p95FrametimeMs
+                -1.0, // tickTimeAvg
+                -1.0, // tickTimeP95
                 0, // spikeCount
                 System.currentTimeMillis(),
                 CURRENT_VERSION,

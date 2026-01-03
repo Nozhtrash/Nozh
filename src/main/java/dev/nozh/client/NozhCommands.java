@@ -7,6 +7,7 @@ import dev.nozh.core.config.NozhConfig;
 import dev.nozh.core.safety.CrashLoopGuard;
 import dev.nozh.core.safety.StateManager;
 import dev.nozh.core.safety.NozhState;
+import dev.nozh.core.state.StateStore;
 import dev.nozh.core.util.NozhText;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
@@ -250,6 +251,7 @@ public final class NozhCommands {
         config.enabled = true;
         config.allowAutoTuning = true;
         ConfigManager.save();
+        StateStore.getInstance().update(state -> state.withConfig(config));
 
         source.sendFeedback(Text.translatable("nozh.enable.success"));
     }
@@ -258,6 +260,7 @@ public final class NozhCommands {
         NozhConfig config = ConfigManager.getConfig();
         config.enabled = false;
         ConfigManager.save();
+        StateStore.getInstance().update(state -> state.withConfig(config));
 
         source.sendFeedback(Text.translatable("nozh.disable.success"));
     }
