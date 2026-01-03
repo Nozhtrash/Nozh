@@ -14,7 +14,7 @@ import java.util.Optional;
 public record PendingAction(
         long timestampMillis,
         CapabilityId capability,
-        Command actionCommand,
+        dev.nozh.core.bus.Command command,
         Optional<CapabilityValue> previousValue,
         CapabilityValue newValue,
         double baselineAvgMs,

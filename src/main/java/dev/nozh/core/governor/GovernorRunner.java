@@ -212,16 +212,6 @@ public final class GovernorRunner {
                     state.avgFrametimeMs(),
                     state.p95FrametimeMs());
 
-            if (modeController.requiresUserConfirmation()) {
-                try {
-                    stateStore.update(currentState -> currentState.withPendingSuggestion(pending));
-                    logger.info("Governor suggestion awaiting confirmation: " + actionSummary);
-                } catch (Exception e) {
-                    logger.warn("Failed to store pending suggestion: " + e.getMessage());
-                }
-                return;
-            }
-
             actionBus.dispatch(cmd, report -> {
                 if (report.succeeded()) {
                     logger.info("Governor action succeeded");
@@ -309,22 +299,19 @@ public final class GovernorRunner {
     private void evaluatePendingAction(RuntimeState state, PendingAction pending, NozhConfig config) {
         double avg = state.avgFrametimeMs();
         double p95 = state.p95FrametimeMs();
-        double preP95 = resolvePreP95(pending);
-        double preAvg = pending.baselineAvgMs();
-        double epsilonP95 = config.improvementEpsilonP95Ms;
-
-        boolean p95Valid = isValidPerfValue(preP95) && isValidPerfValue(p95);
-        double baselineMetric = p95Valid ? preP95 : preAvg;
-        double currentMetric = p95Valid ? p95 : avg;
-        double epsilon = p95Valid ? epsilonP95 : config.improvementEpsilonAvgMs;
 
         // Strict Evaluation:
         // 1. Worsened: P95 increased significantly ( > baseline + epsilon)
         // 2. Ineffective: P95 didn't decrease enough ( > baseline - epsilon)
         // Goal: P95 < baseline - epsilon
 
-        boolean worsened = currentMetric > baselineMetric + epsilon;
-        boolean ineffective = currentMetric > baselineMetric - epsilon;
+        boolean avgWorsened = avg > pending.baselineAvgMs() + config.improvementEpsilonAvgMs;
+        boolean avgIneffective = avg > pending.baselineAvgMs() - config.improvementEpsilonAvgMs;
+        boolean p95Worsened = p95 > pending.baselineP95Ms() + config.improvementEpsilonP95Ms;
+        boolean p95Ineffective = p95 > pending.baselineP95Ms() - config.improvementEpsilonP95Ms;
+
+        boolean worsened = avgWorsened || p95Worsened;
+        boolean ineffective = avgIneffective || p95Ineffective;
 
         if (worsened || ineffective) {
             if (config.rollbackEnabled) {
@@ -343,10 +330,13 @@ public final class GovernorRunner {
             }
 
             sessionLearning.recordFailure(pending.capability());
+            successTracker.recordFailure(pending.capability());
         } else {
-            // Success: metric <= baseline - epsilon
-            double gain = Math.max(0, baselineMetric - currentMetric);
-            sessionLearning.recordSuccess(pending.capability(), gain);
+            // Success: avg <= baseline - epsilon
+            double gainAvg = Math.max(0, pending.baselineAvgMs() - avg);
+            double gainP95 = Math.max(0, pending.baselineP95Ms() - p95);
+            sessionLearning.recordSuccess(pending.capability(), Math.max(gainAvg, gainP95));
+            successTracker.recordSuccess(pending.capability());
         }
         // Clear pending action
         try {
