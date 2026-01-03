@@ -4,10 +4,13 @@ import dev.nozh.NozhConstants;
 import dev.nozh.core.compat.CompatService;
 import dev.nozh.core.config.ConfigManager;
 import dev.nozh.core.config.NozhConfig;
+import dev.nozh.core.state.PendingAction;
+import dev.nozh.core.state.RuntimeState;
+import dev.nozh.core.state.StateStore;
+import dev.nozh.core.bus.Command;
 import dev.nozh.core.safety.CrashLoopGuard;
 import dev.nozh.core.safety.StateManager;
 import dev.nozh.core.safety.NozhState;
-import dev.nozh.core.state.StateStore;
 import dev.nozh.core.util.NozhText;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
@@ -65,6 +68,11 @@ public final class NozhCommands {
                             .then(ClientCommandManager.literal("disable")
                                     .executes(context -> {
                                         runDisable(context.getSource());
+                                        return 1;
+                                    }))
+                            .then(ClientCommandManager.literal("apply")
+                                    .executes(context -> {
+                                        runApplySuggestion(context.getSource());
                                         return 1;
                                     }))
                             .then(ClientCommandManager.literal("safemode")
@@ -257,8 +265,7 @@ public final class NozhCommands {
         NozhConfig config = ConfigManager.getConfig();
         config.enabled = true;
         config.allowAutoTuning = true;
-        ConfigManager.save();
-        StateStore.getInstance().update(state -> state.withConfig(config));
+        ConfigManager.saveAndNotify();
 
         source.sendFeedback(Text.translatable("nozh.enable.success"));
     }
@@ -266,9 +273,40 @@ public final class NozhCommands {
     private static void runDisable(FabricClientCommandSource source) {
         NozhConfig config = ConfigManager.getConfig();
         config.enabled = false;
-        ConfigManager.save();
-        StateStore.getInstance().update(state -> state.withConfig(config));
+        ConfigManager.saveAndNotify();
 
         source.sendFeedback(Text.translatable("nozh.disable.success"));
+    }
+
+    private static void runApplySuggestion(FabricClientCommandSource source) {
+        var actionBus = NozhModClient.getActionBus();
+        if (actionBus == null) {
+            source.sendFeedback(Text.literal("NOZH action bus unavailable"));
+            return;
+        }
+
+        RuntimeState state = StateStore.getInstance().snapshotSafe();
+        if (state.suggestedAction().isEmpty()) {
+            source.sendFeedback(Text.literal("No pending suggestion to apply"));
+            return;
+        }
+
+        PendingAction pending = state.suggestedAction().get();
+        Command command = new Command.ApplyCapability(pending.capability(), pending.newValue());
+        long now = System.currentTimeMillis();
+
+        actionBus.dispatch(command, report -> {
+            if (report.succeeded()) {
+                source.sendFeedback(Text.literal("Applied suggested change"));
+            } else {
+                String reason = report.error().orElse("unknown");
+                source.sendFeedback(Text.literal("Failed to apply suggestion: " + reason));
+                StateStore.getInstance().update(RuntimeState::withPendingActionCleared);
+            }
+        });
+
+        StateStore.getInstance().update(currentState -> currentState
+                .withGovernorAction(now, pending)
+                .withSuggestedActionCleared());
     }
 }
