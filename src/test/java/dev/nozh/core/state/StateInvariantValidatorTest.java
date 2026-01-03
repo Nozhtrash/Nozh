@@ -42,11 +42,11 @@ class StateInvariantValidatorTest {
                                 base.benchmarkStartTimestamp(),
 
                                 Optional.<PendingAction>empty(),
+                                0,
 
                                 base.executionHistorySize(),
                                 base.lastSnapshotHistorySize(),
                                 base.sessionChangesCount(),
-                                base.spikeCount(),
 
                                 base.avgFrametimeMs(),
                                 base.p95FrametimeMs(),
@@ -77,11 +77,11 @@ class StateInvariantValidatorTest {
                                 base.benchmarkStartTimestamp(),
 
                                 Optional.<PendingAction>empty(),
+                                0,
 
                                 base.executionHistorySize(),
                                 base.lastSnapshotHistorySize(),
                                 base.sessionChangesCount(),
-                                base.spikeCount(),
 
                                 base.avgFrametimeMs(),
                                 base.p95FrametimeMs(),
@@ -111,11 +111,11 @@ class StateInvariantValidatorTest {
                                 System.currentTimeMillis(),
 
                                 Optional.<PendingAction>empty(),
+                                0,
 
                                 base.executionHistorySize(),
                                 base.lastSnapshotHistorySize(),
                                 base.sessionChangesCount(),
-                                base.spikeCount(),
 
                                 base.avgFrametimeMs(),
                                 base.p95FrametimeMs(),
@@ -143,11 +143,11 @@ class StateInvariantValidatorTest {
                                 System.currentTimeMillis(),
 
                                 Optional.<PendingAction>empty(),
+                                0,
 
                                 base.executionHistorySize(),
                                 base.lastSnapshotHistorySize(),
                                 base.sessionChangesCount(),
-                                base.spikeCount(),
 
                                 base.avgFrametimeMs(),
                                 base.p95FrametimeMs(),
@@ -177,11 +177,11 @@ class StateInvariantValidatorTest {
                                 base.benchmarkStartTimestamp(),
 
                                 Optional.of(samplePending()),
+                                1,
 
                                 base.executionHistorySize(),
                                 base.lastSnapshotHistorySize(),
                                 base.sessionChangesCount(),
-                                base.spikeCount(),
 
                                 base.avgFrametimeMs(),
                                 base.p95FrametimeMs(),
@@ -209,11 +209,11 @@ class StateInvariantValidatorTest {
                                 base.benchmarkStartTimestamp(),
 
                                 Optional.of(samplePending()),
+                                1,
 
                                 base.executionHistorySize(),
                                 base.lastSnapshotHistorySize(),
                                 base.sessionChangesCount(),
-                                base.spikeCount(),
 
                                 base.avgFrametimeMs(),
                                 base.p95FrametimeMs(),
@@ -243,11 +243,11 @@ class StateInvariantValidatorTest {
                                 base.benchmarkStartTimestamp(),
 
                                 Optional.<PendingAction>empty(),
+                                0,
 
                                 5,
                                 10,
                                 base.sessionChangesCount(),
-                                base.spikeCount(),
 
                                 base.avgFrametimeMs(),
                                 base.p95FrametimeMs(),
@@ -275,11 +275,11 @@ class StateInvariantValidatorTest {
                                 base.benchmarkStartTimestamp(),
 
                                 Optional.<PendingAction>empty(),
+                                0,
 
                                 15,
                                 10,
                                 base.sessionChangesCount(),
-                                base.spikeCount(),
 
                                 base.avgFrametimeMs(),
                                 base.p95FrametimeMs(),
