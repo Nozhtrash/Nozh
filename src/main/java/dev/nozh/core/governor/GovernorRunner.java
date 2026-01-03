@@ -187,6 +187,13 @@ public final class GovernorRunner {
                 } else {
                     logger.warn("Governor action failed: " +
                             report.error().orElse("unknown"));
+
+                    // CRITICAL: Clear pending action so we don't evaluate a failed action later
+                    try {
+                        stateStore.update(RuntimeState::withPendingActionCleared);
+                    } catch (Exception e) {
+                        logger.error("Failed to clear pending action after execution failure");
+                    }
                 }
 
                 // REMOVED: withRecentAction() tracking no longer available

@@ -2,8 +2,6 @@ package dev.nozh.core.bus;
 
 import dev.nozh.api.PerfSnapshot;
 import dev.nozh.core.NozhLogger;
-import dev.nozh.core.config.ConfigManager;
-import dev.nozh.core.config.NozhConfig;
 import dev.nozh.core.intelligence.SessionLearning;
 
 import java.util.Optional;
@@ -227,27 +225,9 @@ public final class StandardActionProcessor implements ActionProcessor {
             return;
         }
 
+        // ONLY record failures here (technical faults).
+        // Success/Performance evaluation is done by GovernorRunner after a delay.
         if (finalState != CommandLifecycle.SUCCESS) {
-            sessionLearning.recordFailure(capability);
-            return;
-        }
-
-        if (beforeSnapshot == null || afterSnapshot == null
-                || !beforeSnapshot.sufficientData() || !afterSnapshot.sufficientData()) {
-            sessionLearning.recordSuccess(capability, 0.0);
-            return;
-        }
-
-        double avgDelta = beforeSnapshot.avgFrametimeMs() - afterSnapshot.avgFrametimeMs();
-        double p95Delta = beforeSnapshot.p95FrametimeMs() - afterSnapshot.p95FrametimeMs();
-
-        NozhConfig config = ConfigManager.getConfig();
-        boolean improved = avgDelta >= config.improvementEpsilonAvgMs
-                || p95Delta >= config.improvementEpsilonP95Ms;
-
-        if (improved) {
-            sessionLearning.recordSuccess(capability, Math.max(0.0, avgDelta));
-        } else {
             sessionLearning.recordFailure(capability);
         }
     }
