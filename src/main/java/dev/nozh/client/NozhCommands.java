@@ -10,6 +10,11 @@ import dev.nozh.core.state.StateStore;
 import dev.nozh.core.safety.CrashLoopGuard;
 import dev.nozh.core.safety.StateManager;
 import dev.nozh.core.safety.NozhState;
+import dev.nozh.core.bus.ActionBus;
+import dev.nozh.core.bus.Command;
+import dev.nozh.core.safety.CrashLoopGuard;
+import dev.nozh.core.safety.StateManager;
+import dev.nozh.core.safety.NozhState;
 import dev.nozh.core.util.NozhText;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
@@ -79,12 +84,6 @@ public final class NozhCommands {
                                         runApplySuggestion(context.getSource());
                                         return 1;
                                     }))
-                            .then(ClientCommandManager.literal("suggestion")
-                                    .then(ClientCommandManager.literal("clear")
-                                            .executes(context -> {
-                                                runClearSuggestion(context.getSource());
-                                                return 1;
-                                            })))
                             .then(ClientCommandManager.literal("safemode")
                                     .then(ClientCommandManager.literal("reset")
                                             .executes(context -> {
@@ -294,10 +293,6 @@ public final class NozhCommands {
         source.sendFeedback(Text.translatable("nozh.disable.success"));
     }
 
-    public static void runApply(FabricClientCommandSource source) {
-        runApplySuggestion(source);
-    }
-
     private static void runApplySuggestion(FabricClientCommandSource source) {
         var actionBus = NozhModClient.getActionBus();
         if (actionBus == null) {
@@ -312,7 +307,7 @@ public final class NozhCommands {
         }
 
         PendingAction pending = state.suggestedAction().get();
-        Command command = pending.command();
+        Command command = new Command.ApplyCapability(pending.capability(), pending.newValue());
         long now = System.currentTimeMillis();
 
         actionBus.dispatch(command, report -> {
@@ -328,19 +323,5 @@ public final class NozhCommands {
         StateStore.getInstance().update(currentState -> currentState
                 .withGovernorAction(now, pending)
                 .withSuggestedActionCleared());
-    }
-
-    private static void runClearSuggestion(FabricClientCommandSource source) {
-        RuntimeState state = StateStore.getInstance().snapshotSafe();
-        if (state.suggestedAction().isEmpty()) {
-            source.sendFeedback(Text.literal("No pending suggestion to clear"));
-            return;
-        }
-        StateStore.getInstance().update(RuntimeState::withSuggestedActionCleared);
-        source.sendFeedback(Text.literal("Cleared pending suggestion"));
-    }
-
-    public static String formatPendingAction(PendingAction pending) {
-        return pending.capability().name() + "=" + pending.newValue();
     }
 }
