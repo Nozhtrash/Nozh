@@ -33,6 +33,8 @@ import net.minecraft.client.util.InputUtil;
 import net.minecraft.text.Text;
 import org.lwjgl.glfw.GLFW;
 
+import java.util.function.Consumer;
+
 /**
  * NOZH Client-side initializer - FULL INTEGRATION.
  * 
@@ -265,15 +267,25 @@ public class NozhModClient implements ClientModInitializer {
         if (client == null) {
             return;
         }
+        applySuggestedAction(
+                message -> notifyClient(client, message),
+                message -> notifyClient(client, message));
+    }
+
+    public static void applySuggestedAction(Consumer<Text> feedback, Consumer<Text> errorFeedback) {
+        if (feedback == null || errorFeedback == null) {
+            return;
+        }
         var bus = actionBus;
         if (bus == null) {
-            notifyClient(client, Text.literal("Action bus unavailable"));
+            errorFeedback.accept(Text.literal("Action bus unavailable"));
+            NozhConstants.LOGGER.warn("Manual apply failed: action bus unavailable");
             return;
         }
 
         RuntimeState state = stateStore.snapshotSafe();
         if (state.suggestedAction().isEmpty()) {
-            notifyClient(client, Text.literal("No pending suggestion"));
+            feedback.accept(Text.literal("No pending suggestion"));
             return;
         }
 
@@ -281,19 +293,22 @@ public class NozhModClient implements ClientModInitializer {
         Command command = pending.command();
         long now = System.currentTimeMillis();
 
-        bus.dispatch(command, report -> {
+        bus.dispatchUserCommand(command, report -> {
             if (report.succeeded()) {
-                notifyClient(client, Text.literal("Applied suggested change"));
+                feedback.accept(Text.literal("Applied suggested change"));
+                NozhConstants.LOGGER.info("Manual suggestion applied: " + pending.capability().name());
             } else {
                 String reason = report.error().orElse("unknown");
-                notifyClient(client, Text.literal("Failed to apply: " + reason));
-                stateStore.update(RuntimeState::withPendingActionCleared);
+                errorFeedback.accept(Text.literal("Suggestion rejected: " + reason));
+                NozhConstants.LOGGER.warn(
+                        "Manual suggestion rejected for " + pending.capability().name() + ": " + reason);
+                stateStore.update(currentState -> currentState
+                        .withPendingActionCleared()
+                        .withSuggestedAction(pending));
             }
         });
 
-        stateStore.update(currentState -> currentState
-                .withGovernorAction(now, pending)
-                .withSuggestedActionCleared());
+        stateStore.update(currentState -> currentState.withAppliedSuggestion(now, pending));
     }
 
     private static void notifyClient(MinecraftClient client, Text message) {
