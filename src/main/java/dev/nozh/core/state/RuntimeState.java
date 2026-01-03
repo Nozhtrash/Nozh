@@ -14,6 +14,8 @@ import java.util.Optional;
 import java.util.ArrayList;
 import java.util.List;
 
+import dev.nozh.core.state.ActionHistoryEntry;
+
 /**
  * Runtime state (Contract 1).
  *
@@ -89,6 +91,18 @@ public record RuntimeState(
      * Update after governor action (immutable).
      */
     public RuntimeState withGovernorAction(long timestamp, PendingAction pending) {
+        return withGovernorAction(timestamp, pending, null, executionHistorySize + 1);
+    }
+
+    /**
+     * Update after governor action (immutable) with history metadata.
+     */
+    public RuntimeState withGovernorAction(
+            long timestamp,
+            PendingAction pending,
+            ActionHistoryEntry historyEntry,
+            int historySize) {
+        int nextHistorySize = historySize > 0 ? historySize : executionHistorySize + 1;
         return new RuntimeState(
                 enabled, safeMode, autoTuning, debugLogs,
                 governorDisabled,
@@ -98,7 +112,7 @@ public record RuntimeState(
                 Optional.of(pending),
                 suggestedAction,
                 pendingAction.isPresent() ? pendingActionsCount + 1 : 1,
-                executionHistorySize + 1, // increment history
+                nextHistorySize,
                 lastSnapshotHistorySize,
                 sessionChangesCount + 1, // increment changes
                 avgFrametimeMs, p95FrametimeMs, tickTimeAvg, tickTimeP95, spikeCount,

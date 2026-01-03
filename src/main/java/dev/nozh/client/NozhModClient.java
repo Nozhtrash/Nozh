@@ -3,6 +3,7 @@ package dev.nozh.client;
 import dev.nozh.NozhConstants;
 import dev.nozh.core.NozhLogger;
 import dev.nozh.core.bus.ActionBus;
+import dev.nozh.core.bus.Command;
 import dev.nozh.core.bus.StandardActionProcessor;
 import dev.nozh.core.config.ConfigManager;
 import dev.nozh.core.config.ConfigSyncService;
@@ -10,6 +11,8 @@ import dev.nozh.core.capability.ProviderRegistry;
 import dev.nozh.core.governor.GovernorRunner;
 import dev.nozh.core.matrix.ActionSuccessTracker;
 import dev.nozh.core.safety.CrashLoopGuard;
+import dev.nozh.core.state.PendingAction;
+import dev.nozh.core.state.RuntimeState;
 import dev.nozh.core.state.StateStore;
 import dev.nozh.fabric.FabricNozhLogger;
 import dev.nozh.fabric.capability.MinecraftOptionsAdapter;
@@ -24,8 +27,10 @@ import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
 import net.fabricmc.fabric.api.client.rendering.v1.HudRenderCallback;
 import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper;
+import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.option.KeyBinding;
 import net.minecraft.client.util.InputUtil;
+import net.minecraft.text.Text;
 import org.lwjgl.glfw.GLFW;
 
 /**
@@ -46,6 +51,7 @@ public class NozhModClient implements ClientModInitializer {
     private static dev.nozh.core.intelligence.SessionLearning sessionLearning;
     private static ProviderRegistry providerRegistry;
     private static KeyBinding toggleHudKey;
+    private static KeyBinding applySuggestionKey;
 
     private static int tickCounter = 0;
     private static final int TELEMETRY_UPDATE_INTERVAL = 20; // Every second (20 ticks)
@@ -131,6 +137,12 @@ public class NozhModClient implements ClientModInitializer {
                 GLFW.GLFW_KEY_UNKNOWN,
                 "category.nozh"));
 
+        applySuggestionKey = KeyBindingHelper.registerKeyBinding(new KeyBinding(
+                "key.nozh.apply_suggestion",
+                InputUtil.Type.KEYSYM,
+                GLFW.GLFW_KEY_UNKNOWN,
+                "category.nozh"));
+
         // Register Frametime Sampler (called every frame)
         net.fabricmc.fabric.api.client.rendering.v1.WorldRenderEvents.END.register(context -> {
             perfManager.onFrame();
@@ -164,6 +176,12 @@ public class NozhModClient implements ClientModInitializer {
                     var config = ConfigManager.getConfig();
                     config.showHud = !config.showHud;
                     ConfigManager.saveAndNotify();
+                }
+            }
+
+            if (applySuggestionKey != null) {
+                while (applySuggestionKey.wasPressed()) {
+                    applySuggestedAction(client);
                 }
             }
 
@@ -241,5 +259,47 @@ public class NozhModClient implements ClientModInitializer {
 
     public static StateStore getStateStore() {
         return stateStore;
+    }
+
+    public static void applySuggestedAction(MinecraftClient client) {
+        if (client == null) {
+            return;
+        }
+        var bus = actionBus;
+        if (bus == null) {
+            notifyClient(client, Text.literal("Action bus unavailable"));
+            return;
+        }
+
+        RuntimeState state = stateStore.snapshotSafe();
+        if (state.suggestedAction().isEmpty()) {
+            notifyClient(client, Text.literal("No pending suggestion"));
+            return;
+        }
+
+        PendingAction pending = state.suggestedAction().get();
+        Command command = pending.command();
+        long now = System.currentTimeMillis();
+
+        bus.dispatch(command, report -> {
+            if (report.succeeded()) {
+                notifyClient(client, Text.literal("Applied suggested change"));
+            } else {
+                String reason = report.error().orElse("unknown");
+                notifyClient(client, Text.literal("Failed to apply: " + reason));
+                stateStore.update(RuntimeState::withPendingActionCleared);
+            }
+        });
+
+        stateStore.update(currentState -> currentState
+                .withGovernorAction(now, pending)
+                .withSuggestedActionCleared());
+    }
+
+    private static void notifyClient(MinecraftClient client, Text message) {
+        if (client == null || client.player == null) {
+            return;
+        }
+        client.player.sendMessage(message, false);
     }
 }
