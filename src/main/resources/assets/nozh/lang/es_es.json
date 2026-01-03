@@ -62,4 +62,14 @@
   "nozh.hud.suggestion.pending": "Monitorea el rendimiento",
   "key.nozh.toggle_hud": "Alternar HUD de NOZH",
   "category.nozh": "NOZH"
+    "nozh.config.confirm.yes": "Sí, Restablecer",
+    "nozh.config.confirm.no": "Cancelar",
+    "nozh.config.done": "Listo",
+    "nozh.scenario.standard": "Estándar",
+    "nozh.scenario.combat": "Combate",
+    "nozh.scenario.building": "Construcción",
+    "nozh.scenario.mining": "Minería",
+    "nozh.scenario.afk": "AFK",
+    "nozh.scenario.menu": "Menú",
+    "nozh.scenario.loading": "Cargando"
 }

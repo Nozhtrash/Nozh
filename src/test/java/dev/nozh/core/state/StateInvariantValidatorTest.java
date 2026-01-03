@@ -41,6 +41,7 @@ class StateInvariantValidatorTest {
                                 state.benchmarkValidity(),
                                 state.benchmarkStartTimestamp(),
                                 state.pendingAction(),
+                                state.pendingSuggestion(),
                                 state.pendingActionsCount(),
                                 state.executionHistorySize(),
                                 state.lastSnapshotHistorySize(),
@@ -78,6 +79,7 @@ class StateInvariantValidatorTest {
                                 state.benchmarkValidity(),
                                 state.benchmarkStartTimestamp(),
                                 state.pendingAction(),
+                                state.pendingSuggestion(),
                                 state.pendingActionsCount(),
                                 state.executionHistorySize(),
                                 state.lastSnapshotHistorySize(),
@@ -116,6 +118,7 @@ class StateInvariantValidatorTest {
                                 "NONE", // benchmarkValidity
                                 System.currentTimeMillis(),
                                 base.pendingAction(),
+                                base.pendingSuggestion(),
                                 base.pendingActionsCount(),
                                 base.executionHistorySize(),
                                 base.lastSnapshotHistorySize(),
@@ -153,6 +156,7 @@ class StateInvariantValidatorTest {
                                 "NONE", // benchmarkValidity
                                 System.currentTimeMillis(),
                                 state.pendingAction(),
+                                state.pendingSuggestion(),
                                 state.pendingActionsCount(),
                                 state.executionHistorySize(),
                                 state.lastSnapshotHistorySize(),
@@ -187,6 +191,7 @@ class StateInvariantValidatorTest {
                                 state.benchmarkValidity(),
                                 state.benchmarkStartTimestamp(),
                                 state.pendingAction(),
+                                state.pendingSuggestion(),
                                 3, // pendingActionsCount > 0
                                 state.executionHistorySize(),
                                 state.lastSnapshotHistorySize(),
@@ -224,6 +229,7 @@ class StateInvariantValidatorTest {
                                 state.benchmarkValidity(),
                                 state.benchmarkStartTimestamp(),
                                 state.pendingAction(),
+                                state.pendingSuggestion(),
                                 3, // pendingActionsCount > 0
                                 state.executionHistorySize(),
                                 state.lastSnapshotHistorySize(),
@@ -260,6 +266,7 @@ class StateInvariantValidatorTest {
                                 state.benchmarkValidity(),
                                 state.benchmarkStartTimestamp(),
                                 state.pendingAction(),
+                                state.pendingSuggestion(),
                                 state.pendingActionsCount(),
                                 5, // executionHistorySize = 5
                                 10, // lastSnapshotHistorySize = 10 (VIOLATION: decreased)
@@ -299,6 +306,7 @@ class StateInvariantValidatorTest {
                                 state.benchmarkValidity(),
                                 state.benchmarkStartTimestamp(),
                                 state.pendingAction(),
+                                state.pendingSuggestion(),
                                 state.pendingActionsCount(),
                                 15, // executionHistorySize = 15
                                 10, // lastSnapshotHistorySize = 10 (OK: increased)
@@ -336,6 +344,7 @@ class StateInvariantValidatorTest {
                                 state.benchmarkValidity(),
                                 System.currentTimeMillis(),
                                 state.pendingAction(),
+                                state.pendingSuggestion(),
                                 5, // pendingActionsCount > 0 (VIOLATION 3)
                                 state.executionHistorySize(),
                                 state.lastSnapshotHistorySize(),
@@ -383,6 +392,7 @@ class StateInvariantValidatorTest {
                                 base.benchmarkValidity(),
                                 base.benchmarkStartTimestamp(),
 
+                                Optional.<PendingAction>empty(),
                                 Optional.<PendingAction>empty(),
                                 0,
 

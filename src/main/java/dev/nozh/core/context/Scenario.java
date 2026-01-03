@@ -24,5 +24,9 @@ public enum Scenario {
     MENU,
 
     /** Singleplayer world load or server join */
-    LOADING
+    LOADING;
+
+    public String translationKey() {
+        return "nozh.scenario." + name().toLowerCase();
+    }
 }

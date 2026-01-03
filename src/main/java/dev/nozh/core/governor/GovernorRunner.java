@@ -75,6 +75,14 @@ public final class GovernorRunner {
     }
 
     public void onTick() {
+        dev.nozh.core.context.ScenarioSnapshot scenarioSnapshot = scenarioDetector.detect();
+        try {
+            stateStore.update(s -> s.withScenario(
+                    scenarioSnapshot.scenario(),
+                    scenarioSnapshot.confidence()));
+        } catch (Exception e) {
+            // Ignore update failure
+        }
         tickCounter++;
         if (tickCounter < POLL_INTERVAL_TICKS) {
             return;
@@ -86,16 +94,6 @@ public final class GovernorRunner {
     private void runGovernorLoop() {
         long now = System.currentTimeMillis();
         NozhConfig config = ConfigManager.getConfig();
-
-        // 1. Detect scenario and update state reference
-        dev.nozh.core.context.ScenarioSnapshot scenarioSnapshot = scenarioDetector.detect();
-        try {
-            stateStore.update(s -> s.withScenario(
-                    scenarioSnapshot.scenario(),
-                    scenarioSnapshot.confidence()));
-        } catch (Exception e) {
-            // Ignore update failure
-        }
 
         RuntimeState state = stateStore.snapshotSafe();
 
@@ -112,6 +110,11 @@ public final class GovernorRunner {
             }
 
             evaluatePendingAction(state, pending, config);
+            return;
+        }
+
+        if (state.pendingSuggestion().isPresent()) {
+            logger.debug("Pending suggestion awaiting confirmation");
             return;
         }
 
@@ -132,6 +135,7 @@ public final class GovernorRunner {
 
         GovernorMode mode = determineMode(state);
         String bound = detectBound(state);
+        ModeController modeController = ModeController.forMode(mode);
 
         // 3. Detect performance bound from telemetry
         String currentBound = detectBound(state);
@@ -179,6 +183,16 @@ public final class GovernorRunner {
             Command cmd = new Command.ApplyCapability(
                     decision.capabilityId(),
                     decision.targetValue());
+
+            if (modeController.requiresUserConfirmation()) {
+                try {
+                    stateStore.update(currentState -> currentState.withPendingSuggestion(pending));
+                    logger.info("Governor suggestion awaiting confirmation: " + actionSummary);
+                } catch (Exception e) {
+                    logger.warn("Failed to store pending suggestion: " + e.getMessage());
+                }
+                return;
+            }
 
             actionBus.dispatch(cmd, report -> {
                 if (report.succeeded()) {
