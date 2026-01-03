@@ -63,7 +63,7 @@ public final class NozhCommands {
                                     }))
                             .then(ClientCommandManager.literal("apply")
                                     .executes(context -> {
-                                        runApply(context.getSource());
+                                        runApplySuggestion(context.getSource());
                                         return 1;
                                     }))
                             .then(ClientCommandManager.literal("telemetry")
@@ -90,15 +90,9 @@ public final class NozhCommands {
                                     }))
                             .then(ClientCommandManager.literal("apply")
                                     .executes(context -> {
-                                        runApply(context.getSource());
+                                        runApplySuggestion(context.getSource());
                                         return 1;
                                     }))
-                            .then(ClientCommandManager.literal("suggestion")
-                                    .then(ClientCommandManager.literal("clear")
-                                            .executes(context -> {
-                                                runClearSuggestion(context.getSource());
-                                                return 1;
-                                            })))
                             .then(ClientCommandManager.literal("safemode")
                                     .then(ClientCommandManager.literal("reset")
                                             .executes(context -> {
@@ -236,9 +230,9 @@ public final class NozhCommands {
         ctx.getSource().sendFeedback(Text.translatable("nozh.status.target", config.targetFps));
 
         runtimeState.suggestedAction().ifPresent(pending -> ctx.getSource().sendFeedback(Text.literal(
-                "Suggestion pending: " + formatPendingAction(pending) + " (/nozh apply)")));
+                "Suggestion pending: " + pending.capability().name() + "=" + pending.newValue() + " (/nozh apply)")));
         runtimeState.pendingAction().ifPresent(pending -> ctx.getSource().sendFeedback(Text.literal(
-                "Action pending evaluation: " + formatPendingAction(pending))));
+                "Action pending evaluation: " + pending.capability().name() + "=" + pending.newValue())));
     }
 
     private static void runHistory(CommandContext<FabricClientCommandSource> ctx) {
@@ -321,7 +315,6 @@ public final class NozhCommands {
         NozhModClient.applySuggestedAction(client);
     }
 
-    private static void runClearSuggestion(FabricClientCommandSource source) {
         RuntimeState state = StateStore.getInstance().snapshotSafe();
         if (state.suggestedAction().isEmpty()) {
             source.sendFeedback(Text.translatable("nozh.suggestion.clear.none"));
@@ -347,7 +340,22 @@ public final class NozhCommands {
         }
     }
 
-    public static String formatPendingAction(PendingAction pending) {
-        return pending.capability().name() + "=" + pending.newValue();
+        PendingAction pending = state.suggestedAction().get();
+        Command command = new Command.ApplyCapability(pending.capability(), pending.newValue());
+        long now = System.currentTimeMillis();
+
+        actionBus.dispatch(command, report -> {
+            if (report.succeeded()) {
+                source.sendFeedback(Text.literal("Applied suggested change"));
+            } else {
+                String reason = report.error().orElse("unknown");
+                source.sendFeedback(Text.literal("Failed to apply suggestion: " + reason));
+                StateStore.getInstance().update(RuntimeState::withPendingActionCleared);
+            }
+        });
+
+        StateStore.getInstance().update(currentState -> currentState
+                .withGovernorAction(now, pending)
+                .withSuggestedActionCleared());
     }
 }
