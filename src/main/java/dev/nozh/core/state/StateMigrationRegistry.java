@@ -1,11 +1,8 @@
 package dev.nozh.core.state;
 
 import dev.nozh.NozhConstants;
-import dev.nozh.core.governor.GovernorMode;
-import dev.nozh.core.issues.ParanoiaLevel;
 
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 
 /**
@@ -27,19 +24,7 @@ public final class StateMigrationRegistry {
 
     public StateMigrationRegistry() {
         registerMigrator(2, oldState -> {
-            GovernorMode mode = oldState.governorMode() != null
-                    ? oldState.governorMode()
-                    : GovernorMode.OFF;
-            ParanoiaLevel paranoia = oldState.paranoiaLevel() != null
-                    ? oldState.paranoiaLevel()
-                    : ParanoiaLevel.NORMAL;
-            String bound = oldState.currentBound() != null ? oldState.currentBound() : "BALANCED";
-            String reason = oldState.lastDecisionReason() != null ? oldState.lastDecisionReason() : "";
-            String steward = oldState.lastDecisionSteward() != null ? oldState.lastDecisionSteward() : "NOZH";
             String validity = oldState.benchmarkValidity() != null ? oldState.benchmarkValidity() : "NONE";
-            List<ActionHistoryEntry> recentActions = oldState.recentActions() != null
-                    ? oldState.recentActions()
-                    : List.of();
 
             return new RuntimeState(
                     oldState.enabled(),
@@ -52,23 +37,20 @@ public final class StateMigrationRegistry {
                     oldState.benchmarkRunning(),
                     validity,
                     oldState.benchmarkStartTimestamp(),
+                    oldState.pendingAction(),
                     oldState.pendingActionsCount(),
                     oldState.executionHistorySize(),
                     oldState.lastSnapshotHistorySize(),
                     oldState.sessionChangesCount(),
                     oldState.avgFrametimeMs(),
                     oldState.p95FrametimeMs(),
+                    oldState.tickTimeAvg(),
+                    oldState.tickTimeP95(),
                     oldState.spikeCount(),
                     oldState.sessionStartTime(),
                     CURRENT_VERSION,
                     oldState.currentScenario(),
-                    mode,
-                    paranoia,
-                    bound,
-                    reason,
-                    oldState.lastDecisionTimestamp(),
-                    steward,
-                    recentActions);
+                    oldState.scenarioConfidence());
         });
 
         NozhConstants.LOGGER.debug("StateMigrationRegistry initialized (current version: {})", CURRENT_VERSION);

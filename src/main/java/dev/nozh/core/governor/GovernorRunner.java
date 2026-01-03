@@ -127,11 +127,7 @@ public final class GovernorRunner {
 
         // 3. Detect performance bound from telemetry
         String currentBound = detectBound(state);
-        try {
-            stateStore.update(currentState -> currentState.withGovernorSnapshot(mode, currentBound));
-        } catch (Exception e) {
-            // Ignore update failure
-        }
+        // REMOVED: withGovernorSnapshot() tracking no longer available
 
         long now = System.currentTimeMillis();
 
@@ -151,11 +147,7 @@ public final class GovernorRunner {
 
         ActionCandidate decision = decisionOpt.get();
         String steward = conflictDetector.getSteward(decision.capabilityId());
-        try {
-            stateStore.update(currentState -> currentState.withDecision(decision.reason(), now, steward));
-        } catch (Exception e) {
-            // Ignore update failure
-        }
+        // REMOVED: withDecision() tracking no longer available
         String actionSummary = formatActionSummary(decision);
 
         // Log decision
@@ -191,15 +183,7 @@ public final class GovernorRunner {
                             report.error().orElse("unknown"));
                 }
 
-                ActionHistoryEntry entry = new ActionHistoryEntry(
-                        System.currentTimeMillis(),
-                        actionSummary,
-                        report.finalState());
-                try {
-                    stateStore.update(currentState -> currentState.withRecentAction(entry, 5));
-                } catch (Exception e) {
-                    logger.warn("Failed to update action history: " + e.getMessage());
-                }
+                // REMOVED: withRecentAction() tracking no longer available
             });
 
             // Update state after action dispatch
@@ -294,33 +278,20 @@ public final class GovernorRunner {
             sessionLearning.recordSuccess(pending.capability(), gain);
         }
 
-        // Scenario-based overrides (with confidence gating)
-        double scenarioConfidence = state.scenarioConfidence();
-        if (scenarioConfidence >= 0.55) {
-            dev.nozh.core.context.Scenario scenario = state.currentScenario();
-            if (scenario == dev.nozh.core.context.Scenario.COMBAT) {
-                // Combat requires max FPS -> Aggressive
-                return dev.nozh.core.governor.GovernorMode.AUTO_AGGRESSIVE;
-            }
-
-            if (scenario == dev.nozh.core.context.Scenario.MINING) {
-                // Mining usually stable
-                return dev.nozh.core.governor.GovernorMode.AUTO_CONSERVATIVE;
-            }
-
-            if (scenario == dev.nozh.core.context.Scenario.BUILDING) {
-                return dev.nozh.core.governor.GovernorMode.AUTO_CONSERVATIVE;
-            }
-
-            if (scenario == dev.nozh.core.context.Scenario.AFK) {
-                return dev.nozh.core.governor.GovernorMode.AUTO_CONSERVATIVE;
-            }
+        // Clear pending action
+        try {
+            stateStore.update(RuntimeState::withPendingActionCleared);
+        } catch (Exception e) {
+            logger.warn("Failed to clear pending action");
         }
+    }
+
+    private String formatActionSummary(ActionCandidate decision) {
         String value = formatCapabilityValue(decision.targetValue());
         if (value.isEmpty()) {
-            return decision.capabilityId().name();
+            return decision.capabilityId().toString();
         }
-        return decision.capabilityId().name() + "=" + value;
+        return decision.capabilityId().toString() + "=" + value;
     }
 
     private String formatCapabilityValue(CapabilityValue value) {
