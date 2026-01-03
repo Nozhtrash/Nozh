@@ -12,7 +12,7 @@ import dev.nozh.core.matrix.ActionCandidate;
 import dev.nozh.core.matrix.ActionMatrix;
 import dev.nozh.core.matrix.ActionSuccessTracker;
 import dev.nozh.core.matrix.ConfidenceCalculator;
-import dev.nozh.core.compatibility.ModConflictDetector;
+import dev.nozh.api.PerfSnapshot;
 import dev.nozh.core.state.RuntimeState;
 import dev.nozh.core.state.StateStore;
 import dev.nozh.core.state.PendingAction;
@@ -23,6 +23,9 @@ import dev.nozh.core.monitoring.ChunkLoadMonitor;
 import dev.nozh.core.monitoring.SystemMonitor;
 
 import java.util.Optional;
+import java.util.function.Supplier;
+import java.util.HashMap;
+import java.util.Map;
 
 /**
  * Governor runner - integration loop (Phase G).
@@ -36,16 +39,17 @@ public final class GovernorRunner {
     private final ProviderRegistry providerRegistry;
     private final SessionLearning sessionLearning;
     private final ActionSuccessTracker successTracker;
+    private final Supplier<PerfSnapshot> perfSnapshotSupplier;
+    private final Map<dev.nozh.core.bus.CapabilityId, Long> rollbackCooldowns = new HashMap<>();
 
     // Intelligent components
     private final dev.nozh.core.governor.PredictiveAnalyzer predictiveAnalyzer;
     private final dev.nozh.core.monitoring.SystemMonitor systemMonitor;
     private final dev.nozh.core.monitoring.ChunkLoadMonitor chunkLoadMonitor;
     private final dev.nozh.core.context.ScenarioDetector scenarioDetector;
-    private final ModConflictDetector conflictDetector;
 
     private int tickCounter = 0;
-    private static final int POLL_INTERVAL_TICKS = 100;
+    private long totalTicks = 0;
 
     public GovernorRunner(
             ProviderRegistry registry,
@@ -54,7 +58,8 @@ public final class GovernorRunner {
             StateStore stateStore,
             NozhLogger logger,
             SessionLearning sessionLearning,
-            ScenarioDetector scenarioDetector) {
+            ScenarioDetector scenarioDetector,
+            Supplier<PerfSnapshot> perfSnapshotSupplier) {
         ActionMatrix matrix = new ActionMatrix(
                 registry,
                 successTracker,
@@ -69,7 +74,7 @@ public final class GovernorRunner {
         this.sessionLearning = sessionLearning;
         this.successTracker = successTracker;
         this.scenarioDetector = scenarioDetector;
-        this.conflictDetector = new ModConflictDetector();
+        this.perfSnapshotSupplier = perfSnapshotSupplier != null ? perfSnapshotSupplier : PerfSnapshot::empty;
 
         this.predictiveAnalyzer = new PredictiveAnalyzer();
         this.systemMonitor = new SystemMonitor();
@@ -77,6 +82,7 @@ public final class GovernorRunner {
     }
 
     public void onTick() {
+        totalTicks++;
         dev.nozh.core.context.ScenarioSnapshot scenarioSnapshot = scenarioDetector.detect();
         try {
             stateStore.update(s -> s.withScenario(
@@ -86,7 +92,8 @@ public final class GovernorRunner {
             // Ignore update failure
         }
         tickCounter++;
-        if (tickCounter < POLL_INTERVAL_TICKS) {
+        int pollInterval = Math.max(20, ConfigManager.getConfig().evalPeriodTicks);
+        if (tickCounter < pollInterval) {
             return;
         }
         tickCounter = 0;
@@ -97,17 +104,27 @@ public final class GovernorRunner {
         long now = System.currentTimeMillis();
         NozhConfig config = ConfigManager.getConfig();
 
+        dev.nozh.core.context.ScenarioSnapshot scenarioSnapshot = scenarioDetector.detect();
+        try {
+            stateStore.update(s -> s.withScenario(
+                    scenarioSnapshot.scenario(),
+                    scenarioSnapshot.confidence()));
+        } catch (Exception e) {
+            // Ignore update failure
+        }
+
         RuntimeState state = stateStore.snapshotSafe();
 
         // === Pending evaluation ===
         if (state.pendingAction().isPresent()) {
             PendingAction pending = state.pendingAction().get();
             long elapsed = now - pending.timestampMillis();
+            long ticksSinceApply = totalTicks - pending.appliedTick();
 
-            if (elapsed < config.rollbackWindowMillis) {
+            if (elapsed < config.rollbackWindowMillis || ticksSinceApply < config.rollbackEvaluationTicks) {
                 logger.debug(String.format(
-                        "Pending evaluation in progress (%dms/%dms)",
-                        elapsed, config.rollbackWindowMillis));
+                        "Pending evaluation in progress (%dms/%dms, %dt/%dt)",
+                        elapsed, config.rollbackWindowMillis, ticksSinceApply, config.rollbackEvaluationTicks));
                 return;
             }
 
@@ -144,11 +161,10 @@ public final class GovernorRunner {
             logger.debug("Manual assist active: suggestion pending, awaiting user confirmation");
             return;
         }
-        String bound = detectBound(state);
-        ModeController modeController = ModeController.forMode(mode);
+        ModePolicy policy = ModePolicy.forMode(mode);
 
         // 3. Detect performance bound from telemetry
-        String currentBound = detectBound(state);
+        String bound = detectBound(state);
         // REMOVED: withGovernorSnapshot() tracking no longer available
 
         // 4. Check cooldown (NO CASCADE) with adaptive window
@@ -167,7 +183,6 @@ public final class GovernorRunner {
 
         ActionCandidate decision = decisionOpt.get();
         successTracker.recordDecision(decision);
-        String steward = conflictDetector.getSteward(decision.capabilityId());
         // REMOVED: withDecision() tracking no longer available
         String actionSummary = formatActionSummary(decision);
 
@@ -181,7 +196,8 @@ public final class GovernorRunner {
         }
 
         // Manual Assist: stage suggestion only
-        if (mode == GovernorMode.MANUAL_ASSIST && decision.targetValue() != null) {
+        if (policy.requiresUserConfirmation() && decision.targetValue() != null) {
+            PerfSnapshot baselineSnapshot = perfSnapshotSupplier.get();
             Optional<dev.nozh.core.bus.CapabilityValue> previousValue = providerRegistry.get(decision.capabilityId())
                     .flatMap(provider -> provider.getCurrentValueSafe());
             Command cmd = new Command.ApplyCapability(
@@ -189,12 +205,16 @@ public final class GovernorRunner {
                     decision.targetValue());
             PendingAction pending = new PendingAction(
                     now,
+                    totalTicks,
                     decision.capabilityId(),
                     cmd,
                     previousValue,
                     decision.targetValue(),
                     state.avgFrametimeMs(),
-                    state.p95FrametimeMs());
+                    state.p95FrametimeMs(),
+                    state.currentScenario(),
+                    state.scenarioConfidence(),
+                    baselineSnapshot);
             try {
                 stateStore.update(currentState -> currentState.withSuggestedAction(pending));
             } catch (Exception e) {
@@ -206,6 +226,7 @@ public final class GovernorRunner {
 
         // Dispatch via ActionBus
         if (decision.targetValue() != null) {
+            PerfSnapshot baselineSnapshot = perfSnapshotSupplier.get();
             Optional<dev.nozh.core.bus.CapabilityValue> previousValue = providerRegistry.get(decision.capabilityId())
                     .flatMap(provider -> provider.getCurrentValueSafe());
             Command cmd = new Command.ApplyCapability(
@@ -213,12 +234,26 @@ public final class GovernorRunner {
                     decision.targetValue());
             PendingAction pending = new PendingAction(
                     now,
+                    totalTicks,
                     decision.capabilityId(),
                     cmd,
                     previousValue,
                     decision.targetValue(),
                     state.avgFrametimeMs(),
-                    state.p95FrametimeMs());
+                    state.p95FrametimeMs(),
+                    state.currentScenario(),
+                    state.scenarioConfidence(),
+                    baselineSnapshot);
+
+            ActionHistoryEntry actionEntry = new ActionHistoryEntry(
+                    now,
+                    actionSummary,
+                    state.currentScenario(),
+                    state.scenarioConfidence(),
+                    baselineSnapshot,
+                    PerfSnapshot.empty(),
+                    ActionOutcome.NEUTRAL,
+                    false);
 
             actionBus.dispatch(cmd, report -> {
                 if (report.succeeded()) {
@@ -241,7 +276,11 @@ public final class GovernorRunner {
 
             // Update state after action dispatch
             try {
-                stateStore.update(currentState -> currentState.withGovernorAction(now, pending));
+                stateStore.update(currentState -> currentState.withGovernorAction(
+                        now,
+                        pending,
+                        actionEntry,
+                        config.historyMaxEntries));
             } catch (Exception e) {
                 logger.warn("Failed to update state after governor action: " + e.getMessage());
             }
@@ -305,46 +344,64 @@ public final class GovernorRunner {
     }
 
     private void evaluatePendingAction(RuntimeState state, PendingAction pending, NozhConfig config) {
-        double avg = state.avgFrametimeMs();
-        double p95 = state.p95FrametimeMs();
+        PerfSnapshot previousSnapshot = pending.baselineSnapshot();
+        PerfSnapshot currentSnapshot = perfSnapshotSupplier.get();
+        ActionOutcome outcome = governor.evaluateOutcome(previousSnapshot, currentSnapshot);
 
-        // Strict Evaluation:
-        // 1. Worsened: P95 increased significantly ( > baseline + epsilon)
-        // 2. Ineffective: P95 didn't decrease enough ( > baseline - epsilon)
-        // Goal: P95 < baseline - epsilon
-
-        boolean avgWorsened = avg > pending.baselineAvgMs() + config.improvementEpsilonAvgMs;
-        boolean avgIneffective = avg > pending.baselineAvgMs() - config.improvementEpsilonAvgMs;
-        boolean p95Worsened = p95 > pending.baselineP95Ms() + config.improvementEpsilonP95Ms;
-        boolean p95Ineffective = p95 > pending.baselineP95Ms() - config.improvementEpsilonP95Ms;
-
-        boolean worsened = avgWorsened || p95Worsened;
-        boolean ineffective = avgIneffective || p95Ineffective;
-
-        if (worsened || ineffective) {
+        boolean rollbackApplied = false;
+        if (outcome == ActionOutcome.NEGATIVE) {
             if (config.rollbackEnabled) {
-                pending.command()
-                        .inverse(pending.previousValue())
-                        .ifPresentOrElse(rollback -> actionBus.dispatch(rollback, r -> {
-                            if (r.succeeded()) {
-                                logger.info(
-                                        "Rollback succeeded (Action was " + (worsened ? "harmful" : "ineffective") + ")");
-                            } else {
-                                logger.warn("Rollback failed");
-                            }
-                        }), () -> logger.warn("No inverse action available, rollback skipped."));
+                Long lastRollback = rollbackCooldowns.get(pending.capability());
+                if (lastRollback != null && nowMillis() - lastRollback < config.rollbackCooldownMillis) {
+                    logger.info("Rollback skipped due to cooldown for " + pending.capability());
+                } else {
+                    pending.command()
+                            .inverse(pending.previousValue())
+                            .ifPresentOrElse(rollback -> actionBus.dispatch(rollback, r -> {
+                                if (r.succeeded()) {
+                                    logger.info("Rollback succeeded (Action was harmful)");
+                                } else {
+                                    logger.warn("Rollback failed");
+                                }
+                            }), () -> logger.warn("No inverse action available, rollback skipped."));
+                    rollbackCooldowns.put(pending.capability(), nowMillis());
+                    rollbackApplied = true;
+                }
             } else {
                 logger.info("Rollback disabled in config, keeping ineffective action.");
             }
 
-            sessionLearning.recordFailure(pending.capability());
+            sessionLearning.recordFailure(pending.capability(), pending.scenario());
             successTracker.recordFailure(pending.capability());
-        } else {
-            // Success: avg <= baseline - epsilon
-            double gainAvg = Math.max(0, pending.baselineAvgMs() - avg);
-            double gainP95 = Math.max(0, pending.baselineP95Ms() - p95);
-            sessionLearning.recordSuccess(pending.capability(), Math.max(gainAvg, gainP95));
+        } else if (outcome == ActionOutcome.POSITIVE) {
+            double gainAvg = Math.max(0, pending.baselineAvgMs() - currentSnapshot.avgFrametimeMs());
+            double gainP95 = Math.max(0, pending.baselineP95Ms() - currentSnapshot.p95FrametimeMs());
+            sessionLearning.recordSuccess(pending.capability(), pending.scenario(), Math.max(gainAvg, gainP95));
             successTracker.recordSuccess(pending.capability());
+        } else {
+            sessionLearning.recordFailure(pending.capability(), pending.scenario());
+        }
+
+        logger.debug(String.format(
+                "Governor action evaluation action=%s impact=%s decision=%s",
+                pending.capability(),
+                outcome,
+                rollbackApplied ? "rollback" : "keep"));
+
+        String actionSummary = resolveActionSummary(state, pending);
+        ActionHistoryEntry updatedEntry = new ActionHistoryEntry(
+                pending.timestampMillis(),
+                actionSummary,
+                pending.scenario(),
+                pending.scenarioConfidence(),
+                pending.baselineSnapshot(),
+                currentSnapshot,
+                outcome,
+                rollbackApplied);
+        try {
+            stateStore.update(currentState -> currentState.withActionOutcome(pending.timestampMillis(), updatedEntry));
+        } catch (Exception e) {
+            logger.warn("Failed to update action history outcome");
         }
         // Clear pending action
         try {
@@ -362,6 +419,15 @@ public final class GovernorRunner {
                 .map(snapshot -> snapshot.p95FrametimeMs())
                 .filter(this::isValidPerfValue)
                 .orElse(pending.baselineP95Ms());
+    }
+
+    private String resolveActionSummary(RuntimeState state, PendingAction pending) {
+        for (ActionHistoryEntry entry : state.actionHistory()) {
+            if (entry.timestampMillis() == pending.timestampMillis()) {
+                return entry.actionSummary();
+            }
+        }
+        return pending.capability().toString();
     }
 
     private boolean isValidPerfValue(double value) {
@@ -393,5 +459,9 @@ public final class GovernorRunner {
             return Float.toString(floatValue.value());
         }
         return value.toString();
+    }
+
+    private long nowMillis() {
+        return System.currentTimeMillis();
     }
 }

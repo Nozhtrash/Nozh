@@ -34,4 +34,11 @@ public class NozhChunkMonitor {
     public static int getAndResetLoadCount() {
         return chunksLoaded.getAndSet(0);
     }
+
+    /**
+     * Get current load count without resetting.
+     */
+    public static int getLoadCount() {
+        return chunksLoaded.get();
+    }
 }

@@ -115,7 +115,8 @@ public class NozhModClient implements ClientModInitializer {
                 stateStore,
                 logger,
                 sessionLearning,
-                scenarioDetector);
+                scenarioDetector,
+                () -> perfManager != null ? perfManager.getSnapshot() : dev.nozh.api.PerfSnapshot.empty());
 
         logger.info("Governor system initialized");
 
@@ -217,6 +218,9 @@ public class NozhModClient implements ClientModInitializer {
                 stateStore.update(state -> state.withTelemetry(
                         frameSnapshot.sufficientData() ? frameSnapshot.avgFrametimeMs() : state.avgFrametimeMs(),
                         frameSnapshot.sufficientData() ? frameSnapshot.p95FrametimeMs() : state.p95FrametimeMs(),
+                        frameSnapshot.sufficientData() ? frameSnapshot.p99FrametimeMs() : state.p99FrametimeMs(),
+                        frameSnapshot.sufficientData() ? frameSnapshot.frametimeStddevMs()
+                                : state.frametimeStddevMs(),
                         frameSnapshot.sufficientData() ? frameSnapshot.spikeCount() : state.spikeCount(),
                         tickSnapshot.sufficientData() ? tickSnapshot.avgFrametimeMs() : state.tickTimeAvg(),
                         tickSnapshot.sufficientData() ? tickSnapshot.p95FrametimeMs() : state.tickTimeP95()));

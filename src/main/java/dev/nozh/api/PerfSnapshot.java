@@ -10,6 +10,8 @@ package dev.nozh.api;
 public record PerfSnapshot(
         double avgFrametimeMs,
         double p95FrametimeMs,
+        double p99FrametimeMs,
+        double frametimeStddevMs,
         int sampleCount,
         int spikeCount, // Number of samples >500ms (filtered from avg/p95)
         int windowSeconds,
@@ -20,7 +22,8 @@ public record PerfSnapshot(
      * Create an empty/invalid snapshot for initialization.
      */
     public static PerfSnapshot empty() {
-        return new PerfSnapshot(Double.NaN, Double.NaN, 0, 0, 0, false, System.currentTimeMillis());
+        return new PerfSnapshot(Double.NaN, Double.NaN, Double.NaN, Double.NaN, 0, 0, 0, false,
+                System.currentTimeMillis());
     }
 
     /**

@@ -8,7 +8,7 @@ import java.util.Arrays;
  * 
  * Design:
  * - Fixed size ring buffer of LONGS (nanoseconds)
- * - Spike filtering: outliers >500ms are counted but don't contaminate avg/p95
+ * - Spike filtering: outliers >500ms are counted but don't contaminate avg/p95/p99
  * - No cached stats - compute on demand
  * - Synchronized for thread safety
  */
@@ -53,7 +53,8 @@ public class RollingWindowStats {
     public synchronized PerfSnapshot snapshot() {
         if (count < capacity / 2) {
             // Insufficient data
-            return new PerfSnapshot(Double.NaN, Double.NaN, count, 0, windowSeconds, false, System.currentTimeMillis());
+            return new PerfSnapshot(Double.NaN, Double.NaN, Double.NaN, Double.NaN, count, 0, windowSeconds, false,
+                    System.currentTimeMillis());
         }
 
         // Copy samples, FILTERING spikes for avg/p95 calculation
@@ -71,7 +72,8 @@ public class RollingWindowStats {
         // Edge case: ALL samples are spikes (alt-tab, massive lag)
         if (filteredCount == 0) {
             // Return NaN to signal "data too noisy"
-            return new PerfSnapshot(Double.NaN, Double.NaN, count, spikeCount, windowSeconds, false,
+            return new PerfSnapshot(Double.NaN, Double.NaN, Double.NaN, Double.NaN, count, spikeCount, windowSeconds,
+                    false,
                     System.currentTimeMillis());
         }
 
@@ -91,10 +93,26 @@ public class RollingWindowStats {
         p95Index = Math.max(0, Math.min(p95Index, filteredCount - 1));
         long p95Nanos = validSamples[p95Index];
 
+        // Calculate P99 (filtered)
+        int p99Index = (int) Math.ceil(filteredCount * 0.99) - 1;
+        p99Index = Math.max(0, Math.min(p99Index, filteredCount - 1));
+        long p99Nanos = validSamples[p99Index];
+
+        // Calculate standard deviation (filtered)
+        double varianceSum = 0;
+        for (long s : validSamples) {
+            double diff = s - avgNanos;
+            varianceSum += diff * diff;
+        }
+        double variance = varianceSum / filteredCount;
+        double stddevNanos = Math.sqrt(variance);
+
         // Convert to ms
         return new PerfSnapshot(
                 avgNanos / 1_000_000.0,
                 p95Nanos / 1_000_000.0,
+                p99Nanos / 1_000_000.0,
+                stddevNanos / 1_000_000.0,
                 count,
                 spikeCount, // Spike count for diagnostics
                 windowSeconds,

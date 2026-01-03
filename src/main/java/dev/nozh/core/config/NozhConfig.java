@@ -29,6 +29,8 @@ public class NozhConfig {
     public int rollbackWindowMillis = 45000;
     public double improvementEpsilonAvgMs = 0.5;
     public double improvementEpsilonP95Ms = 1.0;
+    public int rollbackEvaluationTicks = 100;
+    public int rollbackCooldownMillis = 60000;
 
     // Performance Targets
     public int targetFps = 60;
@@ -86,6 +88,18 @@ public class NozhConfig {
         // improvementEpsilonP95Ms: 0.0-5.0
         if (improvementEpsilonP95Ms < 0.0 || improvementEpsilonP95Ms > 5.0) {
             improvementEpsilonP95Ms = clamp(improvementEpsilonP95Ms, 0.0, 5.0);
+            corrected = true;
+        }
+
+        // rollbackEvaluationTicks: 20-600
+        if (rollbackEvaluationTicks < 20 || rollbackEvaluationTicks > 600) {
+            rollbackEvaluationTicks = clamp(rollbackEvaluationTicks, 20, 600);
+            corrected = true;
+        }
+
+        // rollbackCooldownMillis: 10000-600000
+        if (rollbackCooldownMillis < 10000 || rollbackCooldownMillis > 600000) {
+            rollbackCooldownMillis = clamp(rollbackCooldownMillis, 10000, 600000);
             corrected = true;
         }
 

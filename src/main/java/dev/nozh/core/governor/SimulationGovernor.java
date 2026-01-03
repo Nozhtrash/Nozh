@@ -14,6 +14,7 @@ package dev.nozh.core.governor;
 import dev.nozh.core.matrix.ActionCandidate;
 import dev.nozh.core.matrix.ActionMatrix;
 import dev.nozh.core.state.RuntimeState;
+import dev.nozh.api.PerfSnapshot;
 
 import java.util.List;
 import java.util.Optional;
@@ -57,6 +58,7 @@ public final class SimulationGovernor {
 
         private final ActionMatrix actionMatrix;
         private final AdaptiveWindowCalculator windowCalculator;
+        private static final double OUTCOME_EPSILON_MS = 0.75;
 
         public SimulationGovernor(ActionMatrix actionMatrix) {
                 this.actionMatrix = actionMatrix;
@@ -120,5 +122,37 @@ public final class SimulationGovernor {
          */
         public long getObservationWindow(RuntimeState state) {
                 return windowCalculator.calculateWindow(state);
+        }
+
+        /**
+         * Evaluate the outcome of an action based on performance snapshots.
+         */
+        public ActionOutcome evaluateOutcome(PerfSnapshot previousSnapshot, PerfSnapshot newSnapshot) {
+                if (previousSnapshot == null || newSnapshot == null) {
+                        return ActionOutcome.NEUTRAL;
+                }
+                if (!previousSnapshot.sufficientData() || !newSnapshot.sufficientData()) {
+                        return ActionOutcome.NEUTRAL;
+                }
+
+                double avgDelta = newSnapshot.avgFrametimeMs() - previousSnapshot.avgFrametimeMs();
+                double p95Delta = newSnapshot.p95FrametimeMs() - previousSnapshot.p95FrametimeMs();
+                double p99Delta = newSnapshot.p99FrametimeMs() - previousSnapshot.p99FrametimeMs();
+
+                boolean worsened = avgDelta > OUTCOME_EPSILON_MS
+                                || p95Delta > OUTCOME_EPSILON_MS
+                                || p99Delta > OUTCOME_EPSILON_MS;
+                if (worsened) {
+                        return ActionOutcome.NEGATIVE;
+                }
+
+                boolean improved = avgDelta < -OUTCOME_EPSILON_MS
+                                && p95Delta < -OUTCOME_EPSILON_MS
+                                && p99Delta < -OUTCOME_EPSILON_MS;
+                if (improved) {
+                        return ActionOutcome.POSITIVE;
+                }
+
+                return ActionOutcome.NEUTRAL;
         }
 }

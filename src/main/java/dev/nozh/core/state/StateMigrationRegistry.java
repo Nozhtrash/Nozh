@@ -17,10 +17,11 @@ import java.util.Optional;
  * - Version 2 (adds benchmarkRunning): Migrator adds benchmarkRunning=false
  * - Version 3 (adds confidence tracking): Migrator adds confidence fields
  * - Version 4 (adds pending suggestion): Migrator adds suggestion field
+ * - Version 5 (adds action history + extended telemetry): Migrator adds history + p99/stddev
  */
 public final class StateMigrationRegistry {
 
-    private static final int CURRENT_VERSION = 4; // Current state version
+    private static final int CURRENT_VERSION = 5; // Current state version
 
     private final Map<Integer, StateMigrator> migrators = new HashMap<>();
 
@@ -60,15 +61,18 @@ public final class StateMigrationRegistry {
                     0, // pendingActionsCount default
                     oldState.executionHistorySize(),
                     oldState.lastSnapshotHistorySize(),
+                    java.util.List.of(),
                     oldState.sessionChangesCount(),
                     oldState.avgFrametimeMs(),
                     oldState.p95FrametimeMs(),
+                    -1.0,
+                    -1.0,
                     oldState.tickTimeAvg(),
                     oldState.tickTimeP95(),
                     oldState.spikeCount(),
                     "", 0L, // lastDecisionReason, lastDecisionTimestamp default
                     oldState.sessionStartTime(),
-                    4, // Target version is 4
+                    5, // Target version is 5
                     dev.nozh.core.context.Scenario.STANDARD,
                     0.5);
         });
@@ -89,16 +93,51 @@ public final class StateMigrationRegistry {
                 oldState.pendingActionsCount(),
                 oldState.executionHistorySize(),
                 oldState.lastSnapshotHistorySize(),
+                java.util.List.of(),
                 oldState.sessionChangesCount(),
                 oldState.avgFrametimeMs(),
                 oldState.p95FrametimeMs(),
+                -1.0,
+                -1.0,
                 oldState.tickTimeAvg(),
                 oldState.tickTimeP95(),
                 oldState.spikeCount(),
                 oldState.lastDecisionReason(),
                 oldState.lastDecisionTimestamp(),
                 oldState.sessionStartTime(),
-                4,
+                5,
+                oldState.currentScenario(),
+                oldState.scenarioConfidence()));
+
+        registerMigrator(4, oldState -> new RuntimeState(
+                oldState.enabled(),
+                oldState.safeMode(),
+                oldState.autoTuning(),
+                oldState.debugLogs(),
+                oldState.governorDisabled(),
+                oldState.governorCooldownActive(),
+                oldState.governorLastActionTimestamp(),
+                oldState.benchmarkRunning(),
+                oldState.benchmarkValidity(),
+                oldState.benchmarkStartTimestamp(),
+                oldState.pendingAction(),
+                oldState.suggestedAction(),
+                oldState.pendingActionsCount(),
+                oldState.executionHistorySize(),
+                oldState.lastSnapshotHistorySize(),
+                java.util.List.of(),
+                oldState.sessionChangesCount(),
+                oldState.avgFrametimeMs(),
+                oldState.p95FrametimeMs(),
+                -1.0,
+                -1.0,
+                oldState.tickTimeAvg(),
+                oldState.tickTimeP95(),
+                oldState.spikeCount(),
+                oldState.lastDecisionReason(),
+                oldState.lastDecisionTimestamp(),
+                oldState.sessionStartTime(),
+                5,
                 oldState.currentScenario(),
                 oldState.scenarioConfidence()));
 

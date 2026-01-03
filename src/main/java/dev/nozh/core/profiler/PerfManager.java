@@ -17,19 +17,20 @@ import dev.nozh.core.safety.CrashLoopGuard;
  */
 public class PerfManager {
 
-    private final FrameTimeSampler sampler;
-    private final RollingWindowStats stats;
-    private final int windowSeconds;
+    private FrameTimeSampler sampler;
+    private RollingWindowStats stats;
+    private int windowSeconds;
+    private final PerfWindowController windowController;
+    private long lastWindowAdjustMillis = 0L;
 
     public PerfManager() {
         // Calculate capacity based on strict rules
         NozhConfig config = ConfigManager.getConfig();
         this.windowSeconds = 5; // Default window
+        this.windowController = new PerfWindowController(3, 10);
 
         int targetFps = Math.max(30, config.targetFps);
-        int calcCapacity = targetFps * windowSeconds;
-        int capacity = Math.max(60, Math.min(calcCapacity, 600));
-
+        int capacity = calculateCapacity(targetFps, windowSeconds);
         this.stats = new RollingWindowStats(capacity, windowSeconds);
         this.sampler = new FrameTimeSampler(stats);
 
@@ -54,10 +55,36 @@ public class PerfManager {
     }
 
     public PerfSnapshot getSnapshot() {
-        return stats.snapshot();
+        PerfSnapshot snapshot = stats.snapshot();
+        adjustWindowIfNeeded(snapshot);
+        return snapshot;
     }
 
     public void reset() {
         sampler.reset();
+    }
+
+    private void adjustWindowIfNeeded(PerfSnapshot snapshot) {
+        long now = System.currentTimeMillis();
+        if (now - lastWindowAdjustMillis < 1000) {
+            return;
+        }
+
+        int newWindowSeconds = windowController.evaluate(snapshot, windowSeconds, now);
+        if (newWindowSeconds != windowSeconds) {
+            NozhConfig config = ConfigManager.getConfig();
+            int targetFps = Math.max(30, config.targetFps);
+            int capacity = calculateCapacity(targetFps, newWindowSeconds);
+            windowSeconds = newWindowSeconds;
+            stats = new RollingWindowStats(capacity, newWindowSeconds);
+            sampler = new FrameTimeSampler(stats);
+            NozhConstants.LOGGER.debug("PerfManager window adjusted to {}s (capacity={})", newWindowSeconds, capacity);
+        }
+        lastWindowAdjustMillis = now;
+    }
+
+    private int calculateCapacity(int targetFps, int windowSeconds) {
+        int calcCapacity = targetFps * windowSeconds;
+        return Math.max(60, Math.min(calcCapacity, 600));
     }
 }

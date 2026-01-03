@@ -28,8 +28,8 @@ import java.util.Map;
  */
 public final class SessionLearning {
 
-    private static final String STATS_FILE = "session_stats.json";
-    private static final String STATS_TMP_FILE = "session_stats.json.tmp";
+    private static final String STATS_FILE = "nozh_session.json";
+    private static final String STATS_TMP_FILE = "nozh_session.json.tmp";
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
     private static final long SAVE_INTERVAL_MILLIS = 60000;
 
@@ -52,8 +52,8 @@ public final class SessionLearning {
      * Record successful action.
      * ZERO ALLOCATION - primitive operations only.
      */
-    public void recordSuccess(CapabilityId id, double fpsGainMs) {
-        String key = id.name();
+    public void recordSuccess(CapabilityId id, dev.nozh.core.context.Scenario scenario, double fpsGainMs) {
+        String key = buildKey(id, scenario);
         ActionStats stats = history.computeIfAbsent(key, k -> new ActionStats());
 
         stats.totalAttempts++;
@@ -68,8 +68,8 @@ public final class SessionLearning {
      * Record failed action.
      * ZERO ALLOCATION - primitive operations only.
      */
-    public void recordFailure(CapabilityId id) {
-        String key = id.name();
+    public void recordFailure(CapabilityId id, dev.nozh.core.context.Scenario scenario) {
+        String key = buildKey(id, scenario);
         ActionStats stats = history.computeIfAbsent(key, k -> new ActionStats());
 
         stats.totalAttempts++;
@@ -83,7 +83,11 @@ public final class SessionLearning {
      * ZERO ALLOCATION.
      */
     public double getSuccessRate(CapabilityId id) {
-        ActionStats stats = history.get(id.name());
+        return getSuccessRate(id, null);
+    }
+
+    public double getSuccessRate(CapabilityId id, dev.nozh.core.context.Scenario scenario) {
+        ActionStats stats = history.get(buildKey(id, scenario));
         if (stats == null || stats.totalAttempts == 0) {
             return 0.5; // Default 50% confidence for unknowns
         }
@@ -95,7 +99,11 @@ public final class SessionLearning {
      * ZERO ALLOCATION.
      */
     public double getAvgFpsGain(CapabilityId id) {
-        ActionStats stats = history.get(id.name());
+        return getAvgFpsGain(id, null);
+    }
+
+    public double getAvgFpsGain(CapabilityId id, dev.nozh.core.context.Scenario scenario) {
+        ActionStats stats = history.get(buildKey(id, scenario));
         return stats != null ? stats.avgFpsGain : 0.0;
     }
 
@@ -104,7 +112,7 @@ public final class SessionLearning {
      * ZERO ALLOCATION.
      */
     public boolean shouldAvoid(CapabilityId id) {
-        ActionStats stats = history.get(id.name());
+        ActionStats stats = history.get(buildKey(id, null));
         if (stats == null || stats.totalAttempts < 3) {
             return false; // Need at least 3 attempts to judge
         }
@@ -119,8 +127,12 @@ public final class SessionLearning {
      * ZERO ALLOCATION.
      */
     public double getRanking(CapabilityId id) {
-        double successRate = getSuccessRate(id);
-        double avgGain = getAvgFpsGain(id);
+        return getRanking(id, null);
+    }
+
+    public double getRanking(CapabilityId id, dev.nozh.core.context.Scenario scenario) {
+        double successRate = getSuccessRate(id, scenario);
+        double avgGain = getAvgFpsGain(id, scenario);
 
         // Ranking formula: success_rate * (1 + avg_gain)
         // Example: 80% success, 2ms gain → 0.8 * 3 = 2.4
@@ -131,8 +143,30 @@ public final class SessionLearning {
      * Get total attempts for this capability.
      */
     public int getTotalAttempts(CapabilityId id) {
-        ActionStats stats = history.get(id.name());
+        ActionStats stats = history.get(buildKey(id, null));
         return stats != null ? stats.totalAttempts : 0;
+    }
+
+    public void recordSuccess(CapabilityId id, double fpsGainMs) {
+        recordSuccess(id, null, fpsGainMs);
+    }
+
+    public void recordFailure(CapabilityId id) {
+        recordFailure(id, null);
+    }
+
+    public boolean shouldAvoid(CapabilityId id, dev.nozh.core.context.Scenario scenario) {
+        ActionStats stats = history.get(buildKey(id, scenario));
+        if (stats == null || stats.totalAttempts < 3) {
+            return false;
+        }
+        double successRate = (double) stats.successCount / stats.totalAttempts;
+        return successRate < 0.3;
+    }
+
+    private String buildKey(CapabilityId id, dev.nozh.core.context.Scenario scenario) {
+        String scenarioKey = scenario != null ? scenario.name() : "GLOBAL";
+        return id.name() + "|" + scenarioKey;
     }
 
     /**
