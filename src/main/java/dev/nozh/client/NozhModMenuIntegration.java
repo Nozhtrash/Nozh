@@ -121,6 +121,20 @@ public class NozhModMenuIntegration implements ModMenuApi {
             tooltipButtons.add(debugButton);
             y += 25;
 
+            // Toggle: HUD
+            TooltipButton hudButton = new TooltipButton(
+                    centerX - 150, y, 300, 20,
+                    Text.translatable("nozh.config.hud", config.showHud ? "ON" : "OFF"),
+                    Text.translatable("nozh.config.hud.tooltip"),
+                    button -> {
+                        config.showHud = !config.showHud;
+                        ConfigManager.saveAndNotify();
+                        this.clearAndInit();
+                    });
+            addDrawableChild(hudButton);
+            tooltipButtons.add(hudButton);
+            y += 25;
+
             // Toggle: Rollback
             TooltipButton rollbackButton = new TooltipButton(
                     centerX - 150, y, 300, 20,
