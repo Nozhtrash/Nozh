@@ -9,8 +9,7 @@
  */
 package dev.nozh.core.state;
 
-import dev.nozh.core.governor.GovernorMode;
-import dev.nozh.core.issues.ParanoiaLevel;
+import java.util.Optional;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -94,7 +93,8 @@ public record RuntimeState(
                 true, // governorCooldownActive = true after action
                 timestamp, // governorLastActionTimestamp
                 benchmarkRunning, benchmarkValidity, benchmarkStartTimestamp,
-                pendingActionsCount,
+                pending,
+                pending.isPresent() ? 1 : 0,
                 executionHistorySize + 1, // increment history
                 lastSnapshotHistorySize,
                 sessionChangesCount + 1, // increment changes
@@ -112,22 +112,15 @@ public record RuntimeState(
                 governorDisabled,
                 governorCooldownActive,
                 governorLastActionTimestamp,
-                benchmarkRunning, benchmarkStartTimestamp,
+                benchmarkRunning, benchmarkValidity, benchmarkStartTimestamp,
                 Optional.empty(),
                 0,
                 executionHistorySize,
                 lastSnapshotHistorySize,
                 sessionChangesCount,
-                avgFrametimeMs, p95FrametimeMs, spikeCount,
+                avgFrametimeMs, p95FrametimeMs, tickTimeAvg, tickTimeP95, spikeCount,
                 sessionStartTime, stateVersion,
-                currentScenario,
-                governorMode,
-                paranoiaLevel,
-                currentBound,
-                lastDecisionReason,
-                lastDecisionTimestamp,
-                lastDecisionSteward,
-                recentActions);
+                currentScenario, scenarioConfidence);
     }
 
     /**
@@ -146,7 +139,7 @@ public record RuntimeState(
                 running ? true : governorDisabled, // disable governor during benchmark
                 governorCooldownActive, governorLastActionTimestamp,
                 running, validity, startTime,
-                pendingActionsCount, executionHistorySize, lastSnapshotHistorySize,
+                pendingAction, pendingActionsCount, executionHistorySize, lastSnapshotHistorySize,
                 sessionChangesCount,
                 avgFrametimeMs, p95FrametimeMs, tickTimeAvg, tickTimeP95, spikeCount,
                 sessionStartTime, stateVersion,
@@ -161,7 +154,7 @@ public record RuntimeState(
                 enabled, safeMode, autoTuning, debugLogs,
                 governorDisabled, governorCooldownActive, governorLastActionTimestamp,
                 benchmarkRunning, benchmarkValidity, benchmarkStartTimestamp,
-                pendingActionsCount, executionHistorySize, lastSnapshotHistorySize,
+                pendingAction, pendingActionsCount, executionHistorySize, lastSnapshotHistorySize,
                 sessionChangesCount,
                 avg, p95, tickAvg, tickP95, spikes,
                 sessionStartTime, stateVersion,
@@ -178,7 +171,7 @@ public record RuntimeState(
                 false, // governorCooldownActive = false
                 governorLastActionTimestamp,
                 benchmarkRunning, benchmarkValidity, benchmarkStartTimestamp,
-                pendingActionsCount, executionHistorySize, lastSnapshotHistorySize,
+                pendingAction, pendingActionsCount, executionHistorySize, lastSnapshotHistorySize,
                 sessionChangesCount,
                 avgFrametimeMs, p95FrametimeMs, tickTimeAvg, tickTimeP95, spikeCount,
                 sessionStartTime, stateVersion,
@@ -193,92 +186,21 @@ public record RuntimeState(
                 enabled, safeMode, autoTuning, debugLogs,
                 governorDisabled, governorCooldownActive, governorLastActionTimestamp,
                 benchmarkRunning, benchmarkValidity, benchmarkStartTimestamp,
-                pendingActionsCount, executionHistorySize, lastSnapshotHistorySize,
-                sessionChangesCount,
-                avgFrametimeMs, p95FrametimeMs, spikeCount,
-                sessionStartTime, stateVersion,
-                scenario,
-                governorMode,
-                paranoiaLevel,
-                currentBound,
-                lastDecisionReason,
-                lastDecisionTimestamp,
-                lastDecisionSteward,
-                recentActions);
-    }
-
-    /**
-     * Update governor snapshot info (immutable).
-     */
-    public RuntimeState withGovernorSnapshot(GovernorMode mode, String bound) {
-        return new RuntimeState(
-                enabled, safeMode, autoTuning, debugLogs,
-                governorDisabled, governorCooldownActive, governorLastActionTimestamp,
-                benchmarkRunning, benchmarkValidity, benchmarkStartTimestamp,
-                pendingActionsCount, executionHistorySize, lastSnapshotHistorySize,
-                sessionChangesCount,
-                avgFrametimeMs, p95FrametimeMs, spikeCount,
-                sessionStartTime, stateVersion,
-                currentScenario,
-                mode,
-                paranoiaLevel,
-                bound,
-                lastDecisionReason,
-                lastDecisionTimestamp,
-                lastDecisionSteward,
-                recentActions);
-    }
-
-    /**
-     * Update last decision summary (immutable).
-     */
-    public RuntimeState withDecision(String reasonKey, long timestampMillis, String steward) {
-        return new RuntimeState(
-                enabled, safeMode, autoTuning, debugLogs,
-                governorDisabled, governorCooldownActive, governorLastActionTimestamp,
-                benchmarkRunning, benchmarkValidity, benchmarkStartTimestamp,
-                pendingActionsCount, executionHistorySize, lastSnapshotHistorySize,
+                pendingAction, pendingActionsCount, executionHistorySize, lastSnapshotHistorySize,
                 sessionChangesCount,
                 avgFrametimeMs, p95FrametimeMs, tickTimeAvg, tickTimeP95, spikeCount,
                 sessionStartTime, stateVersion,
-                currentScenario,
-                governorMode,
-                paranoiaLevel,
-                currentBound,
-                reasonKey,
-                timestampMillis,
-                steward,
-                recentActions);
+                scenario, confidence);
     }
 
-    /**
-     * Add an action history entry (immutable).
-     */
-    public RuntimeState withRecentAction(ActionHistoryEntry entry, int maxEntries) {
-        List<ActionHistoryEntry> updated = new ArrayList<>(recentActions);
-        updated.add(entry);
+    // REMOVED: withGovernorSnapshot() - uses deleted GovernorMode and ParanoiaLevel
+    // parameters
 
-        if (updated.size() > maxEntries) {
-            updated = new ArrayList<>(updated.subList(updated.size() - maxEntries, updated.size()));
-        }
+    // REMOVED: withDecision() - uses deleted governorMode, paranoiaLevel, etc.
+    // parameters
 
-        return new RuntimeState(
-                enabled, safeMode, autoTuning, debugLogs,
-                governorDisabled, governorCooldownActive, governorLastActionTimestamp,
-                benchmarkRunning, benchmarkValidity, benchmarkStartTimestamp,
-                pendingActionsCount, executionHistorySize, lastSnapshotHistorySize,
-                sessionChangesCount,
-                avgFrametimeMs, p95FrametimeMs, spikeCount,
-                sessionStartTime, stateVersion,
-                currentScenario,
-                governorMode,
-                paranoiaLevel,
-                currentBound,
-                lastDecisionReason,
-                lastDecisionTimestamp,
-                lastDecisionSteward,
-                List.copyOf(updated));
-    }
+    // REMOVED: withRecentAction() - uses deleted ActionHistoryEntry and
+    // recentActions parameters
 
     /**
      * Update config-driven flags (immutable).
