@@ -55,6 +55,7 @@ public final class StateStore {
         this.lastPersistedHash = currentState.hashCode();
         NozhConstants.LOGGER.info("StateStore initialized with defaults (version {})",
                 currentState.stateVersion());
+        dev.nozh.core.config.ConfigManager.addListener(config -> update(state -> state.withConfig(config)));
     }
 
     /**

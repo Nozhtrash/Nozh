@@ -56,7 +56,7 @@ public final class StateMigrationRegistry {
                     "NONE", // benchmarkValidity default
                     0L, // benchmarkStartTimestamp default
                     Optional.empty(), // pendingAction default
-                    Optional.empty(), // pendingSuggestion default
+                    Optional.empty(), // suggestedAction default
                     0, // pendingActionsCount default
                     oldState.executionHistorySize(),
                     oldState.lastSnapshotHistorySize(),
@@ -85,7 +85,7 @@ public final class StateMigrationRegistry {
                 oldState.benchmarkValidity(),
                 oldState.benchmarkStartTimestamp(),
                 oldState.pendingAction(),
-                Optional.empty(), // pendingSuggestion default
+                Optional.empty(),
                 oldState.pendingActionsCount(),
                 oldState.executionHistorySize(),
                 oldState.lastSnapshotHistorySize(),
