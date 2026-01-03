@@ -3,6 +3,7 @@ package dev.nozh.client;
 import dev.nozh.NozhConstants;
 import dev.nozh.core.NozhLogger;
 import dev.nozh.core.bus.ActionBus;
+import dev.nozh.core.bus.Command;
 import dev.nozh.core.bus.StandardActionProcessor;
 import dev.nozh.core.config.ConfigManager;
 import dev.nozh.core.config.ConfigSyncService;
@@ -25,11 +26,14 @@ import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
 import net.fabricmc.fabric.api.client.rendering.v1.HudRenderCallback;
 import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper;
+import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.option.KeyBinding;
 import net.minecraft.client.toast.SystemToast;
 import net.minecraft.client.util.InputUtil;
 import net.minecraft.text.Text;
 import org.lwjgl.glfw.GLFW;
+
+import java.util.function.Consumer;
 
 /**
  * NOZH Client-side initializer - FULL INTEGRATION.

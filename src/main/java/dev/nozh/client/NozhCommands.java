@@ -347,7 +347,7 @@ public final class NozhCommands {
         }
     }
 
-    private static String formatPendingAction(PendingAction pending) {
+    public static String formatPendingAction(PendingAction pending) {
         return pending.capability().name() + "=" + pending.newValue();
     }
 }
