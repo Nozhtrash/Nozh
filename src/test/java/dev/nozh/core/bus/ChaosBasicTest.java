@@ -2,6 +2,7 @@ package dev.nozh.core.bus;
 
 import dev.nozh.core.NoOpLogger;
 import dev.nozh.core.state.RuntimeState;
+import dev.nozh.core.state.TestStates;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
@@ -29,7 +30,7 @@ import static org.junit.jupiter.api.Assertions.*;
  */
 class ChaosBasicTest {
 
-    private static final RuntimeState FAKE_STATE = RuntimeState.defaults();
+    private static final RuntimeState FAKE_STATE = TestStates.autoTuningEnabled();
 
     @Test
     void testExecutorAlwaysThrows() {

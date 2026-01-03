@@ -1,5 +1,6 @@
 package dev.nozh.core.bus;
 
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -24,6 +25,13 @@ public sealed interface Command {
     CommandType type();
 
     /**
+     * Optional inverse command for rollback purposes.
+     */
+    default Optional<Command> inverse(Optional<CapabilityValue> previousValue) {
+        return Optional.empty();
+    }
+
+    /**
      * Apply a capability value.
      */
     record ApplyCapability(
@@ -37,6 +45,14 @@ public sealed interface Command {
         @Override
         public CommandType type() {
             return CommandType.APPLY;
+        }
+
+        @Override
+        public Optional<Command> inverse(Optional<CapabilityValue> previousValue) {
+            if (previousValue.isPresent()) {
+                return Optional.of(new Command.ApplyCapability(capability, previousValue.get()));
+            }
+            return Optional.of(new Command.ResetCapability(capability));
         }
     }
 

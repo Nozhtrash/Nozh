@@ -53,6 +53,8 @@ public record HudViewModel(
                 String lastActionSummary,
                 String lastActionOutcome,
                 Scenario currentScenario,
+                String scenarioKey,
+                double scenarioConfidence,
 
                 // Benchmark status
                 boolean benchmarkRunning,
@@ -100,6 +102,8 @@ public record HudViewModel(
                         "",
                         "",
                         Scenario.STANDARD,
+                        Scenario.STANDARD.translationKey(),
+                        0.5,
                         false,
                         "NONE",
                         List.of(),
