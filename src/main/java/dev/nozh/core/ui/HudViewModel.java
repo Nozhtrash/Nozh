@@ -75,16 +75,6 @@ public record HudViewModel(
     }
 
     /**
-     * Action history entry view model.
-     */
-    public record ActionHistoryEntryView(
-            long timestampMillis,
-            String actionSummary,
-            String outcome
-    ) {
-    }
-
-    /**
      * Empty view model for when no data is available.
      */
     public static HudViewModel EMPTY = new HudViewModel(

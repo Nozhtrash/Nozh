@@ -200,7 +200,9 @@ public record RuntimeState(
                 benchmarkRunning, benchmarkValidity, benchmarkStartTimestamp,
                 pendingAction, pendingActionsCount, executionHistorySize, lastSnapshotHistorySize,
                 sessionChangesCount,
-                avgFrametimeMs, p95FrametimeMs, tickTimeAvg, tickTimeP95, spikeCount,
+                avgFrametimeMs, p95FrametimeMs, spikeCount,
+                lastDecisionReason,
+                lastDecisionTimestamp,
                 sessionStartTime, stateVersion,
                 scenario, confidence);
     }
@@ -213,27 +215,6 @@ public record RuntimeState(
 
     // REMOVED: withRecentAction() - uses deleted ActionHistoryEntry and
     // recentActions parameters
-
-    /**
-     * Update config-driven flags (immutable).
-     */
-    public RuntimeState withConfig(dev.nozh.core.config.NozhConfig config) {
-        return new RuntimeState(
-                config.enabled,
-                safeMode,
-                config.allowAutoTuning,
-                config.debugLogs,
-                governorDisabled, governorCooldownActive, governorLastActionTimestamp,
-                benchmarkRunning, benchmarkStartTimestamp,
-                pendingAction,
-                pendingActionsCount, executionHistorySize, lastSnapshotHistorySize,
-                sessionChangesCount,
-                avgFrametimeMs, p95FrametimeMs, spikeCount,
-                lastDecisionReason,
-                lastDecisionTimestamp,
-                sessionStartTime, stateVersion,
-                scenario, confidence);
-    }
 
     /**
      * Update last decision (immutable).
