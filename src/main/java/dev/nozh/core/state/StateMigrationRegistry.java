@@ -16,6 +16,7 @@ import java.util.Optional;
  * - Version 1 (initial): RuntimeState with basic fields
  * - Version 2 (adds benchmarkRunning): Migrator adds benchmarkRunning=false
  * - Version 3 (adds confidence tracking): Migrator adds confidence fields
+ * - Version 4 (adds pending suggestion): Migrator adds suggestion field
  */
 public final class StateMigrationRegistry {
 
@@ -67,7 +68,7 @@ public final class StateMigrationRegistry {
                     oldState.spikeCount(),
                     "", 0L, // lastDecisionReason, lastDecisionTimestamp default
                     oldState.sessionStartTime(),
-                    3, // Target version is 3
+                    4, // Target version is 4
                     dev.nozh.core.context.Scenario.STANDARD,
                     0.5);
         });

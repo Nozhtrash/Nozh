@@ -1,8 +1,10 @@
 package dev.nozh.core.matrix;
 
+import dev.nozh.api.PerfSnapshot;
 import dev.nozh.core.bus.CapabilityId;
 
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -16,6 +18,7 @@ import java.util.concurrent.ConcurrentHashMap;
 public final class ActionSuccessTracker {
 
     private final Map<CapabilityId, SuccessRecord> records = new ConcurrentHashMap<>();
+    private final Map<CapabilityId, DecisionPerfSnapshot> decisionSnapshots = new ConcurrentHashMap<>();
     private String currentEnvironmentHash;
 
     public ActionSuccessTracker(String initialEnvironmentHash) {
@@ -114,6 +117,47 @@ public final class ActionSuccessTracker {
     }
 
     /**
+     * Record a decision for later performance evaluation.
+     */
+    public void recordDecision(ActionCandidate decision) {
+        if (decision == null) {
+            return;
+        }
+        decisionSnapshots.put(
+                decision.capabilityId(),
+                new DecisionPerfSnapshot(decision, PerfSnapshot.empty()));
+    }
+
+    /**
+     * Record performance snapshot before applying an action.
+     */
+    public void recordPreActionSnapshot(CapabilityId id, PerfSnapshot snapshot) {
+        if (id == null || snapshot == null) {
+            return;
+        }
+        decisionSnapshots.compute(id, (key, existing) -> {
+            if (existing == null) {
+                return new DecisionPerfSnapshot(null, snapshot);
+            }
+            return new DecisionPerfSnapshot(existing.decision(), snapshot);
+        });
+    }
+
+    /**
+     * Get the most recent decision snapshot for a capability.
+     */
+    public Optional<DecisionPerfSnapshot> getDecisionSnapshot(CapabilityId id) {
+        return Optional.ofNullable(decisionSnapshots.get(id));
+    }
+
+    /**
+     * Clear decision snapshot after evaluation.
+     */
+    public void clearDecisionSnapshot(CapabilityId id) {
+        decisionSnapshots.remove(id);
+    }
+
+    /**
      * Internal success record.
      */
     private record SuccessRecord(
@@ -122,5 +166,10 @@ public final class ActionSuccessTracker {
             long lastSuccessMillis,
             long lastFailureMillis,
             String environmentHash) {
+    }
+
+    public record DecisionPerfSnapshot(
+            ActionCandidate decision,
+            PerfSnapshot preSnapshot) {
     }
 }
