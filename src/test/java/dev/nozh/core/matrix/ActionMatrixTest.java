@@ -12,6 +12,7 @@ import dev.nozh.core.capability.ProviderStatus;
 import dev.nozh.core.capability.RollbackGuarantee;
 import dev.nozh.core.capability.SafetyLevel;
 import dev.nozh.core.capability.SideEffects;
+import dev.nozh.core.context.Scenario;
 import dev.nozh.core.governor.ModePolicy;
 import dev.nozh.core.intelligence.SessionLearning;
 import org.junit.jupiter.api.Test;
@@ -38,7 +39,8 @@ class ActionMatrixTest {
         ProviderRegistry registry = registryWith(
                 provider(CapabilityId.PARTICLES, metadata(ImpactLevel.LOW, ImpactLevel.MED, SafetyLevel.SAFE, 4.0)),
                 provider(CapabilityId.CLOUDS, metadata(ImpactLevel.NONE, ImpactLevel.LOW, SafetyLevel.SAFE, 2.0)),
-                provider(CapabilityId.ENTITY_SHADOWS, metadata(ImpactLevel.LOW, ImpactLevel.LOW, SafetyLevel.SAFE, 1.0)));
+                provider(CapabilityId.ENTITY_SHADOWS,
+                        metadata(ImpactLevel.LOW, ImpactLevel.LOW, SafetyLevel.SAFE, 1.0)));
 
         ActionMatrix matrix = new ActionMatrix(
                 registry,
@@ -46,7 +48,8 @@ class ActionMatrixTest {
                 new ConfidenceCalculator(),
                 new SessionLearning(tempDir.toFile()));
 
-        List<ActionCandidate> candidates = matrix.generateCandidates(ModePolicy.manualAssist(), "CPU");
+        List<ActionCandidate> candidates = matrix.generateCandidates(ModePolicy.manualAssist(), "CPU",
+                Scenario.STANDARD);
 
         Map<CapabilityId, ActionCandidate> byId = byId(candidates);
         assertEquals(3, byId.size());
@@ -58,8 +61,10 @@ class ActionMatrixTest {
     @Test
     void gpuBoundGeneratesExpectedTargets() {
         ProviderRegistry registry = registryWith(
-                provider(CapabilityId.RENDER_DISTANCE, metadata(ImpactLevel.HIGH, ImpactLevel.HIGH, SafetyLevel.RISKY, 6.0)),
-                provider(CapabilityId.ENTITY_SHADOWS, metadata(ImpactLevel.LOW, ImpactLevel.LOW, SafetyLevel.SAFE, 2.0)),
+                provider(CapabilityId.RENDER_DISTANCE,
+                        metadata(ImpactLevel.HIGH, ImpactLevel.HIGH, SafetyLevel.RISKY, 6.0)),
+                provider(CapabilityId.ENTITY_SHADOWS,
+                        metadata(ImpactLevel.LOW, ImpactLevel.LOW, SafetyLevel.SAFE, 2.0)),
                 provider(CapabilityId.PARTICLES, metadata(ImpactLevel.LOW, ImpactLevel.MED, SafetyLevel.SAFE, 3.0)));
 
         ActionMatrix matrix = new ActionMatrix(
@@ -68,7 +73,8 @@ class ActionMatrixTest {
                 new ConfidenceCalculator(),
                 new SessionLearning(tempDir.toFile()));
 
-        List<ActionCandidate> candidates = matrix.generateCandidates(ModePolicy.manualAssist(), "GPU");
+        List<ActionCandidate> candidates = matrix.generateCandidates(ModePolicy.manualAssist(), "GPU",
+                Scenario.STANDARD);
 
         Map<CapabilityId, ActionCandidate> byId = byId(candidates);
         assertEquals(3, byId.size());
@@ -89,7 +95,8 @@ class ActionMatrixTest {
                 new ConfidenceCalculator(),
                 new SessionLearning(tempDir.toFile()));
 
-        List<ActionCandidate> candidates = matrix.generateCandidates(ModePolicy.manualAssist(), "BALANCED");
+        List<ActionCandidate> candidates = matrix.generateCandidates(ModePolicy.manualAssist(), "BALANCED",
+                Scenario.STANDARD);
 
         Map<CapabilityId, ActionCandidate> byId = byId(candidates);
         assertEquals(2, byId.size());
@@ -102,7 +109,8 @@ class ActionMatrixTest {
         ProviderRegistry registry = registryWith(
                 provider(CapabilityId.PARTICLES, metadata(ImpactLevel.LOW, ImpactLevel.LOW, SafetyLevel.SAFE, 2.0)),
                 provider(CapabilityId.CLOUDS, metadata(ImpactLevel.LOW, ImpactLevel.LOW, SafetyLevel.SAFE, 2.0)),
-                provider(CapabilityId.ENTITY_SHADOWS, metadata(ImpactLevel.LOW, ImpactLevel.LOW, SafetyLevel.SAFE, 2.0)));
+                provider(CapabilityId.ENTITY_SHADOWS,
+                        metadata(ImpactLevel.LOW, ImpactLevel.LOW, SafetyLevel.SAFE, 2.0)));
 
         ActionSuccessTracker tracker = new ActionSuccessTracker("env");
         tracker.recordFailure(CapabilityId.CLOUDS);
@@ -121,7 +129,8 @@ class ActionMatrixTest {
                 new ConfidenceCalculator(),
                 learning);
 
-        List<ActionCandidate> candidates = matrix.generateCandidates(ModePolicy.manualAssist(), "CPU");
+        List<ActionCandidate> candidates = matrix.generateCandidates(ModePolicy.manualAssist(), "CPU",
+                Scenario.STANDARD);
 
         Map<CapabilityId, ActionCandidate> byId = byId(candidates);
         assertEquals(1, byId.size());
@@ -155,8 +164,15 @@ class ActionMatrixTest {
     }
 
     private String candidateValue(ActionCandidate candidate) {
-        CapabilityValue.EnumValue value = (CapabilityValue.EnumValue) candidate.targetValue();
-        return value.value();
+        CapabilityValue value = candidate.targetValue();
+        if (value instanceof CapabilityValue.EnumValue enumValue) {
+            return enumValue.name();
+        } else if (value instanceof CapabilityValue.IntValue intValue) {
+            return String.valueOf(intValue.value());
+        } else if (value instanceof CapabilityValue.BoolValue boolValue) {
+            return String.valueOf(boolValue.value());
+        }
+        return value.toString();
     }
 
     private CapabilityProvider provider(CapabilityId id, ProviderMetadata metadata) {
