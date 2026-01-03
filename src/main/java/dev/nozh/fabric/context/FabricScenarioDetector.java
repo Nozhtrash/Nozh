@@ -1,11 +1,17 @@
 package dev.nozh.fabric.context;
 
-import dev.nozh.core.context.Scenario;
 import dev.nozh.core.context.ScenarioDetector;
+import dev.nozh.core.context.ScenarioSnapshot;
+import dev.nozh.core.input.InputActivityTracker;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.entity.player.PlayerEntity;
+import net.minecraft.item.BlockItem;
+import net.minecraft.item.Item;
 import net.minecraft.item.Items;
 import net.minecraft.util.math.Vec3d;
+
+import java.lang.reflect.Method;
+import java.util.List;
 
 /**
  * Fabric implementation of ScenarioDetector.
@@ -17,68 +23,177 @@ public class FabricScenarioDetector implements ScenarioDetector {
 
     private Vec3d lastPos = Vec3d.ZERO;
     private int stationaryTicks = 0;
+    private long lastEntitySampleTick = -1L;
+    private int cachedEntityCount = 0;
 
     // AFK threshold: 30 seconds
     private static final int AFK_THRESHOLD_TICKS = 20 * 30;
+    private static final long INPUT_RECENT_THRESHOLD_MS = 5_000L;
+    private static final long INPUT_IDLE_THRESHOLD_MS = 15_000L;
+    private static final int ENTITY_CHECK_INTERVAL_TICKS = 20;
+    private static final double ENTITY_RADIUS = 12.0;
+    private static final int COMBAT_ENTITY_THRESHOLD = 8;
 
     public FabricScenarioDetector() {
         this.client = MinecraftClient.getInstance();
     }
 
     @Override
-    public Scenario detect() {
+    public ScenarioSnapshot detect() {
         if (client.player == null || client.world == null) {
-            return Scenario.LOADING;
+            return new ScenarioSnapshot(dev.nozh.core.context.Scenario.LOADING, 0.2);
         }
 
         if (client.currentScreen != null) {
-            return Scenario.MENU;
+            return new ScenarioSnapshot(dev.nozh.core.context.Scenario.MENU, 0.9);
         }
 
         PlayerEntity player = client.player;
 
         // Detect AFK (Stationary + No Input)
-        // Note: Real input detection needs mixins, here we use position heuristic
         Vec3d currentPos = player.getPos();
         if (currentPos.squaredDistanceTo(lastPos) < 0.0001) {
             stationaryTicks++;
         } else {
             stationaryTicks = 0;
-            // Also update input time logic if we could hook inputs,
-            // but movement is a good proxy.
         }
         lastPos = currentPos;
 
-        if (stationaryTicks > AFK_THRESHOLD_TICKS) {
-            return Scenario.AFK;
-        }
+        boolean inputRecent = InputActivityTracker.hasRecentInput(INPUT_RECENT_THRESHOLD_MS);
+        long inputAgeMs = InputActivityTracker.getLastInputAgeMs();
+
+        int nearbyEntities = sampleNearbyEntities(player);
+        double tpsDropConfidence = getTpsDropConfidence();
 
         // Detect Mining (Underground + Pickaxe)
-        if (currentPos.y < 50 && !client.world.isSkyVisible(player.getBlockPos())) {
-            if (player.getMainHandStack().getItem() == Items.DIAMOND_PICKAXE ||
-                    player.getMainHandStack().getItem() == Items.NETHERITE_PICKAXE ||
-                    player.getMainHandStack().getItem() == Items.IRON_PICKAXE) {
-                return Scenario.MINING;
+        boolean underground = currentPos.y < 50 && !client.world.isSkyVisible(player.getBlockPos());
+        boolean holdingPickaxe = isPickaxe(player.getMainHandStack().getItem());
+        boolean holdingWeapon = isWeapon(player.getMainHandStack().getItem());
+        boolean buildingCandidate = player.isCreative() && player.getMainHandStack().getItem() instanceof BlockItem;
+
+        double combatConfidence = 0.0;
+        if (holdingWeapon) {
+            combatConfidence += 0.45;
+        }
+        if (player.hurtTime > 0) {
+            combatConfidence += 0.35;
+        }
+        if (nearbyEntities >= COMBAT_ENTITY_THRESHOLD) {
+            combatConfidence += 0.35;
+        }
+        combatConfidence = clamp(combatConfidence + tpsDropConfidence * 0.1);
+
+        double miningConfidence = 0.0;
+        if (underground) {
+            miningConfidence += 0.35;
+        }
+        if (holdingPickaxe) {
+            miningConfidence += 0.35;
+        }
+        if (!inputRecent && stationaryTicks > 40) {
+            miningConfidence += 0.15;
+        }
+        miningConfidence = clamp(miningConfidence + tpsDropConfidence * 0.05);
+
+        double buildingConfidence = 0.0;
+        if (buildingCandidate) {
+            buildingConfidence += 0.7;
+        }
+        if (inputRecent) {
+            buildingConfidence += 0.15;
+        }
+        buildingConfidence = clamp(buildingConfidence);
+
+        double afkConfidence = 0.0;
+        if (stationaryTicks > AFK_THRESHOLD_TICKS) {
+            afkConfidence += 0.6;
+        }
+        if (inputAgeMs > INPUT_IDLE_THRESHOLD_MS) {
+            afkConfidence += 0.3;
+        }
+        if (inputAgeMs == Long.MAX_VALUE) {
+            afkConfidence += 0.1;
+        }
+        afkConfidence = clamp(afkConfidence - tpsDropConfidence * 0.2);
+
+        double standardConfidence = inputRecent ? 0.55 : 0.4;
+
+        dev.nozh.core.context.Scenario scenario = dev.nozh.core.context.Scenario.STANDARD;
+        double confidence = standardConfidence;
+
+        if (combatConfidence > confidence) {
+            scenario = dev.nozh.core.context.Scenario.COMBAT;
+            confidence = combatConfidence;
+        }
+
+        if (miningConfidence > confidence) {
+            scenario = dev.nozh.core.context.Scenario.MINING;
+            confidence = miningConfidence;
+        }
+
+        if (buildingConfidence > confidence) {
+            scenario = dev.nozh.core.context.Scenario.BUILDING;
+            confidence = buildingConfidence;
+        }
+
+        if (afkConfidence > confidence) {
+            scenario = dev.nozh.core.context.Scenario.AFK;
+            confidence = afkConfidence;
+        }
+
+        return new ScenarioSnapshot(scenario, confidence);
+    }
+
+    private int sampleNearbyEntities(PlayerEntity player) {
+        long worldTick = client.world.getTime();
+        if (lastEntitySampleTick >= 0 && worldTick - lastEntitySampleTick < ENTITY_CHECK_INTERVAL_TICKS) {
+            return cachedEntityCount;
+        }
+
+        lastEntitySampleTick = worldTick;
+        List<net.minecraft.entity.Entity> entities = client.world.getOtherEntities(
+                player,
+                player.getBoundingBox().expand(ENTITY_RADIUS),
+                entity -> entity.isAlive());
+        cachedEntityCount = entities.size();
+        return cachedEntityCount;
+    }
+
+    private boolean isPickaxe(Item item) {
+        return item == Items.DIAMOND_PICKAXE ||
+                item == Items.NETHERITE_PICKAXE ||
+                item == Items.IRON_PICKAXE;
+    }
+
+    private boolean isWeapon(Item item) {
+        return item == Items.DIAMOND_SWORD ||
+                item == Items.NETHERITE_SWORD ||
+                item == Items.NETHERITE_AXE;
+    }
+
+    private double getTpsDropConfidence() {
+        if (client.getServer() == null) {
+            return 0.0;
+        }
+
+        try {
+            Method avgTickMethod = client.getServer().getClass().getMethod("getAverageTickTime");
+            Object result = avgTickMethod.invoke(client.getServer());
+            if (!(result instanceof Number)) {
+                return 0.0;
             }
+            double avgTickTimeMs = ((Number) result).doubleValue();
+            if (avgTickTimeMs <= 0) {
+                return 0.0;
+            }
+            double tps = Math.min(20.0, 1000.0 / avgTickTimeMs);
+            return clamp((20.0 - tps) / 20.0);
+        } catch (ReflectiveOperationException e) {
+            return 0.0;
         }
+    }
 
-        // Detect Combat (Holding weapon or recent damage)
-        // Simple heuristic: Holding sword/axe
-        if (player.getMainHandStack().getItem() == Items.DIAMOND_SWORD ||
-                player.getMainHandStack().getItem() == Items.NETHERITE_SWORD ||
-                player.getMainHandStack().getItem() == Items.NETHERITE_AXE) {
-            return Scenario.COMBAT;
-        }
-
-        // If many entities nearby, also consider combat/crowd
-        // (Expensive check, maybe skip or optimize)
-        // int nearbyEntities = client.world.getEntitiesByClass(...)
-
-        // Detect Building (Creative + Holding blocks)
-        if (player.isCreative() && player.getMainHandStack().getItem() instanceof net.minecraft.item.BlockItem) {
-            return Scenario.BUILDING;
-        }
-
-        return Scenario.STANDARD;
+    private double clamp(double value) {
+        return Math.max(0.0, Math.min(1.0, value));
     }
 }

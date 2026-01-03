@@ -49,13 +49,7 @@ public record RuntimeState(
         long sessionStartTime,
         int stateVersion,
         dev.nozh.core.context.Scenario currentScenario,
-        GovernorMode governorMode,
-        ParanoiaLevel paranoiaLevel,
-        String currentBound,
-        String lastDecisionReason,
-        long lastDecisionTimestamp,
-        String lastDecisionSteward,
-        List<ActionHistoryEntry> recentActions) {
+        double scenarioConfidence) {
     private static final int CURRENT_VERSION = 3; // Bump version
 
     /**
@@ -86,13 +80,7 @@ public record RuntimeState(
                 System.currentTimeMillis(), // sessionStartTime
                 CURRENT_VERSION,
                 dev.nozh.core.context.Scenario.STANDARD,
-                GovernorMode.MANUAL_ASSIST,
-                ParanoiaLevel.NORMAL,
-                "BALANCED",
-                "",
-                0L,
-                "NOZH",
-                List.of());
+                0.5);
     }
 
     /**
@@ -112,7 +100,7 @@ public record RuntimeState(
                 sessionChangesCount + 1, // increment changes
                 avgFrametimeMs, p95FrametimeMs, tickTimeAvg, tickTimeP95, spikeCount,
                 sessionStartTime, stateVersion,
-                currentScenario);
+                currentScenario, scenarioConfidence);
     }
 
     /**
@@ -162,14 +150,7 @@ public record RuntimeState(
                 sessionChangesCount,
                 avgFrametimeMs, p95FrametimeMs, tickTimeAvg, tickTimeP95, spikeCount,
                 sessionStartTime, stateVersion,
-                currentScenario,
-                governorMode,
-                paranoiaLevel,
-                currentBound,
-                lastDecisionReason,
-                lastDecisionTimestamp,
-                lastDecisionSteward,
-                recentActions);
+                currentScenario, scenarioConfidence);
     }
 
     /**
@@ -184,14 +165,7 @@ public record RuntimeState(
                 sessionChangesCount,
                 avg, p95, tickAvg, tickP95, spikes,
                 sessionStartTime, stateVersion,
-                currentScenario,
-                governorMode,
-                paranoiaLevel,
-                currentBound,
-                lastDecisionReason,
-                lastDecisionTimestamp,
-                lastDecisionSteward,
-                recentActions);
+                currentScenario, scenarioConfidence);
     }
 
     /**
@@ -208,20 +182,13 @@ public record RuntimeState(
                 sessionChangesCount,
                 avgFrametimeMs, p95FrametimeMs, tickTimeAvg, tickTimeP95, spikeCount,
                 sessionStartTime, stateVersion,
-                currentScenario,
-                governorMode,
-                paranoiaLevel,
-                currentBound,
-                lastDecisionReason,
-                lastDecisionTimestamp,
-                lastDecisionSteward,
-                recentActions);
+                currentScenario, scenarioConfidence);
     }
 
     /**
      * Update current scenario (immutable).
      */
-    public RuntimeState withScenario(dev.nozh.core.context.Scenario scenario) {
+    public RuntimeState withScenario(dev.nozh.core.context.Scenario scenario, double confidence) {
         return new RuntimeState(
                 enabled, safeMode, autoTuning, debugLogs,
                 governorDisabled, governorCooldownActive, governorLastActionTimestamp,
@@ -329,7 +296,7 @@ public record RuntimeState(
                 sessionChangesCount,
                 avgFrametimeMs, p95FrametimeMs, spikeCount,
                 sessionStartTime, stateVersion,
-                currentScenario);
+                scenario, confidence);
     }
 
     /**
@@ -369,12 +336,6 @@ public record RuntimeState(
                 System.currentTimeMillis(),
                 CURRENT_VERSION,
                 dev.nozh.core.context.Scenario.STANDARD,
-                mode,
-                ParanoiaLevel.NORMAL,
-                "BALANCED",
-                "",
-                0L,
-                "NOZH",
-                List.of());
+                0.5);
     }
 }

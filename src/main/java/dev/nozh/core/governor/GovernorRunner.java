@@ -78,13 +78,14 @@ public final class GovernorRunner {
     }
 
     private void runGovernorLoop() {
-        long now = System.currentTimeMillis();
-        NozhConfig config = ConfigManager.getConfig();
-
-        // Update scenario
+        // 1. Detect scenario and update state reference
+        dev.nozh.core.context.ScenarioSnapshot scenarioSnapshot = scenarioDetector.detect();
         try {
-            stateStore.update(s -> s.withScenario(scenarioDetector.detect()));
-        } catch (Exception ignored) {
+            stateStore.update(s -> s.withScenario(
+                    scenarioSnapshot.scenario(),
+                    scenarioSnapshot.confidence()));
+        } catch (Exception e) {
+            // Ignore update failure
         }
 
         RuntimeState state = stateStore.snapshotSafe();
@@ -283,16 +284,27 @@ public final class GovernorRunner {
             sessionLearning.recordSuccess(pending.capability(), gain);
         }
 
-        try {
-            stateStore.update(RuntimeState::withPendingActionCleared);
-        } catch (Exception e) {
-            logger.warn("Failed to clear pending action");
-        }
-    }
+        // Scenario-based overrides (with confidence gating)
+        double scenarioConfidence = state.scenarioConfidence();
+        if (scenarioConfidence >= 0.55) {
+            dev.nozh.core.context.Scenario scenario = state.currentScenario();
+            if (scenario == dev.nozh.core.context.Scenario.COMBAT) {
+                // Combat requires max FPS -> Aggressive
+                return dev.nozh.core.governor.GovernorMode.AUTO_AGGRESSIVE;
+            }
 
-    private String formatActionSummary(ActionCandidate decision) {
-        if (decision == null) {
-            return "";
+            if (scenario == dev.nozh.core.context.Scenario.MINING) {
+                // Mining usually stable
+                return dev.nozh.core.governor.GovernorMode.AUTO_CONSERVATIVE;
+            }
+
+            if (scenario == dev.nozh.core.context.Scenario.BUILDING) {
+                return dev.nozh.core.governor.GovernorMode.AUTO_CONSERVATIVE;
+            }
+
+            if (scenario == dev.nozh.core.context.Scenario.AFK) {
+                return dev.nozh.core.governor.GovernorMode.AUTO_CONSERVATIVE;
+            }
         }
         String value = formatCapabilityValue(decision.targetValue());
         if (value.isEmpty()) {
