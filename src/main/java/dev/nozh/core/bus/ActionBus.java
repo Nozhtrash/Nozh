@@ -98,11 +98,33 @@ public final class ActionBus {
      * @param callback Result callback (may be called from tick thread)
      */
     public void dispatch(Command command, Consumer<CommandExecutionReport> callback) {
+        dispatch(command, callback, false);
+    }
+
+    /**
+     * Dispatch a user-confirmed command (bypasses auto-tuning gating).
+     */
+    public void dispatchUserCommand(Command command, Consumer<CommandExecutionReport> callback) {
+        dispatch(command, callback, true);
+    }
+
+    private void dispatch(Command command, Consumer<CommandExecutionReport> callback, boolean userInitiated) {
         long queuedAt = System.currentTimeMillis();
 
         synchronized (commandQueue) {
             // Validate against current state (injected provider, not StateStore singleton)
             RuntimeState state = stateProvider.get();
+            if (!userInitiated && !state.autoTuning() && isAutoCapabilityCommand(command)) {
+                CommandExecutionReport report = createRejectedReport(
+                        command,
+                        queuedAt,
+                        "Auto-tuning disabled: automatic actions blocked");
+                callback.accept(report);
+                if (logger.isDebugEnabled()) {
+                    logger.debug("Command rejected (auto-tuning disabled): " + command.id());
+                }
+                return;
+            }
             ValidationResult validation = CommandValidator.validate(command, state);
 
             if (validation.isInvalid()) {
@@ -242,6 +264,12 @@ public final class ActionBus {
             return ((Command.PreviewCapability) command).capability();
         }
         return null; // Benchmark has no capability
+    }
+
+    private boolean isAutoCapabilityCommand(Command command) {
+        return command instanceof Command.ApplyCapability
+                || command instanceof Command.ResetCapability
+                || command instanceof Command.PreviewCapability;
     }
 
     /**

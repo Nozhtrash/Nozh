@@ -2,6 +2,7 @@ package dev.nozh.core.state;
 
 import dev.nozh.core.bus.CapabilityId;
 import dev.nozh.core.bus.CapabilityValue;
+import dev.nozh.core.bus.Command;
 
 import java.util.Optional;
 

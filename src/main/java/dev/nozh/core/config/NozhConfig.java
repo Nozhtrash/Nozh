@@ -14,6 +14,7 @@ public class NozhConfig {
     public boolean enabled = true;
     public boolean debugLogs = false;
     public String language = "auto"; // "auto", "en_us", "es_cl"
+    public boolean showHud = true;
 
     // Version tracking for migrations
     public int configVersion = 0; // 0=v0.1.0, 1=legacy, 2=v0.2.0-alpha
