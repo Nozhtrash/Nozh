@@ -25,6 +25,23 @@ public record ActionCandidate(
         String reason // Human-readable explanation
 ) {
     /**
+     * Passive yield candidate (no action).
+     */
+    public static ActionCandidate yield(CapabilityId capabilityId, String steward) {
+        return new ActionCandidate(
+                capabilityId,
+                null,
+                0,
+                0,
+                SafetyLevel.SAFE,
+                RollbackGuarantee.NONE,
+                ImpactLevel.NONE,
+                ImpactLevel.NONE,
+                1.0,
+                String.format("PASSIVE → yield %s to %s", capabilityId.name(), steward));
+    }
+
+    /**
      * Score for sorting candidates.
      * Higher is better.
      */

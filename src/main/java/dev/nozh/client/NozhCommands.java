@@ -159,6 +159,13 @@ public final class NozhCommands {
             source.sendFeedback(hint.copy().styled(s -> s.withColor(0xAAAAAA)));
         }
 
+        source.sendFeedback(NozhText.header("--- Capability Stewards ---"));
+        for (CompatService.CapabilitySteward steward : CompatService.generateStewardReport()) {
+            int color = steward.conflict() ? 0xFFAA00 : 0x55FF55;
+            source.sendFeedback(Text.literal("  " + steward.capabilityId().name() + " → " + steward.steward())
+                    .styled(s -> s.withColor(color)));
+        }
+
         // Verdict
         source.sendFeedback(NozhText.header("--- Verdict ---"));
         if (failures > 0) {

@@ -161,6 +161,12 @@ public final class GovernorRunner {
         // Log decision
         logger.info("Governor decision: " + decision.reason());
 
+        try {
+            stateStore.update(currentState -> currentState.withDecision(decision.reason(), now));
+        } catch (Exception e) {
+            logger.warn("Failed to update state decision: " + e.getMessage());
+        }
+
         // Dispatch via ActionBus
         if (decision.targetValue() != null) {
             Optional<dev.nozh.core.bus.CapabilityValue> previousValue = providerRegistry.get(decision.capabilityId())
@@ -202,6 +208,8 @@ public final class GovernorRunner {
             } catch (Exception e) {
                 logger.warn("Failed to update state after governor action: " + e.getMessage());
             }
+        } else {
+            logger.info("Governor PASSIVE: yield decision, no action dispatched");
         }
     }
 

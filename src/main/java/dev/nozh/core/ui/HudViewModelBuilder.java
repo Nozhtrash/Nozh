@@ -4,6 +4,8 @@ import dev.nozh.core.bus.CommandLifecycle;
 import dev.nozh.core.capability.CapabilityProvider;
 import dev.nozh.core.capability.ProviderRegistry;
 import dev.nozh.core.capability.ProviderStatus;
+import dev.nozh.core.compat.CompatService;
+import dev.nozh.core.governor.GovernorMode;
 import dev.nozh.core.issues.Issue;
 import dev.nozh.core.issues.IssueSeverity;
 import dev.nozh.core.preset.HardwareTier;
@@ -70,7 +72,8 @@ public final class HudViewModelBuilder {
             providerVMs.add(new HudViewModel.ProviderViewModel(
                     provider.id().toString(),
                     status,
-                    provider.statusReason().orElse("")));
+                    provider.statusReason().orElse(""),
+                    CompatService.getSteward(provider.id())));
         }
 
         // Issues summary
@@ -89,22 +92,19 @@ public final class HudViewModelBuilder {
 
         String lastDecisionReason = state.lastDecisionReason();
         long lastDecisionTimestamp = state.lastDecisionTimestamp();
-        String directorSteward = state.lastDecisionSteward();
-        String currentBound = state.currentBound();
 
-        boolean benchmarkRunning = state.benchmarkRunning();
-        String benchmarkValidity = state.benchmarkValidity();
+        // TODO: Get from RuntimeState when Benchmark is integrated
+        boolean benchmarkRunning = false;
+        String benchmarkValidity = "NONE";
 
-        List<HudViewModel.ActionHistoryEntryView> recentActions = new ArrayList<>();
-        List<ActionHistoryEntry> stateActions = state.recentActions();
-        if (stateActions != null) {
-            for (ActionHistoryEntry entry : stateActions) {
-                recentActions.add(new HudViewModel.ActionHistoryEntryView(
-                        entry.timestampMillis(),
-                        entry.actionSummary(),
-                        formatOutcome(entry.outcome())));
-            }
-        }
+        // TODO: Get from RuntimeState execution history
+        List<String> historyEntries = List.of();
+
+        // TODO: Get actual bound from state (for now, placeholder)
+        String currentBound = "BALANCED";
+
+        // TODO: Get governor mode from state (for now, default)
+        GovernorMode governorMode = GovernorMode.AUTO_CONSERVATIVE;
 
         String lastActionSummary = "";
         String lastActionOutcome = "";

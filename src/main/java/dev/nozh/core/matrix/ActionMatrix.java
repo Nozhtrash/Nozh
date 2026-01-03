@@ -77,6 +77,7 @@ public final class ActionMatrix {
      */
     public List<ActionCandidate> generateCandidates(ModePolicy policy, String currentBound, Scenario scenario) {
         List<ActionCandidate> candidates = new ArrayList<>();
+        List<ActionCandidate> yieldCandidates = new ArrayList<>();
         long now = System.currentTimeMillis();
 
         // Iterate all registered providers
@@ -130,6 +131,7 @@ public final class ActionMatrix {
             // INTEGRATION: Conflict Detection
             if (conflictDetector != null && conflictDetector.hasConflict(id)) {
                 // If another mod handles this, we should not touch it
+                yieldCandidates.add(ActionCandidate.yield(id, conflictDetector.getSteward(id)));
                 continue;
             }
 
@@ -172,6 +174,10 @@ public final class ActionMatrix {
                 .orElse(0.0);
 
         candidates.sort(Comparator.comparingDouble(candidate -> scoreCandidate(candidate, maxExpectedGain)).reversed());
+
+        if (candidates.isEmpty() && !yieldCandidates.isEmpty()) {
+            return List.of(yieldCandidates.get(0));
+        }
 
         return candidates;
     }
