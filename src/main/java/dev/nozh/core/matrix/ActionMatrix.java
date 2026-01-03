@@ -8,6 +8,7 @@ import dev.nozh.core.capability.ProviderMetadata;
 import dev.nozh.core.capability.ProviderRegistry;
 import dev.nozh.core.capability.ProviderStatus;
 import dev.nozh.core.capability.SafetyLevel;
+import dev.nozh.core.context.Scenario;
 import dev.nozh.core.governor.ModePolicy;
 
 import java.util.ArrayList;
@@ -50,10 +51,11 @@ public final class ActionMatrix {
      * Generate candidates for current state.
      * 
      * @param policy       Mode policy to enforce
-     * @param currentBound Performance bound (CPU_BOUND/GPU_BOUND/BALANCED)
+     * @param currentBound Performance bound (CPU/GPU/BALANCED)
+     * @param scenario     Current scenario (combat/building/etc.)
      * @return Sorted candidates (best first), may be empty
      */
-    public List<ActionCandidate> generateCandidates(ModePolicy policy, String currentBound) {
+    public List<ActionCandidate> generateCandidates(ModePolicy policy, String currentBound, Scenario scenario) {
         List<ActionCandidate> candidates = new ArrayList<>();
         long now = System.currentTimeMillis();
 
@@ -65,6 +67,10 @@ public final class ActionMatrix {
             // Filter by provider status
             if (provider.status() == ProviderStatus.BROKEN) {
                 continue; // Skip broken providers
+            }
+
+            if (!provider.isAvailable()) {
+                continue;
             }
 
             // Filter by safety level
@@ -94,15 +100,12 @@ public final class ActionMatrix {
             }
 
             // Generate target value based on bound + provider type
-            String targetValueStr = generateTargetValue(id, currentBound, metadata);
+            CapabilityValue targetValue = generateTargetValue(id, currentBound, scenario);
 
             // Skip if no target value could be determined
-            if (targetValueStr == null) {
+            if (targetValue == null) {
                 continue;
             }
-
-            // Create CapabilityValue from string (most values are enums)
-            CapabilityValue targetValue = new CapabilityValue.EnumValue(targetValueStr);
 
             // INTEGRATION: Conflict Detection
             if (conflictDetector.hasConflict(id)) {
@@ -185,25 +188,129 @@ public final class ActionMatrix {
                 return "OFF";
         }
 
-        // GPU-bound heuristics
-        if ("GPU".equals(bound)) {
-            if ("render_distance".equals(capName))
-                return "8";
-            if ("entity_shadows".equals(capName))
-                return "OFF";
-            if ("particles".equals(capName))
-                return "DECREASED";
+        boolean combat = scenario == Scenario.COMBAT;
+        boolean mining = scenario == Scenario.MINING;
+        boolean building = scenario == Scenario.BUILDING;
+        boolean afk = scenario == Scenario.AFK;
+        boolean menu = scenario == Scenario.MENU;
+        boolean loading = scenario == Scenario.LOADING;
+
+        switch (id) {
+            case PARTICLES -> {
+                if (combat || loading) {
+                    return new CapabilityValue.EnumValue("MINIMAL");
+                }
+                if (cpuBound) {
+                    return new CapabilityValue.EnumValue("MINIMAL");
+                }
+                if (gpuBound || balanced) {
+                    return new CapabilityValue.EnumValue("DECREASED");
+                }
+            }
+            case CLOUDS -> {
+                if (combat || loading || cpuBound) {
+                    return new CapabilityValue.EnumValue("OFF");
+                }
+                if (gpuBound || balanced) {
+                    return new CapabilityValue.EnumValue("FAST");
+                }
+            }
+            case ENTITY_SHADOWS -> {
+                if (combat || gpuBound || cpuBound) {
+                    return new CapabilityValue.BoolValue(false);
+                }
+            }
+            case RENDER_DISTANCE -> {
+                if (mining) {
+                    return new CapabilityValue.IntValue(6);
+                }
+                if (gpuBound || combat) {
+                    return new CapabilityValue.IntValue(8);
+                }
+                if (cpuBound) {
+                    return new CapabilityValue.IntValue(10);
+                }
+            }
+            case SIMULATION_DISTANCE -> {
+                if (cpuBound || combat || mining) {
+                    return new CapabilityValue.IntValue(6);
+                }
+                if (balanced && !building) {
+                    return new CapabilityValue.IntValue(7);
+                }
+            }
+            case ENTITY_DISTANCE -> {
+                if (combat || afk || loading) {
+                    return new CapabilityValue.IntValue(70);
+                }
+                if (gpuBound) {
+                    return new CapabilityValue.IntValue(75);
+                }
+                if (cpuBound && !building) {
+                    return new CapabilityValue.IntValue(80);
+                }
+            }
+            case BIOME_BLEND -> {
+                if (combat || gpuBound) {
+                    return new CapabilityValue.IntValue(2);
+                }
+                if (cpuBound || balanced) {
+                    return new CapabilityValue.IntValue(3);
+                }
+            }
+            case MIPMAP_LEVEL -> {
+                if (combat || gpuBound) {
+                    return new CapabilityValue.IntValue(2);
+                }
+                if (balanced && !building) {
+                    return new CapabilityValue.IntValue(3);
+                }
+            }
+            case VSYNC -> {
+                if (combat || loading || gpuBound) {
+                    return new CapabilityValue.BoolValue(false);
+                }
+            }
+            case FOG -> {
+                if (combat || gpuBound) {
+                    return new CapabilityValue.IntValue(8);
+                }
+                if (balanced && !building) {
+                    return new CapabilityValue.IntValue(10);
+                }
+            }
+            case GRAPHICS_MODE -> {
+                if (combat || gpuBound) {
+                    return new CapabilityValue.EnumValue("FAST");
+                }
+                if (balanced && !building) {
+                    return new CapabilityValue.EnumValue("FAST");
+                }
+            }
+            case ARMOR_STANDS -> {
+                if (combat || afk || loading || (cpuBound && !building)) {
+                    return new CapabilityValue.BoolValue(false);
+                }
+            }
+            case ITEM_FRAMES -> {
+                if (combat || afk || loading || (cpuBound && !building)) {
+                    return new CapabilityValue.BoolValue(false);
+                }
+            }
+            case BLOCK_ENTITIES -> {
+                if (!building && (combat || afk || loading || cpuBound)) {
+                    return new CapabilityValue.BoolValue(false);
+                }
+            }
+            case ANIMATIONS -> {
+                if (combat || afk || loading || (cpuBound && !building) || menu) {
+                    return new CapabilityValue.BoolValue(false);
+                }
+            }
+            default -> {
+            }
         }
 
-        // BALANCED: conservative reductions
-        if ("BALANCED".equals(bound)) {
-            if ("particles".equals(capName))
-                return "DECREASED";
-            if ("clouds".equals(capName))
-                return "FAST";
-        }
-
-        // No clear target
         return null;
     }
 

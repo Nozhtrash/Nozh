@@ -131,7 +131,7 @@ public final class VsyncProvider implements CapabilityProvider {
 
         @Override
         public double expectedGainMs() {
-            return 2.0; // VSync can add input lag and cap FPS
+            return 1.4; // VSync can cap FPS; varies by setup
         }
 
         @Override

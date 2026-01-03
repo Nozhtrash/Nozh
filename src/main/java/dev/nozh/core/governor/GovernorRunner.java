@@ -153,28 +153,31 @@ public final class GovernorRunner {
         logger.info("Governor decision: " + decision.reason());
 
         // Dispatch via ActionBus
+        Command cmd;
         if (decision.targetValue() != null) {
-            Command cmd = new Command.ApplyCapability(
+            cmd = new Command.ApplyCapability(
                     decision.capabilityId(),
                     decision.targetValue());
+        } else {
+            cmd = new Command.ResetCapability(decision.capabilityId());
+        }
 
-            actionBus.dispatch(cmd, report -> {
-                // Log result only, no logic
-                if (report.succeeded()) {
-                    logger.info("Governor action succeeded");
-                    // Reset predictor after successful action
-                    predictiveAnalyzer.reset();
-                } else {
-                    logger.warn("Governor action failed: " + report.error().orElse("unknown"));
-                }
-            });
-
-            // Update state after action dispatch
-            try {
-                stateStore.update(currentState -> currentState.withGovernorAction(now));
-            } catch (Exception e) {
-                logger.warn("Failed to update state after governor action: " + e.getMessage());
+        actionBus.dispatch(cmd, report -> {
+            // Log result only, no logic
+            if (report.succeeded()) {
+                logger.info("Governor action succeeded");
+                // Reset predictor after successful action
+                predictiveAnalyzer.reset();
+            } else {
+                logger.warn("Governor action failed: " + report.error().orElse("unknown"));
             }
+        });
+
+        // Update state after action dispatch
+        try {
+            stateStore.update(currentState -> currentState.withGovernorAction(now));
+        } catch (Exception e) {
+            logger.warn("Failed to update state after governor action: " + e.getMessage());
         }
     }
 

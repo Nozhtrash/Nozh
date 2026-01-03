@@ -5,7 +5,10 @@ import dev.nozh.api.governor.ActionType;
 import dev.nozh.api.governor.Decision;
 import dev.nozh.core.config.ConfigManager;
 import dev.nozh.core.config.NozhConfig;
+import dev.nozh.core.executor.handlers.DecreaseEntityDistanceHandler;
 import dev.nozh.core.executor.handlers.DecreaseParticlesHandler;
+import dev.nozh.core.executor.handlers.DecreaseRenderDistanceHandler;
+import dev.nozh.core.executor.handlers.DecreaseSimulationDistanceHandler;
 import dev.nozh.core.safety.NozhState;
 import dev.nozh.core.safety.StateManager;
 import net.minecraft.client.MinecraftClient;
@@ -29,6 +32,9 @@ public class StandardActionExecutor implements ActionExecutor {
 
         // Register Phase 6 Handler
         handlers.put(ActionType.DECREASE_PARTICLES, new DecreaseParticlesHandler());
+        handlers.put(ActionType.DECREASE_RENDER_DISTANCE, new DecreaseRenderDistanceHandler());
+        handlers.put(ActionType.DECREASE_SIMULATION_DISTANCE, new DecreaseSimulationDistanceHandler());
+        handlers.put(ActionType.DECREASE_ENTITY_DISTANCE, new DecreaseEntityDistanceHandler());
     }
 
     @Override

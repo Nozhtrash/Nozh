@@ -128,7 +128,7 @@ public final class BlockEntityProvider implements CapabilityProvider {
 
         @Override
         public double expectedGainMs() {
-            return 2.5; // Very high gain in bases
+            return 2.0; // High gain in bases
         }
 
         @Override
