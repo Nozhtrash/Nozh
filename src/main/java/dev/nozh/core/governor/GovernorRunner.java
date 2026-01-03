@@ -171,14 +171,41 @@ public final class GovernorRunner {
     }
 
     private String detectBound(RuntimeState state) {
-        double avg = state.avgFrametimeMs();
-        double p95 = state.p95FrametimeMs();
+        double avgMs = state.avgFrametimeMs();
+        double p95Ms = state.p95FrametimeMs();
+        double tickAvgMs = state.tickTimeAvg();
+        double tickP95Ms = state.tickTimeP95();
 
-        if (avg < 0 || p95 < 0)
+        boolean frameDataAvailable = avgMs >= 0 && p95Ms >= 0;
+        boolean tickDataAvailable = tickAvgMs >= 0 && tickP95Ms >= 0;
+
+        if (!frameDataAvailable && !tickDataAvailable) {
             return "BALANCED";
-        if (avg > 16.67)
+        }
+
+        if (!tickDataAvailable) {
+            // Fallback heuristic without tick data
+            if (avgMs > 16.67) {
+                return "CPU";
+            }
+
+            if (p95Ms > avgMs * 1.5) {
+                return "GPU";
+            }
+
+            return "BALANCED";
+        }
+
+        double tickThresholdMs = 50.0;
+        boolean tickHigh = tickAvgMs > tickThresholdMs || tickP95Ms > tickThresholdMs;
+
+        if (tickHigh) {
             return "CPU";
-        if (p95 > avg * 1.5)
+        }
+
+        double frameThresholdMs = 16.67;
+        boolean frameHigh = frameDataAvailable && (avgMs > frameThresholdMs || p95Ms > frameThresholdMs);
+        if (frameHigh) {
             return "GPU";
         return "BALANCED";
     }

@@ -38,11 +38,13 @@ public record RuntimeState(
         int sessionChangesCount,
         double avgFrametimeMs,
         double p95FrametimeMs,
+        double tickTimeAvg,
+        double tickTimeP95,
         int spikeCount,
         long sessionStartTime,
         int stateVersion,
         dev.nozh.core.context.Scenario currentScenario) {
-    private static final int CURRENT_VERSION = 2; // Bump version
+    private static final int CURRENT_VERSION = 3; // Bump version
 
     /**
      * Create default initial state.
@@ -65,6 +67,8 @@ public record RuntimeState(
                 0, // sessionChangesCount
                 -1.0, // avgFrametimeMs (sentinel)
                 -1.0, // p95FrametimeMs (sentinel)
+                -1.0, // tickTimeAvg (sentinel)
+                -1.0, // tickTimeP95 (sentinel)
                 0, // spikeCount
                 System.currentTimeMillis(), // sessionStartTime
                 CURRENT_VERSION,
@@ -87,7 +91,7 @@ public record RuntimeState(
                 executionHistorySize + 1, // increment history
                 lastSnapshotHistorySize,
                 sessionChangesCount + 1, // increment changes
-                avgFrametimeMs, p95FrametimeMs, spikeCount,
+                avgFrametimeMs, p95FrametimeMs, tickTimeAvg, tickTimeP95, spikeCount,
                 sessionStartTime, stateVersion,
                 currentScenario);
     }
@@ -124,7 +128,7 @@ public record RuntimeState(
                 pendingAction,
                 pendingActionsCount, executionHistorySize, lastSnapshotHistorySize,
                 sessionChangesCount,
-                avgFrametimeMs, p95FrametimeMs, spikeCount,
+                avgFrametimeMs, p95FrametimeMs, tickTimeAvg, tickTimeP95, spikeCount,
                 sessionStartTime, stateVersion,
                 currentScenario);
     }
@@ -132,7 +136,7 @@ public record RuntimeState(
     /**
      * Update telemetry metrics (immutable).
      */
-    public RuntimeState withTelemetry(double avg, double p95, int spikes) {
+    public RuntimeState withTelemetry(double avg, double p95, int spikes, double tickAvg, double tickP95) {
         return new RuntimeState(
                 enabled, safeMode, autoTuning, debugLogs,
                 governorDisabled, governorCooldownActive, governorLastActionTimestamp,
@@ -140,7 +144,7 @@ public record RuntimeState(
                 pendingAction,
                 pendingActionsCount, executionHistorySize, lastSnapshotHistorySize,
                 sessionChangesCount,
-                avg, p95, spikes,
+                avg, p95, tickAvg, tickP95, spikes,
                 sessionStartTime, stateVersion,
                 currentScenario);
     }
@@ -158,7 +162,7 @@ public record RuntimeState(
                 pendingAction,
                 pendingActionsCount, executionHistorySize, lastSnapshotHistorySize,
                 sessionChangesCount,
-                avgFrametimeMs, p95FrametimeMs, spikeCount,
+                avgFrametimeMs, p95FrametimeMs, tickTimeAvg, tickTimeP95, spikeCount,
                 sessionStartTime, stateVersion,
                 currentScenario);
     }
@@ -174,7 +178,7 @@ public record RuntimeState(
                 pendingAction,
                 pendingActionsCount, executionHistorySize, lastSnapshotHistorySize,
                 sessionChangesCount,
-                avgFrametimeMs, p95FrametimeMs, spikeCount,
+                avgFrametimeMs, p95FrametimeMs, tickTimeAvg, tickTimeP95, spikeCount,
                 sessionStartTime, stateVersion,
                 scenario);
     }
@@ -219,6 +223,8 @@ public record RuntimeState(
                 0, // sessionChangesCount
                 -1.0, // avgFrametimeMs
                 -1.0, // p95FrametimeMs
+                -1.0, // tickTimeAvg
+                -1.0, // tickTimeP95
                 0, // spikeCount
                 System.currentTimeMillis(),
                 CURRENT_VERSION,

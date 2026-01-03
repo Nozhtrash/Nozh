@@ -28,32 +28,29 @@ class StateInvariantValidatorTest {
 
         @Test
         void testInvariant1_SafeModeWithAutoTuning_IsInvalid() {
-                RuntimeState base = RuntimeState.defaults();
-
-                RuntimeState state = new RuntimeState(
-                                base.enabled(),
-                                true,
-                                true,
-                                base.debugLogs(),
-                                base.governorDisabled(),
-                                base.governorCooldownActive(),
-                                base.governorLastActionTimestamp(),
-                                base.benchmarkRunning(),
-                                base.benchmarkStartTimestamp(),
-
-                                Optional.<PendingAction>empty(),
-                                0,
-
-                                base.executionHistorySize(),
-                                base.lastSnapshotHistorySize(),
-                                base.sessionChangesCount(),
-
-                                base.avgFrametimeMs(),
-                                base.p95FrametimeMs(),
-                                base.spikeCount(),
-                                base.sessionStartTime(),
-                                base.stateVersion(),
-                                base.currentScenario());
+                RuntimeState state = RuntimeState.defaults();
+                state = new RuntimeState(
+                                state.enabled(),
+                                true, // safeMode = true
+                                true, // autoTuning = true (VIOLATION)
+                                state.debugLogs(),
+                                state.governorDisabled(),
+                                state.governorCooldownActive(),
+                                state.governorLastActionTimestamp(),
+                                state.benchmarkRunning(),
+                                state.benchmarkStartTimestamp(),
+                                state.pendingActionsCount(),
+                                state.executionHistorySize(),
+                                state.lastSnapshotHistorySize(),
+                                state.sessionChangesCount(),
+                                state.avgFrametimeMs(),
+                                state.p95FrametimeMs(),
+                                state.tickTimeAvg(),
+                                state.tickTimeP95(),
+                                state.spikeCount(),
+                                state.sessionStartTime(),
+                                state.stateVersion(),
+                                state.currentScenario());
 
                 ValidationResult result = StateInvariantValidator.validate(state);
                 assertTrue(result.isInvalid());
@@ -63,34 +60,32 @@ class StateInvariantValidatorTest {
 
         @Test
         void testInvariant1_SafeModeWithoutAutoTuning_IsValid() {
-                RuntimeState base = RuntimeState.defaults();
+                RuntimeState state = RuntimeState.defaults();
+                state = new RuntimeState(
+                                state.enabled(),
+                                true, // safeMode = true
+                                false, // autoTuning = false (OK)
+                                state.debugLogs(),
+                                state.governorDisabled(),
+                                state.governorCooldownActive(),
+                                state.governorLastActionTimestamp(),
+                                state.benchmarkRunning(),
+                                state.benchmarkStartTimestamp(),
+                                state.pendingActionsCount(),
+                                state.executionHistorySize(),
+                                state.lastSnapshotHistorySize(),
+                                state.sessionChangesCount(),
+                                state.avgFrametimeMs(),
+                                state.p95FrametimeMs(),
+                                state.tickTimeAvg(),
+                                state.tickTimeP95(),
+                                state.spikeCount(),
+                                state.sessionStartTime(),
+                                state.stateVersion(),
+                                state.currentScenario());
 
-                RuntimeState state = new RuntimeState(
-                                base.enabled(),
-                                true,
-                                false,
-                                base.debugLogs(),
-                                base.governorDisabled(),
-                                base.governorCooldownActive(),
-                                base.governorLastActionTimestamp(),
-                                base.benchmarkRunning(),
-                                base.benchmarkStartTimestamp(),
-
-                                Optional.<PendingAction>empty(),
-                                0,
-
-                                base.executionHistorySize(),
-                                base.lastSnapshotHistorySize(),
-                                base.sessionChangesCount(),
-
-                                base.avgFrametimeMs(),
-                                base.p95FrametimeMs(),
-                                base.spikeCount(),
-                                base.sessionStartTime(),
-                                base.stateVersion(),
-                                base.currentScenario());
-
-                assertTrue(StateInvariantValidator.validate(state).isValid());
+                ValidationResult result = StateInvariantValidator.validate(state);
+                assertTrue(result.isValid(), "SafeMode without AutoTuning should be valid");
         }
 
         // === Invariant 2: Benchmark → Governor Disabled ===
@@ -109,6 +104,18 @@ class StateInvariantValidatorTest {
                                 base.governorLastActionTimestamp(),
                                 true,
                                 System.currentTimeMillis(),
+                                state.pendingActionsCount(),
+                                state.executionHistorySize(),
+                                state.lastSnapshotHistorySize(),
+                                state.sessionChangesCount(),
+                                state.avgFrametimeMs(),
+                                state.p95FrametimeMs(),
+                                state.tickTimeAvg(),
+                                state.tickTimeP95(),
+                                state.spikeCount(),
+                                state.sessionStartTime(),
+                                state.stateVersion(),
+                                state.currentScenario());
 
                                 Optional.<PendingAction>empty(),
                                 0,
@@ -117,30 +124,60 @@ class StateInvariantValidatorTest {
                                 base.lastSnapshotHistorySize(),
                                 base.sessionChangesCount(),
 
-                                base.avgFrametimeMs(),
-                                base.p95FrametimeMs(),
-                                base.spikeCount(),
-                                base.sessionStartTime(),
-                                base.stateVersion(),
-                                base.currentScenario());
+        @Test
+        void testInvariant2_BenchmarkWithGovernorDisabled_IsValid() {
+                RuntimeState state = RuntimeState.defaults();
+                state = new RuntimeState(
+                                state.enabled(),
+                                state.safeMode(),
+                                state.autoTuning(),
+                                state.debugLogs(),
+                                true, // governorDisabled = true (OK)
+                                state.governorCooldownActive(),
+                                state.governorLastActionTimestamp(),
+                                true, // benchmarkRunning = true
+                                System.currentTimeMillis(),
+                                state.pendingActionsCount(),
+                                state.executionHistorySize(),
+                                state.lastSnapshotHistorySize(),
+                                state.sessionChangesCount(),
+                                state.avgFrametimeMs(),
+                                state.p95FrametimeMs(),
+                                state.tickTimeAvg(),
+                                state.tickTimeP95(),
+                                state.spikeCount(),
+                                state.sessionStartTime(),
+                                state.stateVersion(),
+                                state.currentScenario());
 
                 assertTrue(StateInvariantValidator.validate(state).isInvalid());
         }
 
         @Test
-        void testInvariant2_BenchmarkWithGovernorDisabled_IsValid() {
-                RuntimeState base = RuntimeState.defaults();
-
-                RuntimeState state = new RuntimeState(
-                                base.enabled(),
-                                base.safeMode(),
-                                base.autoTuning(),
-                                base.debugLogs(),
-                                true,
-                                base.governorCooldownActive(),
-                                base.governorLastActionTimestamp(),
-                                true,
-                                System.currentTimeMillis(),
+        void testInvariant3_PendingActionsWithoutCooldown_IsInvalid() {
+                RuntimeState state = RuntimeState.defaults();
+                state = new RuntimeState(
+                                state.enabled(),
+                                state.safeMode(),
+                                state.autoTuning(),
+                                state.debugLogs(),
+                                state.governorDisabled(),
+                                false, // governorCooldownActive = false (VIOLATION)
+                                state.governorLastActionTimestamp(),
+                                state.benchmarkRunning(),
+                                state.benchmarkStartTimestamp(),
+                                3, // pendingActionsCount > 0
+                                state.executionHistorySize(),
+                                state.lastSnapshotHistorySize(),
+                                state.sessionChangesCount(),
+                                state.avgFrametimeMs(),
+                                state.p95FrametimeMs(),
+                                state.tickTimeAvg(),
+                                state.tickTimeP95(),
+                                state.spikeCount(),
+                                state.sessionStartTime(),
+                                state.stateVersion(),
+                                state.currentScenario());
 
                                 Optional.<PendingAction>empty(),
                                 0,
@@ -149,12 +186,31 @@ class StateInvariantValidatorTest {
                                 base.lastSnapshotHistorySize(),
                                 base.sessionChangesCount(),
 
-                                base.avgFrametimeMs(),
-                                base.p95FrametimeMs(),
-                                base.spikeCount(),
-                                base.sessionStartTime(),
-                                base.stateVersion(),
-                                base.currentScenario());
+        @Test
+        void testInvariant3_PendingActionsWithCooldown_IsValid() {
+                RuntimeState state = RuntimeState.defaults();
+                state = new RuntimeState(
+                                state.enabled(),
+                                state.safeMode(),
+                                state.autoTuning(),
+                                state.debugLogs(),
+                                state.governorDisabled(),
+                                true, // governorCooldownActive = true (OK)
+                                state.governorLastActionTimestamp(),
+                                state.benchmarkRunning(),
+                                state.benchmarkStartTimestamp(),
+                                3, // pendingActionsCount > 0
+                                state.executionHistorySize(),
+                                state.lastSnapshotHistorySize(),
+                                state.sessionChangesCount(),
+                                state.avgFrametimeMs(),
+                                state.p95FrametimeMs(),
+                                state.tickTimeAvg(),
+                                state.tickTimeP95(),
+                                state.spikeCount(),
+                                state.sessionStartTime(),
+                                state.stateVersion(),
+                                state.currentScenario());
 
                 assertTrue(StateInvariantValidator.validate(state).isValid());
         }
@@ -162,102 +218,98 @@ class StateInvariantValidatorTest {
         // === Invariant 3: PendingAction → Cooldown Active ===
 
         @Test
-        void testInvariant3_PendingWithoutCooldown_IsInvalid() {
-                RuntimeState base = RuntimeState.defaults();
+        void testInvariant4_HistorySizeDecreased_IsInvalid() {
+                RuntimeState state = RuntimeState.defaults();
+                state = new RuntimeState(
+                                state.enabled(),
+                                state.safeMode(),
+                                state.autoTuning(),
+                                state.debugLogs(),
+                                state.governorDisabled(),
+                                state.governorCooldownActive(),
+                                state.governorLastActionTimestamp(),
+                                state.benchmarkRunning(),
+                                state.benchmarkStartTimestamp(),
+                                state.pendingActionsCount(),
+                                5, // executionHistorySize = 5
+                                10, // lastSnapshotHistorySize = 10 (VIOLATION: decreased)
+                                state.sessionChangesCount(),
+                                state.avgFrametimeMs(),
+                                state.p95FrametimeMs(),
+                                state.tickTimeAvg(),
+                                state.tickTimeP95(),
+                                state.spikeCount(),
+                                state.sessionStartTime(),
+                                state.stateVersion(),
+                                state.currentScenario());
 
-                RuntimeState state = new RuntimeState(
-                                base.enabled(),
-                                base.safeMode(),
-                                base.autoTuning(),
-                                base.debugLogs(),
-                                base.governorDisabled(),
-                                false,
-                                base.governorLastActionTimestamp(),
-                                base.benchmarkRunning(),
-                                base.benchmarkStartTimestamp(),
+                ValidationResult result = StateInvariantValidator.validate(state);
 
-                                Optional.of(samplePending()),
-                                1,
-
-                                base.executionHistorySize(),
-                                base.lastSnapshotHistorySize(),
-                                base.sessionChangesCount(),
-
-                                base.avgFrametimeMs(),
-                                base.p95FrametimeMs(),
-                                base.spikeCount(),
-                                base.sessionStartTime(),
-                                base.stateVersion(),
-                                base.currentScenario());
-
-                assertTrue(StateInvariantValidator.validate(state).isInvalid());
+                assertTrue(result.isInvalid(), "History size decrease should be invalid");
+                ValidationResult.Invalid invalid = (ValidationResult.Invalid) result;
+                assertTrue(invalid.violations().stream().anyMatch(v -> v.contains("Invariant 4")),
+                                "Should report Invariant 4 violation");
         }
 
         @Test
-        void testInvariant3_PendingWithCooldown_IsValid() {
-                RuntimeState base = RuntimeState.defaults();
+        void testInvariant4_HistorySizeIncreased_IsValid() {
+                RuntimeState state = RuntimeState.defaults();
+                state = new RuntimeState(
+                                state.enabled(),
+                                state.safeMode(),
+                                state.autoTuning(),
+                                state.debugLogs(),
+                                state.governorDisabled(),
+                                state.governorCooldownActive(),
+                                state.governorLastActionTimestamp(),
+                                state.benchmarkRunning(),
+                                state.benchmarkStartTimestamp(),
+                                state.pendingActionsCount(),
+                                15, // executionHistorySize = 15
+                                10, // lastSnapshotHistorySize = 10 (OK: increased)
+                                state.sessionChangesCount(),
+                                state.avgFrametimeMs(),
+                                state.p95FrametimeMs(),
+                                state.tickTimeAvg(),
+                                state.tickTimeP95(),
+                                state.spikeCount(),
+                                state.sessionStartTime(),
+                                state.stateVersion(),
+                                state.currentScenario());
 
-                RuntimeState state = new RuntimeState(
-                                base.enabled(),
-                                base.safeMode(),
-                                base.autoTuning(),
-                                base.debugLogs(),
-                                base.governorDisabled(),
-                                true,
-                                base.governorLastActionTimestamp(),
-                                base.benchmarkRunning(),
-                                base.benchmarkStartTimestamp(),
-
-                                Optional.of(samplePending()),
-                                1,
-
-                                base.executionHistorySize(),
-                                base.lastSnapshotHistorySize(),
-                                base.sessionChangesCount(),
-
-                                base.avgFrametimeMs(),
-                                base.p95FrametimeMs(),
-                                base.spikeCount(),
-                                base.sessionStartTime(),
-                                base.stateVersion(),
-                                base.currentScenario());
-
-                assertTrue(StateInvariantValidator.validate(state).isValid());
+                ValidationResult result = StateInvariantValidator.validate(state);
+                assertTrue(result.isValid(), "History size increase should be valid");
         }
 
         // === Invariant 4: History monotonic ===
 
         @Test
-        void testInvariant4_HistoryDecreased_IsInvalid() {
-                RuntimeState base = RuntimeState.defaults();
+        void testMultipleViolations_ReportsAll() {
+                RuntimeState state = RuntimeState.defaults();
+                state = new RuntimeState(
+                                state.enabled(),
+                                true, // safeMode = true
+                                true, // autoTuning = true (VIOLATION 1)
+                                state.debugLogs(),
+                                false, // governorDisabled = false
+                                false, // governorCooldownActive = false
+                                state.governorLastActionTimestamp(),
+                                true, // benchmarkRunning = true (VIOLATION 2)
+                                System.currentTimeMillis(),
+                                5, // pendingActionsCount > 0 (VIOLATION 3)
+                                state.executionHistorySize(),
+                                state.lastSnapshotHistorySize(),
+                                state.sessionChangesCount(),
+                                state.avgFrametimeMs(),
+                                state.p95FrametimeMs(),
+                                state.tickTimeAvg(),
+                                state.tickTimeP95(),
+                                state.spikeCount(),
+                                state.sessionStartTime(),
+                                state.stateVersion(),
+                                state.currentScenario());
 
-                RuntimeState state = new RuntimeState(
-                                base.enabled(),
-                                base.safeMode(),
-                                base.autoTuning(),
-                                base.debugLogs(),
-                                base.governorDisabled(),
-                                base.governorCooldownActive(),
-                                base.governorLastActionTimestamp(),
-                                base.benchmarkRunning(),
-                                base.benchmarkStartTimestamp(),
-
-                                Optional.<PendingAction>empty(),
-                                0,
-
-                                5,
-                                10,
-                                base.sessionChangesCount(),
-
-                                base.avgFrametimeMs(),
-                                base.p95FrametimeMs(),
-                                base.spikeCount(),
-                                base.sessionStartTime(),
-                                base.stateVersion(),
-                                base.currentScenario());
-
-                assertTrue(StateInvariantValidator.validate(state).isInvalid());
-        }
+                ValidationResult result = StateInvariantValidator.validate(state);
 
         @Test
         void testInvariant4_HistoryIncreased_IsValid() {

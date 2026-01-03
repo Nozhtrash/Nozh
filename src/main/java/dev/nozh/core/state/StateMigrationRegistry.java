@@ -18,22 +18,33 @@ import java.util.Map;
  */
 public final class StateMigrationRegistry {
 
-    private static final int CURRENT_VERSION = 1; // Current state version
+    private static final int CURRENT_VERSION = 3; // Current state version
 
     private final Map<Integer, StateMigrator> migrators = new HashMap<>();
 
     public StateMigrationRegistry() {
-        // Register migrators here as versions evolve
-        // Example (when v2 comes):
-        // registerMigrator(1, oldState -> {
-        // // Migrate v1 -> v2
-        // return new RuntimeState(
-        // oldState.enabled(),
-        // ... existing fields ...
-        // false, // NEW: benchmarkRunning
-        // 2 // NEW: stateVersion
-        // );
-        // });
+        registerMigrator(2, oldState -> new RuntimeState(
+                oldState.enabled(),
+                oldState.safeMode(),
+                oldState.autoTuning(),
+                oldState.debugLogs(),
+                oldState.governorDisabled(),
+                oldState.governorCooldownActive(),
+                oldState.governorLastActionTimestamp(),
+                oldState.benchmarkRunning(),
+                oldState.benchmarkStartTimestamp(),
+                oldState.pendingActionsCount(),
+                oldState.executionHistorySize(),
+                oldState.lastSnapshotHistorySize(),
+                oldState.sessionChangesCount(),
+                oldState.avgFrametimeMs(),
+                oldState.p95FrametimeMs(),
+                -1.0, // tickTimeAvg (new)
+                -1.0, // tickTimeP95 (new)
+                oldState.spikeCount(),
+                oldState.sessionStartTime(),
+                CURRENT_VERSION,
+                oldState.currentScenario()));
 
         NozhConstants.LOGGER.debug("StateMigrationRegistry initialized (current version: {})", CURRENT_VERSION);
     }

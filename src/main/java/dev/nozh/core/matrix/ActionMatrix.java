@@ -28,6 +28,9 @@ import java.util.List;
  */
 public final class ActionMatrix {
 
+    private static final double CONFIDENCE_WEIGHT = 0.65;
+    private static final double EXPECTED_GAIN_WEIGHT = 0.35;
+
     private final ProviderRegistry registry;
     private final ActionSuccessTracker successTracker;
     private final ConfidenceCalculator confidenceCalculator;
@@ -162,8 +165,13 @@ public final class ActionMatrix {
             candidates.add(candidate);
         }
 
-        // Sort by score (descending)
-        candidates.sort(Comparator.comparingDouble(ActionCandidate::score).reversed());
+        // Sort by weighted score (descending)
+        double maxExpectedGain = candidates.stream()
+                .mapToDouble(ActionCandidate::expectedGainMs)
+                .max()
+                .orElse(0.0);
+
+        candidates.sort(Comparator.comparingDouble(candidate -> scoreCandidate(candidate, maxExpectedGain)).reversed());
 
         return candidates;
     }
@@ -329,5 +337,10 @@ public final class ActionMatrix {
     private String generateReason(CapabilityId id, double confidence, ProviderMetadata metadata) {
         return String.format("%s → reduce (confidence: %.2f, expected gain: %.2fms)",
                 id.name(), confidence, metadata.expectedGainMs());
+    }
+
+    private double scoreCandidate(ActionCandidate candidate, double maxExpectedGain) {
+        double normalizedGain = maxExpectedGain > 0 ? candidate.expectedGainMs() / maxExpectedGain : 0.0;
+        return (candidate.confidenceScore() * CONFIDENCE_WEIGHT) + (normalizedGain * EXPECTED_GAIN_WEIGHT);
     }
 }

@@ -31,6 +31,7 @@ import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
 public class NozhModClient implements ClientModInitializer {
 
     private static dev.nozh.core.profiler.PerfManager perfManager;
+    private static dev.nozh.core.monitoring.TickTimeSampler tickTimeSampler;
     private static GovernorRunner governorRunner;
     private static ActionBus actionBus;
     private static StateStore stateStore;
@@ -110,6 +111,7 @@ public class NozhModClient implements ClientModInitializer {
 
         // Initialize PerfManager (collects FPS data)
         perfManager = new dev.nozh.core.profiler.PerfManager();
+        tickTimeSampler = new dev.nozh.core.monitoring.TickTimeSampler();
 
         // Register Frametime Sampler (called every frame)
         net.fabricmc.fabric.api.client.rendering.v1.WorldRenderEvents.END.register(context -> {
@@ -130,6 +132,9 @@ public class NozhModClient implements ClientModInitializer {
 
             // Process ONE command per tick (Contract 2: NO CASCADE)
             actionBus.tick(actionProcessor);
+
+            // Sample tick time (must be called once per tick)
+            tickTimeSampler.onTick();
 
             // Update RuntimeState with telemetry data every second
             if (tickCounter % TELEMETRY_UPDATE_INTERVAL == 0) {
@@ -175,12 +180,15 @@ public class NozhModClient implements ClientModInitializer {
      */
     private void updateTelemetryState() {
         try {
-            var snapshot = perfManager.getSnapshot();
-            if (snapshot.sufficientData()) {
+            var frameSnapshot = perfManager.getSnapshot();
+            var tickSnapshot = tickTimeSampler.getSnapshot();
+            if (frameSnapshot.sufficientData() || tickSnapshot.sufficientData()) {
                 stateStore.update(state -> state.withTelemetry(
-                        snapshot.avgFrametimeMs(),
-                        snapshot.p95FrametimeMs(),
-                        snapshot.spikeCount()));
+                        frameSnapshot.sufficientData() ? frameSnapshot.avgFrametimeMs() : state.avgFrametimeMs(),
+                        frameSnapshot.sufficientData() ? frameSnapshot.p95FrametimeMs() : state.p95FrametimeMs(),
+                        frameSnapshot.sufficientData() ? frameSnapshot.spikeCount() : state.spikeCount(),
+                        tickSnapshot.sufficientData() ? tickSnapshot.avgFrametimeMs() : state.tickTimeAvg(),
+                        tickSnapshot.sufficientData() ? tickSnapshot.p95FrametimeMs() : state.tickTimeP95()));
             }
         } catch (Exception e) {
             // Never crash telemetry update
