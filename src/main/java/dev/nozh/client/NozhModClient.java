@@ -5,6 +5,7 @@ import dev.nozh.core.NozhLogger;
 import dev.nozh.core.bus.ActionBus;
 import dev.nozh.core.bus.StandardActionProcessor;
 import dev.nozh.core.config.ConfigManager;
+import dev.nozh.core.config.ConfigSyncService;
 import dev.nozh.core.capability.ProviderRegistry;
 import dev.nozh.core.governor.GovernorRunner;
 import dev.nozh.core.matrix.ActionSuccessTracker;
@@ -35,6 +36,7 @@ public class NozhModClient implements ClientModInitializer {
     private static GovernorRunner governorRunner;
     private static ActionBus actionBus;
     private static StateStore stateStore;
+    private static ConfigSyncService configSyncService;
     private static dev.nozh.core.intelligence.SessionLearning sessionLearning;
 
     private static int tickCounter = 0;
@@ -60,6 +62,7 @@ public class NozhModClient implements ClientModInitializer {
 
         // 2. Get StateStore singleton
         stateStore = StateStore.getInstance();
+        configSyncService = ConfigSyncService.start(stateStore);
 
         // 3. Create MinecraftOptionsAdapter
         MinecraftOptionsAdapter optionsAdapter = new ProductionMinecraftOptionsAdapter();
