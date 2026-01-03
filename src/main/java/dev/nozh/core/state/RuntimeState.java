@@ -107,6 +107,25 @@ public record RuntimeState(
                 currentScenario, scenarioConfidence);
     }
 
+    public RuntimeState withAppliedSuggestion(long timestamp, PendingAction pending) {
+        return new RuntimeState(
+                enabled, safeMode, autoTuning, debugLogs,
+                governorDisabled,
+                true,
+                timestamp,
+                benchmarkRunning, benchmarkValidity, benchmarkStartTimestamp,
+                Optional.of(pending),
+                Optional.empty(),
+                pendingAction.isPresent() ? pendingActionsCount + 1 : 1,
+                executionHistorySize + 1,
+                lastSnapshotHistorySize,
+                sessionChangesCount + 1,
+                avgFrametimeMs, p95FrametimeMs, tickTimeAvg, tickTimeP95, spikeCount,
+                lastDecisionReason, lastDecisionTimestamp,
+                sessionStartTime, stateVersion,
+                currentScenario, scenarioConfidence);
+    }
+
     /**
      * Clear any pending action (immutable).
      */
@@ -289,6 +308,36 @@ public record RuntimeState(
                 avgFrametimeMs, p95FrametimeMs, tickTimeAvg, tickTimeP95, spikeCount,
                 reason != null ? reason : "",
                 timestamp,
+                sessionStartTime, stateVersion,
+                currentScenario, scenarioConfidence);
+    }
+
+    public RuntimeState withPendingSuggestion(PendingAction suggestion) {
+        return new RuntimeState(
+                enabled, safeMode, autoTuning, debugLogs,
+                governorDisabled, governorCooldownActive, governorLastActionTimestamp,
+                benchmarkRunning, benchmarkValidity, benchmarkStartTimestamp,
+                pendingAction,
+                Optional.of(suggestion),
+                pendingActionsCount, executionHistorySize, lastSnapshotHistorySize,
+                sessionChangesCount,
+                avgFrametimeMs, p95FrametimeMs, tickTimeAvg, tickTimeP95, spikeCount,
+                lastDecisionReason, lastDecisionTimestamp,
+                sessionStartTime, stateVersion,
+                currentScenario, scenarioConfidence);
+    }
+
+    public RuntimeState withPendingSuggestionCleared() {
+        return new RuntimeState(
+                enabled, safeMode, autoTuning, debugLogs,
+                governorDisabled, governorCooldownActive, governorLastActionTimestamp,
+                benchmarkRunning, benchmarkValidity, benchmarkStartTimestamp,
+                pendingAction,
+                Optional.empty(),
+                pendingActionsCount, executionHistorySize, lastSnapshotHistorySize,
+                sessionChangesCount,
+                avgFrametimeMs, p95FrametimeMs, tickTimeAvg, tickTimeP95, spikeCount,
+                lastDecisionReason, lastDecisionTimestamp,
                 sessionStartTime, stateVersion,
                 currentScenario, scenarioConfidence);
     }

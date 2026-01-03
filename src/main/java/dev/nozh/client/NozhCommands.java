@@ -11,6 +11,15 @@ import dev.nozh.core.bus.Command;
 import dev.nozh.core.safety.CrashLoopGuard;
 import dev.nozh.core.safety.StateManager;
 import dev.nozh.core.safety.NozhState;
+import dev.nozh.core.bus.ActionBus;
+import dev.nozh.core.bus.Command;
+import dev.nozh.core.bus.CapabilityValue;
+import dev.nozh.core.safety.CrashLoopGuard;
+import dev.nozh.core.safety.StateManager;
+import dev.nozh.core.safety.NozhState;
+import dev.nozh.core.state.PendingAction;
+import dev.nozh.core.state.RuntimeState;
+import dev.nozh.core.state.StateStore;
 import dev.nozh.core.util.NozhText;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
@@ -58,6 +67,11 @@ public final class NozhCommands {
                             .then(ClientCommandManager.literal("history")
                                     .executes(context -> {
                                         runHistory(context);
+                                        return 1;
+                                    }))
+                            .then(ClientCommandManager.literal("apply")
+                                    .executes(context -> {
+                                        runApply(context.getSource());
                                         return 1;
                                     }))
                             .then(ClientCommandManager.literal("enable")
@@ -209,6 +223,20 @@ public final class NozhCommands {
                 .append(Text.translatable(modeKey).styled(s -> s.withColor(color))));
         ctx.getSource().sendFeedback(Text.translatable("nozh.status.uptime", uptimeSec));
         ctx.getSource().sendFeedback(Text.translatable("nozh.status.target", config.targetFps));
+
+        StateStore stateStore = NozhModClient.getStateStore();
+        if (stateStore != null) {
+            RuntimeState runtimeState = stateStore.snapshotSafe();
+            if (runtimeState.pendingSuggestion().isPresent()) {
+                PendingAction pending = runtimeState.pendingSuggestion().get();
+                ctx.getSource().sendFeedback(NozhText.warning(
+                        "Suggestion pending: " + formatPendingAction(pending) + " (/nozh apply)"));
+            } else if (runtimeState.pendingAction().isPresent()) {
+                PendingAction pending = runtimeState.pendingAction().get();
+                ctx.getSource().sendFeedback(NozhText.info(
+                        "Action pending evaluation: " + formatPendingAction(pending)));
+            }
+        }
     }
 
     private static void runHistory(CommandContext<FabricClientCommandSource> ctx) {
