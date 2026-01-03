@@ -9,7 +9,11 @@
  */
 package dev.nozh.core.state;
 
-import java.util.Optional;
+import dev.nozh.core.governor.GovernorMode;
+import dev.nozh.core.issues.ParanoiaLevel;
+
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Runtime state (Contract 1).
@@ -30,6 +34,7 @@ public record RuntimeState(
         boolean governorCooldownActive,
         long governorLastActionTimestamp,
         boolean benchmarkRunning,
+        String benchmarkValidity,
         long benchmarkStartTimestamp,
         Optional<PendingAction> pendingAction,
         int pendingActionsCount,
@@ -43,7 +48,14 @@ public record RuntimeState(
         int spikeCount,
         long sessionStartTime,
         int stateVersion,
-        dev.nozh.core.context.Scenario currentScenario) {
+        dev.nozh.core.context.Scenario currentScenario,
+        GovernorMode governorMode,
+        ParanoiaLevel paranoiaLevel,
+        String currentBound,
+        String lastDecisionReason,
+        long lastDecisionTimestamp,
+        String lastDecisionSteward,
+        List<ActionHistoryEntry> recentActions) {
     private static final int CURRENT_VERSION = 3; // Bump version
 
     /**
@@ -59,6 +71,7 @@ public record RuntimeState(
                 false, // governorCooldownActive
                 0L, // governorLastActionTimestamp
                 false, // benchmarkRunning
+                "NONE", // benchmarkValidity
                 0L, // benchmarkStartTimestamp
                 Optional.empty(), // pendingAction
                 0, // pendingActionsCount
@@ -72,7 +85,14 @@ public record RuntimeState(
                 0, // spikeCount
                 System.currentTimeMillis(), // sessionStartTime
                 CURRENT_VERSION,
-                dev.nozh.core.context.Scenario.STANDARD);
+                dev.nozh.core.context.Scenario.STANDARD,
+                GovernorMode.MANUAL_ASSIST,
+                ParanoiaLevel.NORMAL,
+                "BALANCED",
+                "",
+                0L,
+                "NOZH",
+                List.of());
     }
 
     /**
@@ -85,9 +105,8 @@ public record RuntimeState(
                 governorDisabled,
                 true, // governorCooldownActive = true after action
                 timestamp, // governorLastActionTimestamp
-                benchmarkRunning, benchmarkStartTimestamp,
-                pending,
-                pending.isPresent() ? 1 : 0,
+                benchmarkRunning, benchmarkValidity, benchmarkStartTimestamp,
+                pendingActionsCount,
                 executionHistorySize + 1, // increment history
                 lastSnapshotHistorySize,
                 sessionChangesCount + 1, // increment changes
@@ -113,24 +132,44 @@ public record RuntimeState(
                 sessionChangesCount,
                 avgFrametimeMs, p95FrametimeMs, spikeCount,
                 sessionStartTime, stateVersion,
-                currentScenario);
+                currentScenario,
+                governorMode,
+                paranoiaLevel,
+                currentBound,
+                lastDecisionReason,
+                lastDecisionTimestamp,
+                lastDecisionSteward,
+                recentActions);
     }
 
     /**
      * Update benchmark status (immutable).
      */
     public RuntimeState withBenchmarkStatus(boolean running, long startTime) {
+        return withBenchmarkStatus(running, startTime, benchmarkValidity);
+    }
+
+    /**
+     * Update benchmark status (immutable) with validity.
+     */
+    public RuntimeState withBenchmarkStatus(boolean running, long startTime, String validity) {
         return new RuntimeState(
                 enabled, safeMode, autoTuning, debugLogs,
                 running ? true : governorDisabled, // disable governor during benchmark
                 governorCooldownActive, governorLastActionTimestamp,
-                running, startTime,
-                pendingAction,
+                running, validity, startTime,
                 pendingActionsCount, executionHistorySize, lastSnapshotHistorySize,
                 sessionChangesCount,
                 avgFrametimeMs, p95FrametimeMs, tickTimeAvg, tickTimeP95, spikeCount,
                 sessionStartTime, stateVersion,
-                currentScenario);
+                currentScenario,
+                governorMode,
+                paranoiaLevel,
+                currentBound,
+                lastDecisionReason,
+                lastDecisionTimestamp,
+                lastDecisionSteward,
+                recentActions);
     }
 
     /**
@@ -140,13 +179,19 @@ public record RuntimeState(
         return new RuntimeState(
                 enabled, safeMode, autoTuning, debugLogs,
                 governorDisabled, governorCooldownActive, governorLastActionTimestamp,
-                benchmarkRunning, benchmarkStartTimestamp,
-                pendingAction,
+                benchmarkRunning, benchmarkValidity, benchmarkStartTimestamp,
                 pendingActionsCount, executionHistorySize, lastSnapshotHistorySize,
                 sessionChangesCount,
                 avg, p95, tickAvg, tickP95, spikes,
                 sessionStartTime, stateVersion,
-                currentScenario);
+                currentScenario,
+                governorMode,
+                paranoiaLevel,
+                currentBound,
+                lastDecisionReason,
+                lastDecisionTimestamp,
+                lastDecisionSteward,
+                recentActions);
     }
 
     /**
@@ -158,13 +203,19 @@ public record RuntimeState(
                 governorDisabled,
                 false, // governorCooldownActive = false
                 governorLastActionTimestamp,
-                benchmarkRunning, benchmarkStartTimestamp,
-                pendingAction,
+                benchmarkRunning, benchmarkValidity, benchmarkStartTimestamp,
                 pendingActionsCount, executionHistorySize, lastSnapshotHistorySize,
                 sessionChangesCount,
                 avgFrametimeMs, p95FrametimeMs, tickTimeAvg, tickTimeP95, spikeCount,
                 sessionStartTime, stateVersion,
-                currentScenario);
+                currentScenario,
+                governorMode,
+                paranoiaLevel,
+                currentBound,
+                lastDecisionReason,
+                lastDecisionTimestamp,
+                lastDecisionSteward,
+                recentActions);
     }
 
     /**
@@ -174,13 +225,92 @@ public record RuntimeState(
         return new RuntimeState(
                 enabled, safeMode, autoTuning, debugLogs,
                 governorDisabled, governorCooldownActive, governorLastActionTimestamp,
-                benchmarkRunning, benchmarkStartTimestamp,
-                pendingAction,
+                benchmarkRunning, benchmarkValidity, benchmarkStartTimestamp,
+                pendingActionsCount, executionHistorySize, lastSnapshotHistorySize,
+                sessionChangesCount,
+                avgFrametimeMs, p95FrametimeMs, spikeCount,
+                sessionStartTime, stateVersion,
+                scenario,
+                governorMode,
+                paranoiaLevel,
+                currentBound,
+                lastDecisionReason,
+                lastDecisionTimestamp,
+                lastDecisionSteward,
+                recentActions);
+    }
+
+    /**
+     * Update governor snapshot info (immutable).
+     */
+    public RuntimeState withGovernorSnapshot(GovernorMode mode, String bound) {
+        return new RuntimeState(
+                enabled, safeMode, autoTuning, debugLogs,
+                governorDisabled, governorCooldownActive, governorLastActionTimestamp,
+                benchmarkRunning, benchmarkValidity, benchmarkStartTimestamp,
+                pendingActionsCount, executionHistorySize, lastSnapshotHistorySize,
+                sessionChangesCount,
+                avgFrametimeMs, p95FrametimeMs, spikeCount,
+                sessionStartTime, stateVersion,
+                currentScenario,
+                mode,
+                paranoiaLevel,
+                bound,
+                lastDecisionReason,
+                lastDecisionTimestamp,
+                lastDecisionSteward,
+                recentActions);
+    }
+
+    /**
+     * Update last decision summary (immutable).
+     */
+    public RuntimeState withDecision(String reasonKey, long timestampMillis, String steward) {
+        return new RuntimeState(
+                enabled, safeMode, autoTuning, debugLogs,
+                governorDisabled, governorCooldownActive, governorLastActionTimestamp,
+                benchmarkRunning, benchmarkValidity, benchmarkStartTimestamp,
                 pendingActionsCount, executionHistorySize, lastSnapshotHistorySize,
                 sessionChangesCount,
                 avgFrametimeMs, p95FrametimeMs, tickTimeAvg, tickTimeP95, spikeCount,
                 sessionStartTime, stateVersion,
-                scenario);
+                currentScenario,
+                governorMode,
+                paranoiaLevel,
+                currentBound,
+                reasonKey,
+                timestampMillis,
+                steward,
+                recentActions);
+    }
+
+    /**
+     * Add an action history entry (immutable).
+     */
+    public RuntimeState withRecentAction(ActionHistoryEntry entry, int maxEntries) {
+        List<ActionHistoryEntry> updated = new ArrayList<>(recentActions);
+        updated.add(entry);
+
+        if (updated.size() > maxEntries) {
+            updated = new ArrayList<>(updated.subList(updated.size() - maxEntries, updated.size()));
+        }
+
+        return new RuntimeState(
+                enabled, safeMode, autoTuning, debugLogs,
+                governorDisabled, governorCooldownActive, governorLastActionTimestamp,
+                benchmarkRunning, benchmarkValidity, benchmarkStartTimestamp,
+                pendingActionsCount, executionHistorySize, lastSnapshotHistorySize,
+                sessionChangesCount,
+                avgFrametimeMs, p95FrametimeMs, spikeCount,
+                sessionStartTime, stateVersion,
+                currentScenario,
+                governorMode,
+                paranoiaLevel,
+                currentBound,
+                lastDecisionReason,
+                lastDecisionTimestamp,
+                lastDecisionSteward,
+                List.copyOf(updated));
     }
 
     /**
@@ -206,6 +336,15 @@ public record RuntimeState(
      * Create state from config (initialization).
      */
     public static RuntimeState fromConfig(dev.nozh.core.config.NozhConfig config) {
+        GovernorMode mode;
+        if (!config.enabled) {
+            mode = GovernorMode.OFF;
+        } else if (!config.allowAutoTuning) {
+            mode = GovernorMode.MANUAL_ASSIST;
+        } else {
+            mode = GovernorMode.AUTO_CONSERVATIVE;
+        }
+
         return new RuntimeState(
                 config.enabled,
                 config.safeModeForce, // safeMode from config
@@ -215,6 +354,7 @@ public record RuntimeState(
                 false, // governorCooldownActive (runtime only)
                 0L, // governorLastActionTimestamp
                 false, // benchmarkRunning (runtime only)
+                "NONE", // benchmarkValidity
                 0L, // benchmarkStartTimestamp
                 Optional.empty(), // pendingAction
                 0, // pendingActionsCount
@@ -228,6 +368,13 @@ public record RuntimeState(
                 0, // spikeCount
                 System.currentTimeMillis(),
                 CURRENT_VERSION,
-                dev.nozh.core.context.Scenario.STANDARD);
+                dev.nozh.core.context.Scenario.STANDARD,
+                mode,
+                ParanoiaLevel.NORMAL,
+                "BALANCED",
+                "",
+                0L,
+                "NOZH",
+                List.of());
     }
 }

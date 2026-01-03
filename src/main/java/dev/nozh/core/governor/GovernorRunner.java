@@ -12,11 +12,11 @@ import dev.nozh.core.matrix.ActionCandidate;
 import dev.nozh.core.matrix.ActionMatrix;
 import dev.nozh.core.matrix.ActionSuccessTracker;
 import dev.nozh.core.matrix.ConfidenceCalculator;
-import dev.nozh.core.monitoring.ChunkLoadMonitor;
-import dev.nozh.core.monitoring.SystemMonitor;
-import dev.nozh.core.state.PendingAction;
+import dev.nozh.core.compatibility.ModConflictDetector;
 import dev.nozh.core.state.RuntimeState;
 import dev.nozh.core.state.StateStore;
+import dev.nozh.core.state.ActionHistoryEntry;
+import dev.nozh.core.bus.CapabilityValue;
 
 import java.util.Optional;
 
@@ -33,10 +33,11 @@ public final class GovernorRunner {
     private final SessionLearning sessionLearning;
 
     // Intelligent components
-    private final PredictiveAnalyzer predictiveAnalyzer;
-    private final SystemMonitor systemMonitor;
-    private final ChunkLoadMonitor chunkLoadMonitor;
-    private final ScenarioDetector scenarioDetector;
+    private final dev.nozh.core.governor.PredictiveAnalyzer predictiveAnalyzer;
+    private final dev.nozh.core.monitoring.SystemMonitor systemMonitor;
+    private final dev.nozh.core.monitoring.ChunkLoadMonitor chunkLoadMonitor;
+    private final dev.nozh.core.context.ScenarioDetector scenarioDetector;
+    private final ModConflictDetector conflictDetector;
 
     private int tickCounter = 0;
     private static final int POLL_INTERVAL_TICKS = 100;
@@ -60,8 +61,7 @@ public final class GovernorRunner {
         this.stateStore = stateStore;
         this.logger = logger;
         this.scenarioDetector = scenarioDetector;
-        this.providerRegistry = registry;
-        this.sessionLearning = sessionLearning;
+        this.conflictDetector = new ModConflictDetector();
 
         this.predictiveAnalyzer = new PredictiveAnalyzer();
         this.systemMonitor = new SystemMonitor();
@@ -123,7 +123,21 @@ public final class GovernorRunner {
         GovernorMode mode = determineMode(state);
         String bound = detectBound(state);
 
-        if (!governor.canAct(state, state.governorLastActionTimestamp(), now)) {
+        // 3. Detect performance bound from telemetry
+        String currentBound = detectBound(state);
+        try {
+            stateStore.update(currentState -> currentState.withGovernorSnapshot(mode, currentBound));
+        } catch (Exception e) {
+            // Ignore update failure
+        }
+
+        long now = System.currentTimeMillis();
+
+        // 4. Check cooldown (NO CASCADE) with adaptive window
+        long lastActionTimestamp = state.governorLastActionTimestamp();
+        if (!governor.canAct(state, lastActionTimestamp, now)) {
+            long windowMs = governor.getObservationWindow(state);
+            logger.debug(String.format("Governor in cooldown, skipping decision (window: %dms)", windowMs));
             return;
         }
 
@@ -134,6 +148,15 @@ public final class GovernorRunner {
         }
 
         ActionCandidate decision = decisionOpt.get();
+        String steward = conflictDetector.getSteward(decision.capabilityId());
+        try {
+            stateStore.update(currentState -> currentState.withDecision(decision.reason(), now, steward));
+        } catch (Exception e) {
+            // Ignore update failure
+        }
+        String actionSummary = formatActionSummary(decision);
+
+        // Log decision
         logger.info("Governor decision: " + decision.reason());
 
         // Dispatch via ActionBus
@@ -158,6 +181,16 @@ public final class GovernorRunner {
                 } else {
                     logger.warn("Governor action failed: " +
                             report.error().orElse("unknown"));
+                }
+
+                ActionHistoryEntry entry = new ActionHistoryEntry(
+                        System.currentTimeMillis(),
+                        actionSummary,
+                        report.finalState());
+                try {
+                    stateStore.update(currentState -> currentState.withRecentAction(entry, 5));
+                } catch (Exception e) {
+                    logger.warn("Failed to update action history: " + e.getMessage());
                 }
             });
 
@@ -255,5 +288,35 @@ public final class GovernorRunner {
         } catch (Exception e) {
             logger.warn("Failed to clear pending action");
         }
+    }
+
+    private String formatActionSummary(ActionCandidate decision) {
+        if (decision == null) {
+            return "";
+        }
+        String value = formatCapabilityValue(decision.targetValue());
+        if (value.isEmpty()) {
+            return decision.capabilityId().name();
+        }
+        return decision.capabilityId().name() + "=" + value;
+    }
+
+    private String formatCapabilityValue(CapabilityValue value) {
+        if (value == null) {
+            return "";
+        }
+        if (value instanceof CapabilityValue.IntValue intValue) {
+            return Integer.toString(intValue.value());
+        }
+        if (value instanceof CapabilityValue.EnumValue enumValue) {
+            return enumValue.name();
+        }
+        if (value instanceof CapabilityValue.BoolValue boolValue) {
+            return Boolean.toString(boolValue.value());
+        }
+        if (value instanceof CapabilityValue.FloatValue floatValue) {
+            return Float.toString(floatValue.value());
+        }
+        return value.toString();
     }
 }
