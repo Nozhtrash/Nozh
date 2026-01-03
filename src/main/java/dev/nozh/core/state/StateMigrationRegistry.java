@@ -17,7 +17,7 @@ import java.util.Optional;
  * - Version 2 (adds benchmarkRunning): Migrator adds benchmarkRunning=false
  * - Version 3 (adds confidence tracking): Migrator adds confidence fields
  * - Version 4 (adds pending suggestion): Migrator adds suggestion field
- * - Version 5 (adds action history + extended telemetry): Migrator adds history + p99/stddev
+ * - Version 5 (adds baseline/current settings): Migrator adds settings maps
  */
 public final class StateMigrationRegistry {
 
@@ -74,7 +74,9 @@ public final class StateMigrationRegistry {
                     oldState.sessionStartTime(),
                     5, // Target version is 5
                     dev.nozh.core.context.Scenario.STANDARD,
-                    0.5);
+                    0.5,
+                    java.util.Map.of(),
+                    java.util.Map.of());
         });
 
         registerMigrator(3, oldState -> new RuntimeState(
@@ -107,7 +109,9 @@ public final class StateMigrationRegistry {
                 oldState.sessionStartTime(),
                 5,
                 oldState.currentScenario(),
-                oldState.scenarioConfidence()));
+                oldState.scenarioConfidence(),
+                java.util.Map.of(),
+                java.util.Map.of()));
 
         registerMigrator(4, oldState -> new RuntimeState(
                 oldState.enabled(),
@@ -125,12 +129,9 @@ public final class StateMigrationRegistry {
                 oldState.pendingActionsCount(),
                 oldState.executionHistorySize(),
                 oldState.lastSnapshotHistorySize(),
-                java.util.List.of(),
                 oldState.sessionChangesCount(),
                 oldState.avgFrametimeMs(),
                 oldState.p95FrametimeMs(),
-                -1.0,
-                -1.0,
                 oldState.tickTimeAvg(),
                 oldState.tickTimeP95(),
                 oldState.spikeCount(),
@@ -139,7 +140,9 @@ public final class StateMigrationRegistry {
                 oldState.sessionStartTime(),
                 5,
                 oldState.currentScenario(),
-                oldState.scenarioConfidence()));
+                oldState.scenarioConfidence(),
+                java.util.Map.of(),
+                java.util.Map.of()));
 
         NozhConstants.LOGGER.debug("StateMigrationRegistry initialized (current version: {})", CURRENT_VERSION);
     }

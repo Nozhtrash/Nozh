@@ -16,6 +16,8 @@ import dev.nozh.core.matrix.ActionMatrix;
 import dev.nozh.core.state.RuntimeState;
 import dev.nozh.api.PerfSnapshot;
 
+import java.util.Map;
+
 import java.util.List;
 import java.util.Optional;
 
@@ -78,7 +80,12 @@ public final class SimulationGovernor {
                         RuntimeState state,
                         GovernorMode mode,
                         String currentBound,
-                        long nowMillis) {
+                        long nowMillis,
+                        OptimizationProfile profile,
+                        int targetFps,
+                        double reverseEpsilonMs,
+                        Map<dev.nozh.core.bus.CapabilityId, dev.nozh.core.bus.CapabilityValue> baselineSettings,
+                        Map<dev.nozh.core.bus.CapabilityId, dev.nozh.core.bus.CapabilityValue> currentSettings) {
                 // OFF mode → no decisions
                 if (mode == GovernorMode.OFF) {
                         return Optional.empty();
@@ -88,10 +95,23 @@ public final class SimulationGovernor {
                 ModePolicy policy = ModePolicy.forMode(mode);
 
                 // Generate candidates
+                if (shouldReverseOptimize(state, targetFps, reverseEpsilonMs, baselineSettings, currentSettings)) {
+                        List<ActionCandidate> reverseCandidates = actionMatrix.generateReverseCandidates(
+                                        policy,
+                                        state.currentScenario(),
+                                        profile,
+                                        baselineSettings,
+                                        currentSettings);
+                        if (!reverseCandidates.isEmpty()) {
+                                return Optional.of(reverseCandidates.get(0));
+                        }
+                }
+
                 List<ActionCandidate> candidates = actionMatrix.generateCandidates(
                                 policy,
                                 currentBound,
-                                state.currentScenario());
+                                state.currentScenario(),
+                                profile);
 
                 if (candidates.isEmpty()) {
                         return Optional.empty();
@@ -101,17 +121,44 @@ public final class SimulationGovernor {
                 return Optional.of(candidates.get(0));
         }
 
+        private boolean shouldReverseOptimize(
+                        RuntimeState state,
+                        int targetFps,
+                        double reverseEpsilonMs,
+                        Map<dev.nozh.core.bus.CapabilityId, dev.nozh.core.bus.CapabilityValue> baselineSettings,
+                        Map<dev.nozh.core.bus.CapabilityId, dev.nozh.core.bus.CapabilityValue> currentSettings) {
+                if (baselineSettings == null || baselineSettings.isEmpty()) {
+                        return false;
+                }
+                if (currentSettings == null || currentSettings.isEmpty()) {
+                        return false;
+                }
+                double avg = state.avgFrametimeMs();
+                double p95 = state.p95FrametimeMs();
+                if (avg <= 0 || p95 <= 0) {
+                        return false;
+                }
+                int safeTargetFps = Math.max(1, targetFps);
+                double targetFrameMs = 1000.0 / safeTargetFps;
+                double headroomTarget = targetFrameMs - reverseEpsilonMs;
+                return avg <= headroomTarget && p95 <= targetFrameMs * 1.05;
+        }
+
         /**
          * Check if governor can act (not in cooldown).
          * Uses adaptive observation window based on FPS stability.
          */
-        public boolean canAct(RuntimeState state, long lastActionTimestamp, long nowMillis) {
+        public boolean canAct(RuntimeState state, long lastActionTimestamp, long nowMillis, boolean benchmarkMode,
+                        long benchmarkIntervalMillis) {
                 if (lastActionTimestamp == 0) {
                         return true; // Never acted before
                 }
 
                 // Calculate adaptive window based on FPS variance
                 long adaptiveWindow = windowCalculator.calculateWindow(state);
+                if (benchmarkMode) {
+                        adaptiveWindow = Math.max(1000L, benchmarkIntervalMillis);
+                }
 
                 long timeSinceLastAction = nowMillis - lastActionTimestamp;
                 return timeSinceLastAction >= adaptiveWindow;

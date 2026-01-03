@@ -4,7 +4,7 @@ import dev.nozh.core.capability.CapabilityProvider;
 import dev.nozh.core.capability.ProviderRegistry;
 import dev.nozh.core.capability.ProviderStatus;
 import dev.nozh.core.context.Scenario;
-import dev.nozh.core.governor.ActionOutcome;
+import dev.nozh.core.compatibility.CompatibilityMatrix;
 import dev.nozh.core.issues.Issue;
 import dev.nozh.core.issues.IssueSeverity;
 import dev.nozh.core.preset.HardwareTier;
@@ -58,6 +58,12 @@ public final class HudViewModelBuilder {
         int degraded = 0;
         int broken = 0;
 
+        CompatibilityMatrix compatibilityMatrix = null;
+        try {
+            compatibilityMatrix = new CompatibilityMatrix();
+        } catch (Throwable e) {
+            // Ignore compatibility initialization failures (tests/headless)
+        }
         List<HudViewModel.ProviderViewModel> providerVMs = new ArrayList<>();
         for (CapabilityProvider provider : allProviders) {
             ProviderStatus status = provider.status();
@@ -72,7 +78,7 @@ public final class HudViewModelBuilder {
                     provider.id().toString(),
                     status,
                     provider.statusReason().orElse(""),
-                    "NOZH")); // Default steward
+                    compatibilityMatrix != null ? compatibilityMatrix.getSteward(provider.id()) : "NOZH"));
         }
 
         // Issues summary
