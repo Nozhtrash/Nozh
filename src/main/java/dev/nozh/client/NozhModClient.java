@@ -9,6 +9,7 @@ import dev.nozh.core.config.ConfigManager;
 import dev.nozh.core.config.ConfigSyncService;
 import dev.nozh.core.capability.ProviderRegistry;
 import dev.nozh.core.governor.GovernorRunner;
+import dev.nozh.core.governor.ActionOutcome;
 import dev.nozh.core.matrix.ActionSuccessTracker;
 import dev.nozh.core.safety.CrashLoopGuard;
 import dev.nozh.core.state.PendingAction;

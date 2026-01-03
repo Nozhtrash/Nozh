@@ -124,7 +124,7 @@ public class NozhHudRenderer implements HudRenderCallback {
         }
 
         var last = state.executionHistory.get(state.executionHistory.size() - 1);
-        return formatAction(last.type(), last.oldValue(), last.newValue());
+        return formatAction(last.type().name(), last.oldValue(), last.newValue());
     }
 
     private String resolveSuggestion(RuntimeState state) {

@@ -21,6 +21,8 @@ import dev.nozh.core.state.PendingAction;
 import dev.nozh.core.state.ActionHistoryEntry;
 import dev.nozh.core.governor.ActionOutcome;
 import dev.nozh.core.bus.CapabilityValue;
+import dev.nozh.api.PerfSnapshot;
+import dev.nozh.core.governor.ActionOutcome;
 
 import dev.nozh.core.monitoring.ChunkLoadMonitor;
 import dev.nozh.core.monitoring.SystemMonitor;
@@ -206,10 +208,14 @@ public final class GovernorRunner {
             PerfSnapshot baselineSnapshot = perfSnapshotSupplier.get();
             Optional<dev.nozh.core.bus.CapabilityValue> previousValue = providerRegistry.get(decision.capabilityId())
                     .flatMap(provider -> provider.getCurrentValueSafe());
+            Command cmd = new Command.ApplyCapability(
+                    decision.capabilityId(),
+                    decision.targetValue());
             PendingAction pending = new PendingAction(
                     now,
                     totalTicks,
                     decision.capabilityId(),
+                    cmd,
                     previousValue,
                     decision.targetValue(),
                     state.avgFrametimeMs(),
@@ -426,18 +432,16 @@ public final class GovernorRunner {
             successTracker.clearDecisionSnapshot(pending.capability());
             return;
         }
-        double avg = state.avgFrametimeMs();
-        double p95 = state.p95FrametimeMs();
+        PerfSnapshot currentSnapshot = perfSnapshotSupplier.get();
+        if (currentSnapshot == null
+                || pending.baselineSnapshot() == null
+                || !currentSnapshot.sufficientData()
+                || !pending.baselineSnapshot().sufficientData()) {
+            logger.debug("Skipping outcome evaluation (insufficient perf snapshot data)");
+            return;
+        }
 
-        // Strict Evaluation:
-        // 1. Worsened: P95 increased significantly ( > baseline + epsilon)
-        // 2. Ineffective: P95 didn't decrease enough ( > baseline - epsilon)
-        // Goal: P95 < baseline - epsilon
-
-        boolean avgWorsened = avg > pending.baselineAvgMs() + config.improvementEpsilonAvgMs;
-        boolean avgIneffective = avg > pending.baselineAvgMs() - config.improvementEpsilonAvgMs;
-        boolean p95Worsened = p95 > pending.baselineP95Ms() + config.improvementEpsilonP95Ms;
-        boolean p95Ineffective = p95 > pending.baselineP95Ms() - config.improvementEpsilonP95Ms;
+        ActionOutcome outcome = governor.evaluateOutcome(pending.baselineSnapshot(), currentSnapshot);
 
         PerfSnapshot currentSnapshot = perfSnapshotSupplier.get();
         ActionOutcome outcome;
