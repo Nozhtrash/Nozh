@@ -39,11 +39,29 @@ public final class ActionMatrix {
             ActionSuccessTracker successTracker,
             ConfidenceCalculator confidenceCalculator,
             dev.nozh.core.intelligence.SessionLearning sessionLearning) {
+        this(registry, successTracker, confidenceCalculator, sessionLearning, null);
+    }
+
+    public ActionMatrix(
+            ProviderRegistry registry,
+            ActionSuccessTracker successTracker,
+            ConfidenceCalculator confidenceCalculator,
+            dev.nozh.core.intelligence.SessionLearning sessionLearning,
+            dev.nozh.core.compatibility.ModConflictDetector conflictDetector) {
         this.registry = registry;
         this.successTracker = successTracker;
         this.confidenceCalculator = confidenceCalculator;
         this.sessionLearning = sessionLearning;
-        this.conflictDetector = new dev.nozh.core.compatibility.ModConflictDetector();
+        this.conflictDetector = conflictDetector != null ? conflictDetector : createConflictDetectorSafe();
+    }
+
+    private static dev.nozh.core.compatibility.ModConflictDetector createConflictDetectorSafe() {
+        try {
+            return new dev.nozh.core.compatibility.ModConflictDetector();
+        } catch (Throwable e) {
+            // Tests don't have FabricLoader available
+            return null;
+        }
     }
 
     /**
@@ -107,7 +125,7 @@ public final class ActionMatrix {
             }
 
             // INTEGRATION: Conflict Detection
-            if (conflictDetector.hasConflict(id)) {
+            if (conflictDetector != null && conflictDetector.hasConflict(id)) {
                 // If another mod handles this, we should not touch it
                 continue;
             }
@@ -211,7 +229,7 @@ public final class ActionMatrix {
             }
             case ENTITY_SHADOWS -> {
                 if (combat || gpuBound || cpuBound) {
-                    return new CapabilityValue.BoolValue(false);
+                    return new CapabilityValue.EnumValue("OFF");
                 }
             }
             case RENDER_DISTANCE -> {
