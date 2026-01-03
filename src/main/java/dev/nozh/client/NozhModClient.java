@@ -15,11 +15,17 @@ import dev.nozh.fabric.capability.MinecraftOptionsAdapter;
 import dev.nozh.fabric.capability.ProductionMinecraftOptionsAdapter;
 import dev.nozh.fabric.capability.ProviderBootstrap;
 import dev.nozh.fabric.capability.StandardCapabilityExecutor;
+import dev.nozh.client.hud.NozhHudRenderer;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
+import net.fabricmc.fabric.api.client.rendering.v1.HudRenderCallback;
+import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper;
+import net.minecraft.client.option.KeyBinding;
+import net.minecraft.client.util.InputUtil;
+import org.lwjgl.glfw.GLFW;
 
 /**
  * NOZH Client-side initializer - FULL INTEGRATION.
@@ -36,6 +42,8 @@ public class NozhModClient implements ClientModInitializer {
     private static ActionBus actionBus;
     private static StateStore stateStore;
     private static dev.nozh.core.intelligence.SessionLearning sessionLearning;
+    private static ProviderRegistry providerRegistry;
+    private static KeyBinding toggleHudKey;
 
     private static int tickCounter = 0;
     private static final int TELEMETRY_UPDATE_INTERVAL = 20; // Every second (20 ticks)
@@ -66,7 +74,7 @@ public class NozhModClient implements ClientModInitializer {
 
         // 4. Create ProviderHealthTracker and ProviderRegistry
         dev.nozh.core.capability.ProviderHealthTracker healthTracker = new dev.nozh.core.capability.ProviderHealthTracker();
-        ProviderRegistry providerRegistry = new ProviderRegistry(healthTracker);
+        providerRegistry = new ProviderRegistry(healthTracker);
         ProviderBootstrap.registerAll(providerRegistry, optionsAdapter);
         logger.info("Registered " + providerRegistry.getAllProviders().size() + " capability providers");
 
@@ -113,10 +121,21 @@ public class NozhModClient implements ClientModInitializer {
         perfManager = new dev.nozh.core.profiler.PerfManager();
         tickTimeSampler = new dev.nozh.core.monitoring.TickTimeSampler();
 
+        toggleHudKey = KeyBindingHelper.registerKeyBinding(new KeyBinding(
+                "key.nozh.toggle_hud",
+                InputUtil.Type.KEYSYM,
+                GLFW.GLFW_KEY_UNKNOWN,
+                "category.nozh"));
+
         // Register Frametime Sampler (called every frame)
         net.fabricmc.fabric.api.client.rendering.v1.WorldRenderEvents.END.register(context -> {
             perfManager.onFrame();
         });
+
+        HudRenderCallback.EVENT.register(new NozhHudRenderer(
+                stateStore,
+                providerRegistry,
+                () -> perfManager != null ? perfManager.getSnapshot() : dev.nozh.api.PerfSnapshot.empty()));
 
         // === TICK HANDLER SETUP ===
 
@@ -135,6 +154,14 @@ public class NozhModClient implements ClientModInitializer {
 
             // Sample tick time (must be called once per tick)
             tickTimeSampler.onTick();
+
+            if (toggleHudKey != null) {
+                while (toggleHudKey.wasPressed()) {
+                    var config = ConfigManager.getConfig();
+                    config.showHud = !config.showHud;
+                    ConfigManager.saveAndNotify();
+                }
+            }
 
             // Update RuntimeState with telemetry data every second
             if (tickCounter % TELEMETRY_UPDATE_INTERVAL == 0) {
