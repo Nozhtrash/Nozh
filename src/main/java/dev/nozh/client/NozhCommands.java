@@ -7,10 +7,10 @@ import dev.nozh.core.config.NozhConfig;
 import dev.nozh.core.state.PendingAction;
 import dev.nozh.core.state.RuntimeState;
 import dev.nozh.core.state.StateStore;
-import dev.nozh.core.bus.Command;
 import dev.nozh.core.safety.CrashLoopGuard;
 import dev.nozh.core.safety.StateManager;
 import dev.nozh.core.safety.NozhState;
+import dev.nozh.core.telemetry.TelemetryExportFormat;
 import dev.nozh.core.util.NozhText;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
@@ -18,6 +18,7 @@ import net.fabricmc.fabric.api.client.command.v2.ClientCommandManager;
 import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallback;
 import net.fabricmc.fabric.api.client.command.v2.FabricClientCommandSource;
 import net.fabricmc.loader.api.FabricLoader;
+import net.minecraft.client.MinecraftClient;
 import net.minecraft.SharedConstants;
 import com.mojang.brigadier.context.CommandContext;
 import net.minecraft.text.Text;
@@ -65,6 +66,18 @@ public final class NozhCommands {
                                         runApply(context.getSource());
                                         return 1;
                                     }))
+                            .then(ClientCommandManager.literal("telemetry")
+                                    .then(ClientCommandManager.literal("export")
+                                            .then(ClientCommandManager.literal("csv")
+                                                    .executes(context -> {
+                                                        runTelemetryExport(context.getSource(), TelemetryExportFormat.CSV);
+                                                        return 1;
+                                                    }))
+                                            .then(ClientCommandManager.literal("json")
+                                                    .executes(context -> {
+                                                        runTelemetryExport(context.getSource(), TelemetryExportFormat.JSON);
+                                                        return 1;
+                                                    }))))
                             .then(ClientCommandManager.literal("enable")
                                     .executes(context -> {
                                         runEnable(context.getSource());
@@ -300,45 +313,38 @@ public final class NozhCommands {
     }
 
     private static void runApplySuggestion(FabricClientCommandSource source) {
-        var actionBus = NozhModClient.getActionBus();
-        if (actionBus == null) {
-            source.sendFeedback(Text.literal("NOZH action bus unavailable"));
+        MinecraftClient client = MinecraftClient.getInstance();
+        if (client == null) {
+            source.sendFeedback(Text.translatable("nozh.suggestion.apply.unavailable"));
             return;
         }
-
-        RuntimeState state = StateStore.getInstance().snapshotSafe();
-        if (state.suggestedAction().isEmpty()) {
-            source.sendFeedback(Text.literal("No pending suggestion to apply"));
-            return;
-        }
-
-        PendingAction pending = state.suggestedAction().get();
-        Command command = pending.command();
-        long now = System.currentTimeMillis();
-
-        actionBus.dispatch(command, report -> {
-            if (report.succeeded()) {
-                source.sendFeedback(Text.literal("Applied suggested change"));
-            } else {
-                String reason = report.error().orElse("unknown");
-                source.sendFeedback(Text.literal("Failed to apply suggestion: " + reason));
-                StateStore.getInstance().update(RuntimeState::withPendingActionCleared);
-            }
-        });
-
-        StateStore.getInstance().update(currentState -> currentState
-                .withGovernorAction(now, pending)
-                .withSuggestedActionCleared());
+        NozhModClient.applySuggestedAction(client);
     }
 
     private static void runClearSuggestion(FabricClientCommandSource source) {
         RuntimeState state = StateStore.getInstance().snapshotSafe();
         if (state.suggestedAction().isEmpty()) {
-            source.sendFeedback(Text.literal("No pending suggestion to clear"));
+            source.sendFeedback(Text.translatable("nozh.suggestion.clear.none"));
             return;
         }
         StateStore.getInstance().update(RuntimeState::withSuggestedActionCleared);
-        source.sendFeedback(Text.literal("Cleared pending suggestion"));
+        source.sendFeedback(Text.translatable("nozh.suggestion.clear.success"));
+    }
+
+    private static void runTelemetryExport(FabricClientCommandSource source, TelemetryExportFormat format) {
+        var perfManager = NozhModClient.getPerfManager();
+        if (perfManager == null) {
+            source.sendFeedback(Text.translatable("nozh.telemetry.export.unavailable"));
+            return;
+        }
+        try {
+            var output = perfManager.exportTelemetry(
+                    NozhConstants.CONFIG_DIR.resolve("telemetry_exports"),
+                    format);
+            source.sendFeedback(Text.translatable("nozh.telemetry.export.success", output.toString()));
+        } catch (Exception e) {
+            source.sendFeedback(Text.translatable("nozh.telemetry.export.failed", e.getMessage()));
+        }
     }
 
     private static String formatPendingAction(PendingAction pending) {

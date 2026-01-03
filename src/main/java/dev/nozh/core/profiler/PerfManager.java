@@ -5,6 +5,14 @@ import dev.nozh.api.PerfSnapshot;
 import dev.nozh.core.config.ConfigManager;
 import dev.nozh.core.config.NozhConfig;
 import dev.nozh.core.safety.CrashLoopGuard;
+import dev.nozh.core.telemetry.TelemetryExportFormat;
+import dev.nozh.core.telemetry.TelemetryExportWriter;
+
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.time.Instant;
+import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
 
 /**
  * Orchestrator for performance profiling.
@@ -55,6 +63,18 @@ public class PerfManager {
 
     public PerfSnapshot getSnapshot() {
         return stats.snapshot();
+    }
+
+    public Path exportTelemetry(Path outputDir, TelemetryExportFormat format) throws Exception {
+        Files.createDirectories(outputDir);
+        PerfSnapshot snapshot = stats.snapshot();
+        long[] samples = stats.snapshotSamplesNanos();
+        String timestamp = DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss")
+                .withZone(ZoneOffset.UTC)
+                .format(Instant.ofEpochMilli(snapshot.timestampMillis()));
+        String extension = format == TelemetryExportFormat.CSV ? "csv" : "json";
+        Path outputFile = outputDir.resolve("telemetry_" + timestamp + "." + extension);
+        return TelemetryExportWriter.write(snapshot, samples, outputFile, format);
     }
 
     public void reset() {

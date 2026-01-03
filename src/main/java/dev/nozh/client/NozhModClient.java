@@ -10,6 +10,7 @@ import dev.nozh.core.capability.ProviderRegistry;
 import dev.nozh.core.governor.GovernorRunner;
 import dev.nozh.core.matrix.ActionSuccessTracker;
 import dev.nozh.core.safety.CrashLoopGuard;
+import dev.nozh.core.state.PendingAction;
 import dev.nozh.core.state.StateStore;
 import dev.nozh.fabric.FabricNozhLogger;
 import dev.nozh.fabric.capability.MinecraftOptionsAdapter;
@@ -25,7 +26,9 @@ import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
 import net.fabricmc.fabric.api.client.rendering.v1.HudRenderCallback;
 import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper;
 import net.minecraft.client.option.KeyBinding;
+import net.minecraft.client.toast.SystemToast;
 import net.minecraft.client.util.InputUtil;
+import net.minecraft.text.Text;
 import org.lwjgl.glfw.GLFW;
 
 /**
@@ -46,6 +49,8 @@ public class NozhModClient implements ClientModInitializer {
     private static dev.nozh.core.intelligence.SessionLearning sessionLearning;
     private static ProviderRegistry providerRegistry;
     private static KeyBinding toggleHudKey;
+    private static KeyBinding applySuggestionKey;
+    private static boolean safeModeNotified = false;
 
     private static int tickCounter = 0;
     private static final int TELEMETRY_UPDATE_INTERVAL = 20; // Every second (20 ticks)
@@ -131,6 +136,12 @@ public class NozhModClient implements ClientModInitializer {
                 GLFW.GLFW_KEY_UNKNOWN,
                 "category.nozh"));
 
+        applySuggestionKey = KeyBindingHelper.registerKeyBinding(new KeyBinding(
+                "key.nozh.apply_suggestion",
+                InputUtil.Type.KEYSYM,
+                GLFW.GLFW_KEY_K,
+                "category.nozh"));
+
         // Register Frametime Sampler (called every frame)
         net.fabricmc.fabric.api.client.rendering.v1.WorldRenderEvents.END.register(context -> {
             perfManager.onFrame();
@@ -165,6 +176,19 @@ public class NozhModClient implements ClientModInitializer {
                     config.showHud = !config.showHud;
                     ConfigManager.saveAndNotify();
                 }
+            }
+
+            if (applySuggestionKey != null) {
+                while (applySuggestionKey.wasPressed()) {
+                    applySuggestedAction(client);
+                }
+            }
+
+            if (!safeModeNotified && CrashLoopGuard.isInSafeMode()) {
+                safeModeNotified = true;
+                notifyClient(client,
+                        Text.translatable("nozh.safemode.entered.title"),
+                        Text.translatable("nozh.safemode.entered.message"));
             }
 
             // Update RuntimeState with telemetry data every second
@@ -241,5 +265,65 @@ public class NozhModClient implements ClientModInitializer {
 
     public static StateStore getStateStore() {
         return stateStore;
+    }
+
+    public static KeyBinding getApplySuggestionKey() {
+        return applySuggestionKey;
+    }
+
+    public static void applySuggestedAction(MinecraftClient client) {
+        if (client == null) {
+            return;
+        }
+        var actionBus = getActionBus();
+        if (actionBus == null) {
+            notifyClient(client,
+                    Text.translatable("nozh.suggestion.apply.failed"),
+                    Text.translatable("nozh.suggestion.apply.unavailable"));
+            return;
+        }
+
+        RuntimeState state = StateStore.getInstance().snapshotSafe();
+        if (state.suggestedAction().isEmpty()) {
+            notifyClient(client,
+                    Text.translatable("nozh.suggestion.apply.none"),
+                    Text.translatable("nozh.suggestion.apply.none_detail"));
+            return;
+        }
+
+        PendingAction pending = state.suggestedAction().get();
+        var command = pending.command();
+        long now = System.currentTimeMillis();
+
+        actionBus.dispatch(command, report -> {
+            if (report.succeeded()) {
+                notifyClient(client,
+                        Text.translatable("nozh.suggestion.apply.success"),
+                        Text.translatable("nozh.suggestion.apply.success_detail",
+                                pending.capability().name(), pending.newValue().toString()));
+            } else {
+                String reason = report.error().orElse("unknown");
+                notifyClient(client,
+                        Text.translatable("nozh.suggestion.apply.failed"),
+                        Text.translatable("nozh.suggestion.apply.failed_detail", reason));
+                StateStore.getInstance().update(RuntimeState::withPendingActionCleared);
+            }
+        });
+
+        StateStore.getInstance().update(currentState -> currentState
+                .withGovernorAction(now, pending)
+                .withSuggestedActionCleared());
+    }
+
+    private static void notifyClient(MinecraftClient client, Text title, Text message) {
+        if (client == null) {
+            return;
+        }
+        if (client.getToastManager() != null) {
+            SystemToast.add(client.getToastManager(), SystemToast.Type.TUTORIAL_HINT, title, message);
+        }
+        if (client.inGameHud != null) {
+            client.inGameHud.getChatHud().addMessage(title.copy().append(Text.literal(" ")).append(message));
+        }
     }
 }

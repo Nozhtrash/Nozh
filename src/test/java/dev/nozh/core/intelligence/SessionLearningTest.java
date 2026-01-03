@@ -46,4 +46,18 @@ class SessionLearningTest {
         learning.recordFailure(CapabilityId.PARTICLES);
         assertFalse(learning.shouldAvoid(CapabilityId.PARTICLES));
     }
+
+    @Test
+    void rankingReflectsSuccessAndGain() {
+        SessionLearning learning = new SessionLearning(tempDir.toFile());
+
+        learning.recordSuccess(CapabilityId.RENDER_DISTANCE, 2.0);
+        learning.recordSuccess(CapabilityId.RENDER_DISTANCE, 1.0);
+
+        learning.recordSuccess(CapabilityId.CLOUDS, 0.2);
+        learning.recordFailure(CapabilityId.CLOUDS);
+
+        assertTrue(learning.getRanking(CapabilityId.RENDER_DISTANCE)
+                > learning.getRanking(CapabilityId.CLOUDS));
+    }
 }
