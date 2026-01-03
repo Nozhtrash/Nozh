@@ -7,7 +7,6 @@ import dev.nozh.core.config.NozhConfig;
 import dev.nozh.core.state.PendingAction;
 import dev.nozh.core.state.RuntimeState;
 import dev.nozh.core.state.StateStore;
-import dev.nozh.core.bus.Command;
 import dev.nozh.core.safety.CrashLoopGuard;
 import dev.nozh.core.safety.StateManager;
 import dev.nozh.core.safety.NozhState;
@@ -295,7 +294,7 @@ public final class NozhCommands {
         source.sendFeedback(Text.translatable("nozh.disable.success"));
     }
 
-    private static void runApply(FabricClientCommandSource source) {
+    public static void runApply(FabricClientCommandSource source) {
         runApplySuggestion(source);
     }
 
@@ -341,7 +340,7 @@ public final class NozhCommands {
         source.sendFeedback(Text.literal("Cleared pending suggestion"));
     }
 
-    private static String formatPendingAction(PendingAction pending) {
+    public static String formatPendingAction(PendingAction pending) {
         return pending.capability().name() + "=" + pending.newValue();
     }
 }
