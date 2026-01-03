@@ -19,6 +19,7 @@ import dev.nozh.core.state.RuntimeState;
 import dev.nozh.core.state.StateStore;
 import dev.nozh.core.state.PendingAction;
 import dev.nozh.core.bus.CapabilityValue;
+import dev.nozh.api.PerfSnapshot;
 
 import dev.nozh.core.monitoring.ChunkLoadMonitor;
 import dev.nozh.core.monitoring.SystemMonitor;

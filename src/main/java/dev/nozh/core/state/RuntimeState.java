@@ -12,6 +12,7 @@ package dev.nozh.core.state;
 import dev.nozh.core.bus.CapabilityId;
 import dev.nozh.core.bus.CapabilityValue;
 
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
