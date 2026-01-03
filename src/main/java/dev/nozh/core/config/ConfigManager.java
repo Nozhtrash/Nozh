@@ -8,6 +8,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
+import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 /**
  * Configuration manager for NOZH.
@@ -19,6 +21,7 @@ public final class ConfigManager {
 
     private static final Object LOCK = new Object();
     private static volatile NozhConfig config = null;
+    private static final List<ConfigListener> listeners = new CopyOnWriteArrayList<>();
 
     private ConfigManager() {
         // Utility class
@@ -42,6 +45,7 @@ public final class ConfigManager {
      * Load config from disk (or create defaults)
      */
     public static void load() {
+        NozhConfig snapshot;
         synchronized (LOCK) {
             try {
                 Path configFile = NozhConstants.CONFIG_FILE;
@@ -80,6 +84,8 @@ public final class ConfigManager {
                 config.configVersion = 2;
             }
         }
+        snapshot = config;
+        notifyListeners(snapshot);
     }
 
     /**
@@ -87,51 +93,71 @@ public final class ConfigManager {
      * Debounced to prevent race conditions on rapid saves
      */
     public static void save() {
+        saveInternal(false);
+    }
+
+    /**
+     * Save and notify listeners even if the write is debounced.
+     */
+    public static void saveAndNotify() {
+        saveInternal(true);
+    }
+
+    private static void saveInternal(boolean notifyOnDebounce) {
+        NozhConfig snapshot = null;
+        boolean shouldNotify = false;
         synchronized (LOCK) {
             // Debounce: prevent rapid successive saves
             long now = System.currentTimeMillis();
             if (now - lastSaveTime < SAVE_DEBOUNCE_MS) {
                 NozhConstants.LOGGER.debug("Skipping config save (debounce)");
-                return;
-            }
-            lastSaveTime = now;
+                snapshot = config;
+                shouldNotify = notifyOnDebounce;
+            } else {
+                lastSaveTime = now;
+                shouldNotify = true;
 
-            if (config == null) {
-                NozhConstants.LOGGER.warn("Cannot save null config");
-                return;
-            }
+                if (config == null) {
+                    NozhConstants.LOGGER.warn("Cannot save null config");
+                    return;
+                }
 
-            try {
-                Path configFile = NozhConstants.CONFIG_FILE;
-                Path tmpFile = configFile.resolveSibling(configFile.getFileName() + ".tmp");
-
-                ensureConfigDirExists();
-
-                String json = JsonMini.toJson(config);
-
-                // Write to tmp, then atomic rename
-                Files.writeString(tmpFile, json, StandardCharsets.UTF_8,
-                        StandardOpenOption.CREATE,
-                        StandardOpenOption.TRUNCATE_EXISTING,
-                        StandardOpenOption.WRITE);
-
-                Files.move(tmpFile, configFile,
-                        StandardCopyOption.REPLACE_EXISTING,
-                        StandardCopyOption.ATOMIC_MOVE);
-
-                NozhConstants.LOGGER.debug("Saved config to {}", configFile);
-            } catch (IOException e) {
-                NozhConstants.LOGGER.error("Failed to save config", e);
-
-                // Clean up tmp file if exists
                 try {
-                    Path tmpFile = NozhConstants.CONFIG_FILE
-                            .resolveSibling(NozhConstants.CONFIG_FILE.getFileName() + ".tmp");
-                    Files.deleteIfExists(tmpFile);
-                } catch (IOException cleanup) {
-                    // Fail silently
+                    Path configFile = NozhConstants.CONFIG_FILE;
+                    Path tmpFile = configFile.resolveSibling(configFile.getFileName() + ".tmp");
+
+                    ensureConfigDirExists();
+
+                    String json = JsonMini.toJson(config);
+
+                    // Write to tmp, then atomic rename
+                    Files.writeString(tmpFile, json, StandardCharsets.UTF_8,
+                            StandardOpenOption.CREATE,
+                            StandardOpenOption.TRUNCATE_EXISTING,
+                            StandardOpenOption.WRITE);
+
+                    Files.move(tmpFile, configFile,
+                            StandardCopyOption.REPLACE_EXISTING,
+                            StandardCopyOption.ATOMIC_MOVE);
+
+                    NozhConstants.LOGGER.debug("Saved config to {}", configFile);
+                } catch (IOException e) {
+                    NozhConstants.LOGGER.error("Failed to save config", e);
+
+                    // Clean up tmp file if exists
+                    try {
+                        Path tmpFile = NozhConstants.CONFIG_FILE
+                                .resolveSibling(NozhConstants.CONFIG_FILE.getFileName() + ".tmp");
+                        Files.deleteIfExists(tmpFile);
+                    } catch (IOException cleanup) {
+                        // Fail silently
+                    }
                 }
             }
+            snapshot = config;
+        }
+        if (shouldNotify) {
+            notifyListeners(snapshot);
         }
     }
 
@@ -150,6 +176,7 @@ public final class ConfigManager {
      * - Failure recovery (rollback on write failure)
      */
     public static void resetToDefaults() {
+        NozhConfig snapshot;
         synchronized (LOCK) {
             NozhConfig previousConfig = config; // Backup for rollback
 
@@ -171,7 +198,9 @@ public final class ConfigManager {
                 config = previousConfig;
                 throw new RuntimeException("Config reset failed", e);
             }
+            snapshot = config;
         }
+        notifyListeners(snapshot);
     }
 
     private static void ensureConfigDirExists() throws IOException {
@@ -179,6 +208,29 @@ public final class ConfigManager {
         if (!Files.exists(dir)) {
             Files.createDirectories(dir);
             NozhConstants.LOGGER.debug("Created config directory: {}", dir);
+        }
+    }
+
+    public static void addListener(ConfigListener listener) {
+        if (listener != null) {
+            listeners.add(listener);
+        }
+    }
+
+    public static void removeListener(ConfigListener listener) {
+        listeners.remove(listener);
+    }
+
+    private static void notifyListeners(NozhConfig snapshot) {
+        if (snapshot == null) {
+            return;
+        }
+        for (ConfigListener listener : listeners) {
+            try {
+                listener.onConfigUpdated(snapshot);
+            } catch (Exception e) {
+                NozhConstants.LOGGER.warn("Config listener failed: {}", e.getMessage());
+            }
         }
     }
 }
