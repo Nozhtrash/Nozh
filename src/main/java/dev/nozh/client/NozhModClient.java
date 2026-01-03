@@ -3,6 +3,7 @@ package dev.nozh.client;
 import dev.nozh.NozhConstants;
 import dev.nozh.core.NozhLogger;
 import dev.nozh.core.bus.ActionBus;
+import dev.nozh.core.bus.Command;
 import dev.nozh.core.bus.StandardActionProcessor;
 import dev.nozh.core.config.ConfigManager;
 import dev.nozh.core.config.ConfigSyncService;
@@ -10,6 +11,8 @@ import dev.nozh.core.capability.ProviderRegistry;
 import dev.nozh.core.governor.GovernorRunner;
 import dev.nozh.core.matrix.ActionSuccessTracker;
 import dev.nozh.core.safety.CrashLoopGuard;
+import dev.nozh.core.state.PendingAction;
+import dev.nozh.core.state.RuntimeState;
 import dev.nozh.core.state.StateStore;
 import dev.nozh.fabric.FabricNozhLogger;
 import dev.nozh.fabric.capability.MinecraftOptionsAdapter;
@@ -24,9 +27,13 @@ import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
 import net.fabricmc.fabric.api.client.rendering.v1.HudRenderCallback;
 import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper;
+import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.option.KeyBinding;
 import net.minecraft.client.util.InputUtil;
+import net.minecraft.text.Text;
 import org.lwjgl.glfw.GLFW;
+
+import java.util.function.Consumer;
 
 /**
  * NOZH Client-side initializer - FULL INTEGRATION.
@@ -46,6 +53,7 @@ public class NozhModClient implements ClientModInitializer {
     private static dev.nozh.core.intelligence.SessionLearning sessionLearning;
     private static ProviderRegistry providerRegistry;
     private static KeyBinding toggleHudKey;
+    private static KeyBinding applySuggestionKey;
 
     private static int tickCounter = 0;
     private static final int TELEMETRY_UPDATE_INTERVAL = 20; // Every second (20 ticks)
@@ -131,6 +139,12 @@ public class NozhModClient implements ClientModInitializer {
                 GLFW.GLFW_KEY_UNKNOWN,
                 "category.nozh"));
 
+        applySuggestionKey = KeyBindingHelper.registerKeyBinding(new KeyBinding(
+                "key.nozh.apply_suggestion",
+                InputUtil.Type.KEYSYM,
+                GLFW.GLFW_KEY_UNKNOWN,
+                "category.nozh"));
+
         // Register Frametime Sampler (called every frame)
         net.fabricmc.fabric.api.client.rendering.v1.WorldRenderEvents.END.register(context -> {
             perfManager.onFrame();
@@ -164,6 +178,12 @@ public class NozhModClient implements ClientModInitializer {
                     var config = ConfigManager.getConfig();
                     config.showHud = !config.showHud;
                     ConfigManager.saveAndNotify();
+                }
+            }
+
+            if (applySuggestionKey != null) {
+                while (applySuggestionKey.wasPressed()) {
+                    applySuggestedAction(client);
                 }
             }
 
@@ -241,5 +261,60 @@ public class NozhModClient implements ClientModInitializer {
 
     public static StateStore getStateStore() {
         return stateStore;
+    }
+
+    public static void applySuggestedAction(MinecraftClient client) {
+        if (client == null) {
+            return;
+        }
+        applySuggestedAction(
+                message -> notifyClient(client, message),
+                message -> notifyClient(client, message));
+    }
+
+    public static void applySuggestedAction(Consumer<Text> feedback, Consumer<Text> errorFeedback) {
+        if (feedback == null || errorFeedback == null) {
+            return;
+        }
+        var bus = actionBus;
+        if (bus == null) {
+            errorFeedback.accept(Text.literal("Action bus unavailable"));
+            NozhConstants.LOGGER.warn("Manual apply failed: action bus unavailable");
+            return;
+        }
+
+        RuntimeState state = stateStore.snapshotSafe();
+        if (state.suggestedAction().isEmpty()) {
+            feedback.accept(Text.literal("No pending suggestion"));
+            return;
+        }
+
+        PendingAction pending = state.suggestedAction().get();
+        Command command = pending.command();
+        long now = System.currentTimeMillis();
+
+        bus.dispatchUserCommand(command, report -> {
+            if (report.succeeded()) {
+                feedback.accept(Text.literal("Applied suggested change"));
+                NozhConstants.LOGGER.info("Manual suggestion applied: " + pending.capability().name());
+            } else {
+                String reason = report.error().orElse("unknown");
+                errorFeedback.accept(Text.literal("Suggestion rejected: " + reason));
+                NozhConstants.LOGGER.warn(
+                        "Manual suggestion rejected for " + pending.capability().name() + ": " + reason);
+                stateStore.update(currentState -> currentState
+                        .withPendingActionCleared()
+                        .withSuggestedAction(pending));
+            }
+        });
+
+        stateStore.update(currentState -> currentState.withAppliedSuggestion(now, pending));
+    }
+
+    private static void notifyClient(MinecraftClient client, Text message) {
+        if (client == null || client.player == null) {
+            return;
+        }
+        client.player.sendMessage(message, false);
     }
 }

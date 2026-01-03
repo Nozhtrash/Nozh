@@ -115,7 +115,7 @@ public final class GovernorRunner {
             return;
         }
 
-        if (state.pendingSuggestion().isPresent()) {
+        if (state.suggestedAction().isPresent()) {
             logger.debug("Pending suggestion awaiting confirmation");
             return;
         }
@@ -315,7 +315,7 @@ public final class GovernorRunner {
 
         if (worsened || ineffective) {
             if (config.rollbackEnabled) {
-                pending.actionCommand()
+                pending.command()
                         .inverse(pending.previousValue())
                         .ifPresentOrElse(rollback -> actionBus.dispatch(rollback, r -> {
                             if (r.succeeded()) {

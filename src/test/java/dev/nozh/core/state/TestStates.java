@@ -19,7 +19,7 @@ public final class TestStates {
                 state.benchmarkValidity(),
                 state.benchmarkStartTimestamp(),
                 state.pendingAction(),
-                state.pendingSuggestion(),
+                state.suggestedAction(),
                 state.pendingActionsCount(),
                 state.executionHistorySize(),
                 state.lastSnapshotHistorySize(),
