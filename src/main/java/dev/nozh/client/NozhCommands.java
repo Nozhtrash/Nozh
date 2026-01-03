@@ -7,7 +7,6 @@ import dev.nozh.core.config.NozhConfig;
 import dev.nozh.core.state.PendingAction;
 import dev.nozh.core.state.RuntimeState;
 import dev.nozh.core.state.StateStore;
-import dev.nozh.core.bus.Command;
 import dev.nozh.core.safety.CrashLoopGuard;
 import dev.nozh.core.safety.StateManager;
 import dev.nozh.core.safety.NozhState;
@@ -295,40 +294,8 @@ public final class NozhCommands {
         source.sendFeedback(Text.translatable("nozh.disable.success"));
     }
 
-    private static void runApply(FabricClientCommandSource source) {
-        runApplySuggestion(source);
-    }
-
-    private static void runApplySuggestion(FabricClientCommandSource source) {
-        var actionBus = NozhModClient.getActionBus();
-        if (actionBus == null) {
-            source.sendFeedback(Text.literal("NOZH action bus unavailable"));
-            return;
-        }
-
-        RuntimeState state = StateStore.getInstance().snapshotSafe();
-        if (state.suggestedAction().isEmpty()) {
-            source.sendFeedback(Text.literal("No pending suggestion to apply"));
-            return;
-        }
-
-        PendingAction pending = state.suggestedAction().get();
-        Command command = pending.command();
-        long now = System.currentTimeMillis();
-
-        actionBus.dispatch(command, report -> {
-            if (report.succeeded()) {
-                source.sendFeedback(Text.literal("Applied suggested change"));
-            } else {
-                String reason = report.error().orElse("unknown");
-                source.sendFeedback(Text.literal("Failed to apply suggestion: " + reason));
-                StateStore.getInstance().update(RuntimeState::withPendingActionCleared);
-            }
-        });
-
-        StateStore.getInstance().update(currentState -> currentState
-                .withGovernorAction(now, pending)
-                .withSuggestedActionCleared());
+    public static void runApply(FabricClientCommandSource source) {
+        NozhModClient.applySuggestedAction(source::sendFeedback, source::sendError);
     }
 
     private static void runClearSuggestion(FabricClientCommandSource source) {
@@ -341,7 +308,7 @@ public final class NozhCommands {
         source.sendFeedback(Text.literal("Cleared pending suggestion"));
     }
 
-    private static String formatPendingAction(PendingAction pending) {
+    public static String formatPendingAction(PendingAction pending) {
         return pending.capability().name() + "=" + pending.newValue();
     }
 }

@@ -14,6 +14,8 @@ import java.util.Optional;
 import java.util.ArrayList;
 import java.util.List;
 
+import dev.nozh.core.state.ActionHistoryEntry;
+
 /**
  * Runtime state (Contract 1).
  *
@@ -106,7 +108,7 @@ public record RuntimeState(
                 Optional.of(pending),
                 suggestedAction,
                 pendingAction.isPresent() ? pendingActionsCount + 1 : 1,
-                executionHistorySize + 1, // increment history
+                nextHistorySize,
                 lastSnapshotHistorySize,
                 updatedHistory,
                 sessionChangesCount + 1, // increment changes
@@ -213,9 +215,10 @@ public record RuntimeState(
     }
 
     /**
-     * Compatibility alias for older callers.
+     * Legacy compatibility alias for older callers.
+     * Scheduled for removal in a cleanup pass.
      */
-    @Deprecated
+    @Deprecated(since = "1.0", forRemoval = true)
     public Optional<PendingAction> pendingSuggestion() {
         return suggestedAction;
     }
