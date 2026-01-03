@@ -22,6 +22,7 @@ import java.util.concurrent.ConcurrentHashMap;
 public final class ProviderRegistry {
 
     private final Map<CapabilityId, CapabilityProvider> providers = new ConcurrentHashMap<>();
+    private final Map<CapabilityId, dev.nozh.core.bus.CapabilityValue> baselineValues = new ConcurrentHashMap<>();
     private final ProviderHealthTracker healthTracker;
 
     public ProviderRegistry(ProviderHealthTracker healthTracker) {
@@ -56,6 +57,7 @@ public final class ProviderRegistry {
             // Register
             providers.put(id, provider);
             healthTracker.markHealthy(id);
+            recordBaselineIfMissing(provider);
 
         } catch (Exception e) {
             // Provider threw during registration -> mark BROKEN, continue
@@ -80,8 +82,19 @@ public final class ProviderRegistry {
         if (healthTracker.isBroken(id)) {
             return Optional.empty();
         }
+        CapabilityProvider provider = providers.get(id);
+        if (provider == null) {
+            return Optional.empty();
+        }
+        recordBaselineIfMissing(provider);
+        return Optional.of(provider);
+    }
 
-        return Optional.ofNullable(providers.get(id));
+    /**
+     * Get the baseline value for a capability if known.
+     */
+    public Optional<dev.nozh.core.bus.CapabilityValue> baselineValue(CapabilityId id) {
+        return Optional.ofNullable(baselineValues.get(id));
     }
 
     /**
@@ -101,6 +114,14 @@ public final class ProviderRegistry {
                 .filter(entry -> !healthTracker.isBroken(entry.getKey()))
                 .map(Map.Entry::getValue)
                 .toList();
+    }
+
+    private void recordBaselineIfMissing(CapabilityProvider provider) {
+        CapabilityId id = provider.id();
+        if (baselineValues.containsKey(id)) {
+            return;
+        }
+        provider.getCurrentValueSafe().ifPresent(value -> baselineValues.putIfAbsent(id, value));
     }
 
     /**

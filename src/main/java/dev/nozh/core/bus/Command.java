@@ -27,7 +27,8 @@ public sealed interface Command {
     /**
      * Optional inverse command for rollback purposes.
      */
-    default Optional<Command> inverse(Optional<CapabilityValue> previousValue) {
+    default Optional<Command> inverse(Optional<CapabilityValue> previousValue,
+            Optional<CapabilityValue> baselineValue) {
         return Optional.empty();
     }
 
@@ -48,9 +49,13 @@ public sealed interface Command {
         }
 
         @Override
-        public Optional<Command> inverse(Optional<CapabilityValue> previousValue) {
-            if (previousValue.isPresent()) {
-                return Optional.of(new Command.ApplyCapability(capability, previousValue.get()));
+        public Optional<Command> inverse(Optional<CapabilityValue> previousValue,
+                Optional<CapabilityValue> baselineValue) {
+            Optional<CapabilityValue> target = previousValue.isPresent()
+                    ? previousValue
+                    : baselineValue;
+            if (target.isPresent()) {
+                return Optional.of(new Command.ApplyCapability(capability, target.get()));
             }
             return Optional.of(new Command.ResetCapability(capability));
         }

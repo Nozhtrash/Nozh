@@ -309,7 +309,7 @@ public class NozhModClient implements ClientModInitializer {
         var command = pending.command();
         long now = System.currentTimeMillis();
 
-        actionBus.dispatch(command, report -> {
+        actionBus.dispatchUserCommand(command, report -> {
             if (report.succeeded()) {
                 notifyClient(client,
                         Text.translatable("nozh.suggestion.apply.success"),

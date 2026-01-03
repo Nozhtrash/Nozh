@@ -13,8 +13,8 @@ import dev.nozh.core.matrix.ActionMatrix;
 import dev.nozh.core.matrix.ActionSuccessTracker;
 import dev.nozh.core.matrix.ConfidenceCalculator;
 import dev.nozh.core.governor.OptimizationProfile;
+import dev.nozh.api.PerfSnapshot;
 import dev.nozh.core.compatibility.CompatibilityMatrix;
-import dev.nozh.core.compatibility.ModConflictDetector;
 import dev.nozh.core.state.RuntimeState;
 import dev.nozh.core.state.StateStore;
 import dev.nozh.core.state.PendingAction;
@@ -300,7 +300,8 @@ public final class GovernorRunner {
         java.util.Map<dev.nozh.core.bus.CapabilityId, dev.nozh.core.bus.CapabilityValue> baseline = new java.util.EnumMap<>(
                 dev.nozh.core.bus.CapabilityId.class);
         for (var provider : providerRegistry.getAllProviders()) {
-            provider.getCurrentValueSafe().ifPresent(value -> baseline.put(provider.id(), value));
+            providerRegistry.baselineValue(provider.id()).ifPresent(value -> baseline.putIfAbsent(provider.id(), value));
+            provider.getCurrentValueSafe().ifPresent(value -> baseline.putIfAbsent(provider.id(), value));
         }
         try {
             stateStore.update(state -> state.withBaselineSettings(baseline));
@@ -387,7 +388,7 @@ public final class GovernorRunner {
         if (currentValue.isPresent() && !currentValue.get().equals(pending.newValue())) {
             logger.warn("Detected inconsistency for " + pending.capability() + ", applying safe fallback");
             pending.command()
-                    .inverse(pending.previousValue())
+                    .inverse(pending.previousValue(), providerRegistry.baselineValue(pending.capability()))
                     .ifPresentOrElse(rollback -> actionBus.dispatch(rollback, r -> {
                         if (r.succeeded()) {
                             logger.info("Safe fallback rollback succeeded");
@@ -405,8 +406,22 @@ public final class GovernorRunner {
             successTracker.clearDecisionSnapshot(pending.capability());
             return;
         }
-        double avg = state.avgFrametimeMs();
-        double p95 = state.p95FrametimeMs();
+        PerfSnapshot currentSnapshot = perfSnapshotSupplier.get();
+        PerfSnapshot baselineSnapshot = pending.baselineSnapshot();
+        if (baselineSnapshot != null) {
+            long minWindowMillis = Math.max(1000L, baselineSnapshot.windowSeconds() * 1000L);
+            long elapsed = currentSnapshot.timestampMillis() - baselineSnapshot.timestampMillis();
+            if (elapsed < minWindowMillis) {
+                logger.debug(String.format(
+                        "Perf snapshot window insufficient (%dms/%dms), delaying evaluation",
+                        elapsed,
+                        minWindowMillis));
+                return;
+            }
+        }
+
+        double avg = currentSnapshot.sufficientData() ? currentSnapshot.avgFrametimeMs() : state.avgFrametimeMs();
+        double p95 = currentSnapshot.sufficientData() ? currentSnapshot.p95FrametimeMs() : state.p95FrametimeMs();
 
         // Strict Evaluation:
         // 1. Worsened: P95 increased significantly ( > baseline + epsilon)
@@ -418,6 +433,11 @@ public final class GovernorRunner {
         boolean p95Worsened = p95 > pending.baselineP95Ms() + config.improvementEpsilonP95Ms;
         boolean p95Ineffective = p95 > pending.baselineP95Ms() - config.improvementEpsilonP95Ms;
 
+        boolean improved = !avgIneffective && !p95Ineffective;
+        boolean worsened = avgWorsened || p95Worsened;
+        ActionOutcome outcome = improved ? ActionOutcome.POSITIVE
+                : (worsened ? ActionOutcome.NEGATIVE : ActionOutcome.NEUTRAL);
+
         boolean rollbackApplied = false;
         if (outcome == ActionOutcome.NEGATIVE) {
             if (config.rollbackEnabled) {
@@ -425,8 +445,15 @@ public final class GovernorRunner {
                 if (lastRollback != null && nowMillis() - lastRollback < config.rollbackCooldownMillis) {
                     logger.info("Rollback skipped due to cooldown for " + pending.capability());
                 } else {
+                    Optional<CapabilityValue> previous = pending.previousValue();
+                    Optional<CapabilityValue> baseline = providerRegistry.baselineValue(pending.capability());
+                    Optional<CapabilityValue> rollbackTarget = resolveRollbackTarget(previous, baseline);
+                    if (rollbackTarget.isPresent()
+                            && exceedsBaseline(pending.capability(), rollbackTarget.get(), baseline.orElse(null))) {
+                        logger.warn("Rollback blocked (would exceed baseline) for " + pending.capability());
+                    } else {
                     pending.command()
-                            .inverse(pending.previousValue())
+                            .inverse(previous, baseline)
                             .ifPresentOrElse(rollback -> actionBus.dispatch(rollback, r -> {
                                 if (r.succeeded()) {
                                     logger.info("Rollback succeeded (Action was harmful)");
@@ -436,6 +463,7 @@ public final class GovernorRunner {
                             }), () -> logger.warn("No inverse action available, rollback skipped."));
                     rollbackCooldowns.put(pending.capability(), nowMillis());
                     rollbackApplied = true;
+                    }
                 }
             } else {
                 logger.info("Rollback disabled in config, keeping ineffective action.");
@@ -489,6 +517,75 @@ public final class GovernorRunner {
                 .map(snapshot -> snapshot.p95FrametimeMs())
                 .filter(this::isValidPerfValue)
                 .orElse(pending.baselineP95Ms());
+    }
+
+    private Optional<CapabilityValue> resolveRollbackTarget(
+            Optional<CapabilityValue> previous,
+            Optional<CapabilityValue> baseline) {
+        if (previous.isPresent()) {
+            return previous;
+        }
+        return baseline;
+    }
+
+    private boolean exceedsBaseline(
+            dev.nozh.core.bus.CapabilityId id,
+            CapabilityValue candidate,
+            CapabilityValue baseline) {
+        if (candidate == null || baseline == null) {
+            return false;
+        }
+        if (candidate.equals(baseline)) {
+            return false;
+        }
+        return switch (id) {
+            case PARTICLES -> compareEnum(candidate, baseline, java.util.List.of("MINIMAL", "DECREASED", "ALL"));
+            case CLOUDS -> compareEnum(candidate, baseline, java.util.List.of("OFF", "FAST", "FANCY"));
+            case GRAPHICS_MODE -> compareEnum(candidate, baseline, java.util.List.of("FAST", "FANCY", "FABULOUS"));
+            case ENTITY_SHADOWS, VSYNC, SMOOTH_LIGHTING, ARMOR_STANDS, ITEM_FRAMES, BLOCK_ENTITIES, ANIMATIONS,
+                    DYNAMIC_LIGHTING -> compareBool(candidate, baseline);
+            case RENDER_DISTANCE, SIMULATION_DISTANCE, ENTITY_DISTANCE, BIOME_BLEND, MIPMAP_LEVEL, FPS_CAP ->
+                    compareInt(candidate, baseline);
+            case RESOLUTION_SCALE, DISTORTION_EFFECT_SCALE -> compareFloat(candidate, baseline);
+            default -> false;
+        };
+    }
+
+    private boolean compareEnum(CapabilityValue current, CapabilityValue baseline, java.util.List<String> ordering) {
+        if (!(current instanceof CapabilityValue.EnumValue currentEnum)
+                || !(baseline instanceof CapabilityValue.EnumValue baselineEnum)) {
+            return false;
+        }
+        int currentIndex = ordering.indexOf(currentEnum.name());
+        int baselineIndex = ordering.indexOf(baselineEnum.name());
+        if (currentIndex < 0 || baselineIndex < 0) {
+            return false;
+        }
+        return currentIndex > baselineIndex;
+    }
+
+    private boolean compareBool(CapabilityValue current, CapabilityValue baseline) {
+        if (!(current instanceof CapabilityValue.BoolValue currentBool)
+                || !(baseline instanceof CapabilityValue.BoolValue baselineBool)) {
+            return false;
+        }
+        return currentBool.value() && !baselineBool.value();
+    }
+
+    private boolean compareInt(CapabilityValue current, CapabilityValue baseline) {
+        if (!(current instanceof CapabilityValue.IntValue currentInt)
+                || !(baseline instanceof CapabilityValue.IntValue baselineInt)) {
+            return false;
+        }
+        return currentInt.value() > baselineInt.value();
+    }
+
+    private boolean compareFloat(CapabilityValue current, CapabilityValue baseline) {
+        if (!(current instanceof CapabilityValue.FloatValue currentFloat)
+                || !(baseline instanceof CapabilityValue.FloatValue baselineFloat)) {
+            return false;
+        }
+        return currentFloat.value() > baselineFloat.value();
     }
 
     private String resolveActionSummary(RuntimeState state, PendingAction pending) {
