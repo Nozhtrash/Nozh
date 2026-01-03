@@ -15,6 +15,7 @@ import dev.nozh.core.matrix.ConfidenceCalculator;
 import dev.nozh.core.compatibility.ModConflictDetector;
 import dev.nozh.core.state.RuntimeState;
 import dev.nozh.core.state.StateStore;
+import dev.nozh.core.state.PendingAction;
 import dev.nozh.core.state.ActionHistoryEntry;
 import dev.nozh.core.bus.CapabilityValue;
 
@@ -249,6 +250,7 @@ public final class GovernorRunner {
         boolean frameHigh = frameDataAvailable && (avgMs > frameThresholdMs || p95Ms > frameThresholdMs);
         if (frameHigh) {
             return "GPU";
+        }
         return "BALANCED";
     }
 
