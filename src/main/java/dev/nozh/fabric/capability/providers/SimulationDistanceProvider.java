@@ -195,7 +195,7 @@ public final class SimulationDistanceProvider implements CapabilityProvider {
             // - 6 → 4 chunks: ~3-5 FPS
             //
             // Conservative estimate for CPU-bound
-            return 1.8;
+            return 1.6;
         }
 
         @Override

@@ -128,7 +128,7 @@ public final class ArmorStandProvider implements CapabilityProvider {
 
         @Override
         public double expectedGainMs() {
-            return 1.5; // High gain in lobbies
+            return 1.1; // Noticeable gain in lobbies
         }
 
         @Override

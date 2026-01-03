@@ -19,6 +19,7 @@ import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
+import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
 
 /**
  * NOZH Client-side initializer - FULL INTEGRATION.
@@ -34,10 +35,12 @@ public class NozhModClient implements ClientModInitializer {
     private static GovernorRunner governorRunner;
     private static ActionBus actionBus;
     private static StateStore stateStore;
+    private static dev.nozh.core.intelligence.SessionLearning sessionLearning;
 
     private static int tickCounter = 0;
     private static final int TELEMETRY_UPDATE_INTERVAL = 20; // Every second (20 ticks)
     private static final int GOVERNOR_POLL_INTERVAL = 100; // Every 5 seconds (100 ticks)
+    private static final int SESSION_SAVE_INTERVAL = 1200; // Every 60 seconds (1200 ticks)
 
     @Override
     public void onInitializeClient() {
@@ -78,11 +81,16 @@ public class NozhModClient implements ClientModInitializer {
         StandardCapabilityExecutor capabilityExecutor = new StandardCapabilityExecutor(providerRegistry, logger);
 
         // 8. Create ActionProcessor bridge
-        StandardActionProcessor actionProcessor = new StandardActionProcessor(capabilityExecutor, logger);
-
         // Create SessionLearning
-        dev.nozh.core.intelligence.SessionLearning sessionLearning = new dev.nozh.core.intelligence.SessionLearning(
+        sessionLearning = new dev.nozh.core.intelligence.SessionLearning(
                 net.fabricmc.loader.api.FabricLoader.getInstance().getConfigDir().toFile());
+
+        // 8. Create ActionProcessor bridge
+        StandardActionProcessor actionProcessor = new StandardActionProcessor(
+                capabilityExecutor,
+                logger,
+                sessionLearning,
+                () -> perfManager != null ? perfManager.getSnapshot() : dev.nozh.api.PerfSnapshot.empty());
 
         // Create ScenarioDetector (Fabric implementation)
         dev.nozh.core.context.ScenarioDetector scenarioDetector = new dev.nozh.fabric.context.FabricScenarioDetector();
@@ -137,6 +145,16 @@ public class NozhModClient implements ClientModInitializer {
             if (tickCounter % GOVERNOR_POLL_INTERVAL == 0) {
                 governorRunner.onTick();
             }
+
+            if (tickCounter % SESSION_SAVE_INTERVAL == 0) {
+                sessionLearning.saveIfDue();
+            }
+        });
+
+        ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> {
+            if (sessionLearning != null) {
+                sessionLearning.save();
+            }
         });
 
         // === COMMANDS & SHUTDOWN ===
@@ -148,6 +166,9 @@ public class NozhModClient implements ClientModInitializer {
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
             dev.nozh.core.util.DebugLogger.log("SHUTDOWN", "NOZH shutting down...");
             dev.nozh.core.util.DebugLogger.close();
+            if (sessionLearning != null) {
+                sessionLearning.save();
+            }
         }, "NOZH-Shutdown"));
 
         dev.nozh.core.util.DebugLogger.log("INIT", "NOZH Client initialized successfully");

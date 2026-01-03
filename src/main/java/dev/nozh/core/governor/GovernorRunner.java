@@ -4,10 +4,17 @@ import dev.nozh.core.NozhLogger;
 import dev.nozh.core.bus.ActionBus;
 import dev.nozh.core.bus.Command;
 import dev.nozh.core.capability.ProviderRegistry;
+import dev.nozh.core.config.ConfigManager;
+import dev.nozh.core.config.NozhConfig;
+import dev.nozh.core.context.ScenarioDetector;
+import dev.nozh.core.intelligence.SessionLearning;
 import dev.nozh.core.matrix.ActionCandidate;
 import dev.nozh.core.matrix.ActionMatrix;
 import dev.nozh.core.matrix.ActionSuccessTracker;
 import dev.nozh.core.matrix.ConfidenceCalculator;
+import dev.nozh.core.monitoring.ChunkLoadMonitor;
+import dev.nozh.core.monitoring.SystemMonitor;
+import dev.nozh.core.state.PendingAction;
 import dev.nozh.core.state.RuntimeState;
 import dev.nozh.core.state.StateStore;
 
@@ -15,14 +22,6 @@ import java.util.Optional;
 
 /**
  * Governor runner - integration loop (Phase G).
- * 
- * RULES:
- * - Does NOT decide (SimulationGovernor decides)
- * - Does NOT filter (ActionMatrix filters)
- * - Does NOT interpret (just executes loop)
- * - Only calls: snapshot → decide → dispatch
- * 
- * This is MC integration layer (allowed to reference MC for polling).
  */
 public final class GovernorRunner {
 
@@ -30,15 +29,17 @@ public final class GovernorRunner {
     private final ActionBus actionBus;
     private final NozhLogger logger;
     private final StateStore stateStore;
+    private final ProviderRegistry providerRegistry;
+    private final SessionLearning sessionLearning;
 
     // Intelligent components
-    private final dev.nozh.core.governor.PredictiveAnalyzer predictiveAnalyzer;
-    private final dev.nozh.core.monitoring.SystemMonitor systemMonitor;
-    private final dev.nozh.core.monitoring.ChunkLoadMonitor chunkLoadMonitor;
-    private final dev.nozh.core.context.ScenarioDetector scenarioDetector;
+    private final PredictiveAnalyzer predictiveAnalyzer;
+    private final SystemMonitor systemMonitor;
+    private final ChunkLoadMonitor chunkLoadMonitor;
+    private final ScenarioDetector scenarioDetector;
 
     private int tickCounter = 0;
-    private static final int POLL_INTERVAL_TICKS = 100; // ~5 seconds at 20tps
+    private static final int POLL_INTERVAL_TICKS = 100;
 
     public GovernorRunner(
             ProviderRegistry registry,
@@ -46,8 +47,8 @@ public final class GovernorRunner {
             ActionBus actionBus,
             StateStore stateStore,
             NozhLogger logger,
-            dev.nozh.core.intelligence.SessionLearning sessionLearning,
-            dev.nozh.core.context.ScenarioDetector scenarioDetector) {
+            SessionLearning sessionLearning,
+            ScenarioDetector scenarioDetector) {
         ActionMatrix matrix = new ActionMatrix(
                 registry,
                 successTracker,
@@ -59,133 +60,116 @@ public final class GovernorRunner {
         this.stateStore = stateStore;
         this.logger = logger;
         this.scenarioDetector = scenarioDetector;
+        this.providerRegistry = registry;
+        this.sessionLearning = sessionLearning;
 
-        // Initialize intelligent components
-        this.predictiveAnalyzer = new dev.nozh.core.governor.PredictiveAnalyzer();
-        this.systemMonitor = new dev.nozh.core.monitoring.SystemMonitor();
-        this.chunkLoadMonitor = new dev.nozh.core.monitoring.ChunkLoadMonitor();
+        this.predictiveAnalyzer = new PredictiveAnalyzer();
+        this.systemMonitor = new SystemMonitor();
+        this.chunkLoadMonitor = new ChunkLoadMonitor();
     }
 
-    /**
-     * Called every client tick.
-     */
     public void onTick() {
         tickCounter++;
         if (tickCounter < POLL_INTERVAL_TICKS) {
             return;
         }
         tickCounter = 0;
-
         runGovernorLoop();
     }
 
     private void runGovernorLoop() {
-        // 1. Detect scenario and update state reference
-        dev.nozh.core.context.Scenario currentScenario = scenarioDetector.detect();
+        long now = System.currentTimeMillis();
+        NozhConfig config = ConfigManager.getConfig();
+
+        // Update scenario
         try {
-            stateStore.update(s -> s.withScenario(currentScenario));
-        } catch (Exception e) {
-            // Ignore update failure
+            stateStore.update(s -> s.withScenario(scenarioDetector.detect()));
+        } catch (Exception ignored) {
         }
 
-        // Get state snapshot (now contains latest scenario)
         RuntimeState state = stateStore.snapshotSafe();
 
-        // Feed current frametime to predictive analyzer
+        // === Pending evaluation ===
+        if (state.pendingAction().isPresent()) {
+            PendingAction pending = state.pendingAction().get();
+            long elapsed = now - pending.timestampMillis();
+
+            if (elapsed < config.rollbackWindowMillis) {
+                logger.debug(String.format(
+                        "Pending evaluation in progress (%dms/%dms)",
+                        elapsed, config.rollbackWindowMillis));
+                return;
+            }
+
+            evaluatePendingAction(state, pending, config);
+            return;
+        }
+
+        // Feed predictor
         if (state.avgFrametimeMs() > 0) {
             predictiveAnalyzer.addSample(state.avgFrametimeMs());
         }
 
-        // INTELLIGENT SKIP: Chunk loading in progress
         if (chunkLoadMonitor.isHeavyChunkLoad()) {
-            logger.debug(String.format("Skipping governor decision - heavy chunk load detected (%d chunks/s)",
-                    chunkLoadMonitor.getChunkLoadRate()));
+            logger.debug("Skipping governor decision - heavy chunk load");
             return;
         }
 
-        // INTELLIGENT SKIP: Memory critical - let GC work
         if (systemMonitor.isMemoryCritical()) {
-            logger.warn(String.format("Skipping governor decision - memory critical (%s)",
-                    systemMonitor.getMemoryUsageString()));
+            logger.warn("Skipping governor decision - memory critical");
             return;
         }
 
-        // 2. Determine mode from state and scenario (Smart Mode Selection)
         GovernorMode mode = determineMode(state);
+        String bound = detectBound(state);
 
-        // 3. Detect performance bound from telemetry
-        String currentBound = detectBound(state);
-
-        long now = System.currentTimeMillis();
-
-        // 4. Check cooldown (NO CASCADE) with adaptive window
-        long lastActionTimestamp = state.governorLastActionTimestamp();
-        if (!governor.canAct(state, lastActionTimestamp, now)) {
-            long windowMs = governor.getObservationWindow(state);
-            logger.debug(String.format("Governor in cooldown, skipping decision (window: %dms)", windowMs));
+        if (!governor.canAct(state, state.governorLastActionTimestamp(), now)) {
             return;
         }
 
-        // PREDICTIVE ANALYSIS: Act proactively if drop predicted
-        if (predictiveAnalyzer.predictFPSDrop()) {
-            double confidence = predictiveAnalyzer.getConfidence();
-            logger.info(String.format("Predictive analysis: FPS drop predicted (confidence: %.2f, trend: %s)",
-                    confidence, predictiveAnalyzer.getTrendDescription()));
-            // Continue to decision making (will act proactively)
-        }
-
-        // Log memory pressure if present (affects ActionMatrix priority)
-        if (systemMonitor.isMemoryPressure()) {
-            logger.debug(String.format("Memory pressure detected (%s)", systemMonitor.getMemoryUsageString()));
-        }
-
-        // Decide
-        Optional<ActionCandidate> decisionOpt = governor.decide(state, mode, currentBound, now);
+        Optional<ActionCandidate> decisionOpt = governor.decide(state, mode, bound, now);
 
         if (decisionOpt.isEmpty()) {
-            logger.debug("Governor: no valid action");
             return;
         }
 
         ActionCandidate decision = decisionOpt.get();
-
-        // Log decision
         logger.info("Governor decision: " + decision.reason());
 
         // Dispatch via ActionBus
         if (decision.targetValue() != null) {
+            Optional<dev.nozh.core.bus.CapabilityValue> previousValue = providerRegistry.get(decision.capabilityId())
+                    .flatMap(provider -> provider.getCurrentValueSafe());
+            PendingAction pending = new PendingAction(
+                    now,
+                    decision.capabilityId(),
+                    previousValue,
+                    decision.targetValue(),
+                    state.avgFrametimeMs(),
+                    state.p95FrametimeMs());
             Command cmd = new Command.ApplyCapability(
                     decision.capabilityId(),
                     decision.targetValue());
 
             actionBus.dispatch(cmd, report -> {
-                // Log result only, no logic
                 if (report.succeeded()) {
                     logger.info("Governor action succeeded");
-                    // Reset predictor after successful action
                     predictiveAnalyzer.reset();
                 } else {
-                    logger.warn("Governor action failed: " + report.error().orElse("unknown"));
+                    logger.warn("Governor action failed: " +
+                            report.error().orElse("unknown"));
                 }
             });
 
             // Update state after action dispatch
             try {
-                stateStore.update(currentState -> currentState.withGovernorAction(now));
+                stateStore.update(currentState -> currentState.withGovernorAction(now, pending));
             } catch (Exception e) {
                 logger.warn("Failed to update state after governor action: " + e.getMessage());
             }
         }
     }
 
-    /**
-     * Detect performance bound from telemetry.
-     * 
-     * Simple heuristics for v0.2-beta:
-     * - If avg frametime > 16.67ms (60 FPS) → CPU bound
-     * - If p95 stable but avg high → GPU bound
-     * - Otherwise → BALANCED
-     */
     private String detectBound(RuntimeState state) {
         double avgMs = state.avgFrametimeMs();
         double p95Ms = state.p95FrametimeMs();
@@ -223,39 +207,53 @@ public final class GovernorRunner {
         boolean frameHigh = frameDataAvailable && (avgMs > frameThresholdMs || p95Ms > frameThresholdMs);
         if (frameHigh) {
             return "GPU";
-        }
-
         return "BALANCED";
     }
 
-    /**
-     * Determine effective mode based on state and scenario.
-     */
-    private dev.nozh.core.governor.GovernorMode determineMode(RuntimeState state) {
+    private GovernorMode determineMode(RuntimeState state) {
         if (!state.enabled() || state.governorDisabled()) {
-            return dev.nozh.core.governor.GovernorMode.OFF;
+            return GovernorMode.OFF;
         }
-
-        if (state.safeMode()) {
-            return dev.nozh.core.governor.GovernorMode.MANUAL_ASSIST;
+        if (state.safeMode() || !state.autoTuning()) {
+            return GovernorMode.MANUAL_ASSIST;
         }
-
-        if (!state.autoTuning()) {
-            return dev.nozh.core.governor.GovernorMode.MANUAL_ASSIST;
-        }
-
-        // Scenario-based overrides
         if (state.currentScenario() == dev.nozh.core.context.Scenario.COMBAT) {
-            // Combat requires max FPS -> Aggressive
-            return dev.nozh.core.governor.GovernorMode.AUTO_AGGRESSIVE;
+            return GovernorMode.AUTO_AGGRESSIVE;
+        }
+        return GovernorMode.AUTO_CONSERVATIVE;
+    }
+
+    private void evaluatePendingAction(RuntimeState state, PendingAction pending, NozhConfig config) {
+        double avg = state.avgFrametimeMs();
+        double p95 = state.p95FrametimeMs();
+
+        boolean worsened = avg < 0 || p95 < 0
+                || avg > pending.baselineAvgMs() + config.improvementEpsilonAvgMs
+                || p95 > pending.baselineP95Ms() + config.improvementEpsilonP95Ms;
+
+        if (worsened) {
+            Command rollback = pending.previousValue()
+                    .<Command>map(v -> new Command.ApplyCapability(pending.capability(), v))
+                    .orElseGet(() -> new Command.ResetCapability(pending.capability()));
+
+            actionBus.dispatch(rollback, r -> {
+                if (r.succeeded()) {
+                    logger.info("Rollback succeeded");
+                } else {
+                    logger.warn("Rollback failed");
+                }
+            });
+
+            sessionLearning.recordFailure(pending.capability());
+        } else {
+            double gain = Math.max(0, pending.baselineAvgMs() - avg);
+            sessionLearning.recordSuccess(pending.capability(), gain);
         }
 
-        if (state.currentScenario() == dev.nozh.core.context.Scenario.MINING) {
-            // Mining usually stable
-            return dev.nozh.core.governor.GovernorMode.AUTO_CONSERVATIVE;
+        try {
+            stateStore.update(RuntimeState::withPendingActionCleared);
+        } catch (Exception e) {
+            logger.warn("Failed to clear pending action");
         }
-
-        // Default auto mode
-        return dev.nozh.core.governor.GovernorMode.AUTO_CONSERVATIVE;
     }
 }
