@@ -10,10 +10,6 @@ import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.ScheduledFuture;
-import java.util.concurrent.TimeUnit;
 
 /**
  * Configuration manager for NOZH.
@@ -26,12 +22,6 @@ public final class ConfigManager {
     private static final Object LOCK = new Object();
     private static volatile NozhConfig config = null;
     private static final List<ConfigListener> listeners = new CopyOnWriteArrayList<>();
-    private static final ScheduledExecutorService SAVE_EXECUTOR = Executors.newSingleThreadScheduledExecutor(r -> {
-        Thread thread = new Thread(r, "NOZH-ConfigSave");
-        thread.setDaemon(true);
-        return thread;
-    });
-    private static ScheduledFuture<?> pendingSave;
 
     private ConfigManager() {
         // Utility class
@@ -138,8 +128,6 @@ public final class ConfigManager {
                 NozhConstants.LOGGER.debug("Skipping config save (debounce)");
                 snapshot = config;
                 shouldNotify = notifyOnDebounce;
-                boolean deferredNotify = notifyOnDebounce ? false : notifyOnSave;
-                scheduleDeferredSave(SAVE_DEBOUNCE_MS - elapsed, deferredNotify);
             } else {
                 lastSaveTime = now;
                 shouldNotify = notifyOnSave;
@@ -259,17 +247,6 @@ public final class ConfigManager {
                 NozhConstants.LOGGER.warn("Config listener failed: {}", e.getMessage());
             }
         }
-    }
-
-    private static void scheduleDeferredSave(long delayMillis, boolean notifyOnSave) {
-        if (delayMillis < 0) {
-            delayMillis = 0;
-        }
-        if (pendingSave != null && !pendingSave.isDone()) {
-            return;
-        }
-        pendingSave = SAVE_EXECUTOR.schedule(() -> saveInternal(false, notifyOnSave, true), delayMillis,
-                TimeUnit.MILLISECONDS);
     }
 
     private static void saveNowSilently() {
