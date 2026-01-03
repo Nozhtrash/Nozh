@@ -33,6 +33,8 @@ import net.minecraft.client.util.InputUtil;
 import net.minecraft.text.Text;
 import org.lwjgl.glfw.GLFW;
 
+import java.util.function.Consumer;
+
 /**
  * NOZH Client-side initializer - FULL INTEGRATION.
  * 

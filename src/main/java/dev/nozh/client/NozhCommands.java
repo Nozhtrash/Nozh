@@ -7,7 +7,6 @@ import dev.nozh.core.config.NozhConfig;
 import dev.nozh.core.state.PendingAction;
 import dev.nozh.core.state.RuntimeState;
 import dev.nozh.core.state.StateStore;
-import dev.nozh.core.bus.Command;
 import dev.nozh.core.safety.CrashLoopGuard;
 import dev.nozh.core.safety.StateManager;
 import dev.nozh.core.safety.NozhState;
