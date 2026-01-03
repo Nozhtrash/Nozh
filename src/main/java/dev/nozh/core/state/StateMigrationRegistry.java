@@ -4,6 +4,7 @@ import dev.nozh.NozhConstants;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * Registry of state version migrators.
@@ -25,20 +26,36 @@ public final class StateMigrationRegistry {
     public StateMigrationRegistry() {
         registerMigrator(2, oldState -> {
             String validity = oldState.benchmarkValidity() != null ? oldState.benchmarkValidity() : "NONE";
+            // The original migrator for version 2 was adding benchmarkRunning=false and
+            // handling validity.
+            // This new version 2 migrator needs to provide defaults for all fields
+            // introduced up to version 3
+            // that are not present in version 1 or 2, and ensure the constructor matches
+            // the latest RuntimeState.
+            // The instruction implies a migration from an older state (likely v1 or v2) to
+            // a v3-compatible state.
+            // The original code was migrating from v1 to v2, adding benchmarkRunning and
+            // handling validity.
+            // The instruction provides a full list of parameters for a RuntimeState
+            // constructor that has 26 fields.
+            // This means the migrator for version 2 should now produce a state compatible
+            // with the *current* RuntimeState
+            // constructor, filling in defaults for fields that didn't exist in the oldState
+            // (which is effectively v2 here).
 
             return new RuntimeState(
                     oldState.enabled(),
                     oldState.safeMode(),
                     oldState.autoTuning(),
                     oldState.debugLogs(),
-                    oldState.governorDisabled(),
-                    oldState.governorCooldownActive(),
-                    oldState.governorLastActionTimestamp(),
-                    oldState.benchmarkRunning(),
-                    validity,
-                    oldState.benchmarkStartTimestamp(),
-                    oldState.pendingAction(),
-                    oldState.pendingActionsCount(),
+                    false, // governorDisabled default
+                    false, // governorCooldownActive default
+                    0L, // governorLastActionTimestamp default
+                    false, // benchmarkRunning default
+                    "NONE", // benchmarkValidity default
+                    0L, // benchmarkStartTimestamp default
+                    Optional.empty(), // pendingAction default
+                    0, // pendingActionsCount default
                     oldState.executionHistorySize(),
                     oldState.lastSnapshotHistorySize(),
                     oldState.sessionChangesCount(),
@@ -47,10 +64,11 @@ public final class StateMigrationRegistry {
                     oldState.tickTimeAvg(),
                     oldState.tickTimeP95(),
                     oldState.spikeCount(),
+                    "", 0L, // lastDecisionReason, lastDecisionTimestamp default
                     oldState.sessionStartTime(),
-                    CURRENT_VERSION,
-                    oldState.currentScenario(),
-                    oldState.scenarioConfidence());
+                    3, // Target version is 3
+                    dev.nozh.core.context.Scenario.STANDARD,
+                    0.5);
         });
 
         NozhConstants.LOGGER.debug("StateMigrationRegistry initialized (current version: {})", CURRENT_VERSION);

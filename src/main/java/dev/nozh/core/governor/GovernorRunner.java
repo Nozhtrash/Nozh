@@ -19,6 +19,9 @@ import dev.nozh.core.state.PendingAction;
 import dev.nozh.core.state.ActionHistoryEntry;
 import dev.nozh.core.bus.CapabilityValue;
 
+import dev.nozh.core.monitoring.ChunkLoadMonitor;
+import dev.nozh.core.monitoring.SystemMonitor;
+
 import java.util.Optional;
 
 /**
@@ -61,6 +64,8 @@ public final class GovernorRunner {
         this.actionBus = actionBus;
         this.stateStore = stateStore;
         this.logger = logger;
+        this.providerRegistry = registry;
+        this.sessionLearning = sessionLearning;
         this.scenarioDetector = scenarioDetector;
         this.conflictDetector = new ModConflictDetector();
 
@@ -79,6 +84,9 @@ public final class GovernorRunner {
     }
 
     private void runGovernorLoop() {
+        long now = System.currentTimeMillis();
+        NozhConfig config = ConfigManager.getConfig();
+
         // 1. Detect scenario and update state reference
         dev.nozh.core.context.ScenarioSnapshot scenarioSnapshot = scenarioDetector.detect();
         try {
@@ -128,8 +136,6 @@ public final class GovernorRunner {
         // 3. Detect performance bound from telemetry
         String currentBound = detectBound(state);
         // REMOVED: withGovernorSnapshot() tracking no longer available
-
-        long now = System.currentTimeMillis();
 
         // 4. Check cooldown (NO CASCADE) with adaptive window
         long lastActionTimestamp = state.governorLastActionTimestamp();

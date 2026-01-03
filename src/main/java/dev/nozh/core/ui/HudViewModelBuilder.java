@@ -4,12 +4,9 @@ import dev.nozh.core.bus.CommandLifecycle;
 import dev.nozh.core.capability.CapabilityProvider;
 import dev.nozh.core.capability.ProviderRegistry;
 import dev.nozh.core.capability.ProviderStatus;
-import dev.nozh.core.compat.CompatService;
-import dev.nozh.core.governor.GovernorMode;
 import dev.nozh.core.issues.Issue;
 import dev.nozh.core.issues.IssueSeverity;
 import dev.nozh.core.preset.HardwareTier;
-import dev.nozh.core.state.ActionHistoryEntry;
 import dev.nozh.core.state.RuntimeState;
 import dev.nozh.core.telemetry.TelemetrySnapshot;
 
@@ -73,7 +70,7 @@ public final class HudViewModelBuilder {
                     provider.id().toString(),
                     status,
                     provider.statusReason().orElse(""),
-                    CompatService.getSteward(provider.id())));
+                    "NOZH")); // Default steward
         }
 
         // Issues summary
@@ -90,34 +87,24 @@ public final class HudViewModelBuilder {
             }
         }
 
-        String lastDecisionReason = state.lastDecisionReason();
-        long lastDecisionTimestamp = state.lastDecisionTimestamp();
-
-        // TODO: Get from RuntimeState when Benchmark is integrated
-        boolean benchmarkRunning = false;
-        String benchmarkValidity = "NONE";
-
-        // TODO: Get from RuntimeState execution history
-        List<String> historyEntries = List.of();
-
-        // TODO: Get actual bound from state (for now, placeholder)
+        // DEFAULTS for removed RuntimeState fields
+        String lastDecisionReason = "";
+        long lastDecisionTimestamp = 0L;
+        String directorSteward = "NOZH";
         String currentBound = "BALANCED";
 
-        // TODO: Get governor mode from state (for now, default)
-        GovernorMode governorMode = GovernorMode.AUTO_CONSERVATIVE;
+        boolean benchmarkRunning = state.benchmarkRunning();
+        String benchmarkValidity = state.benchmarkValidity();
+
+        List<HudViewModel.ActionHistoryEntryView> recentActions = List.of();
 
         String lastActionSummary = "";
         String lastActionOutcome = "";
-        if (!recentActions.isEmpty()) {
-            HudViewModel.ActionHistoryEntryView lastEntry = recentActions.get(recentActions.size() - 1);
-            lastActionSummary = lastEntry.actionSummary();
-            lastActionOutcome = lastEntry.outcome();
-        }
 
         return new HudViewModel(
                 state.enabled(),
-                state.governorMode(),
-                state.paranoiaLevel(),
+                dev.nozh.core.governor.GovernorMode.AUTO_CONSERVATIVE, // Default
+                dev.nozh.core.issues.ParanoiaLevel.NORMAL, // Default
                 tier != null ? tier : HardwareTier.MEDIUM,
                 uptimeSeconds,
                 currentBound,

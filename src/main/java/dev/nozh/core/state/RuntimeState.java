@@ -73,36 +73,33 @@ public record RuntimeState(
                 0, // executionHistorySize
                 0, // lastSnapshotHistorySize
                 0, // sessionChangesCount
-                -1.0, // avgFrametimeMs (sentinel)
-                -1.0, // p95FrametimeMs (sentinel)
-                -1.0, // tickTimeAvg (sentinel)
-                -1.0, // tickTimeP95 (sentinel)
+                -1.0, // avgFrametimeMs
+                -1.0, // p95FrametimeMs
+                -1.0, // tickTimeAvg
+                -1.0, // tickTimeP95
                 0, // spikeCount
-                "",
-                0L,
-                System.currentTimeMillis(), // sessionStartTime
-                CURRENT_VERSION,
-                dev.nozh.core.context.Scenario.STANDARD,
-                0.5);
+                "", 0L, // lastDecisionReason, lastDecisionTimestamp
+                System.currentTimeMillis(), CURRENT_VERSION,
+                dev.nozh.core.context.Scenario.STANDARD, 0.5);
     }
 
     /**
      * Update after governor action (immutable).
      */
-    public RuntimeState withGovernorAction(long timestamp, PendingAction pendingAction) {
-        Optional<PendingAction> pending = Optional.ofNullable(pendingAction);
+    public RuntimeState withGovernorAction(long timestamp, PendingAction pending) {
         return new RuntimeState(
                 enabled, safeMode, autoTuning, debugLogs,
                 governorDisabled,
                 true, // governorCooldownActive = true after action
                 timestamp, // governorLastActionTimestamp
                 benchmarkRunning, benchmarkValidity, benchmarkStartTimestamp,
-                pending,
-                pending.isPresent() ? 1 : 0,
+                Optional.of(pending),
+                pendingAction.isPresent() ? pendingActionsCount + 1 : 1,
                 executionHistorySize + 1, // increment history
                 lastSnapshotHistorySize,
                 sessionChangesCount + 1, // increment changes
                 avgFrametimeMs, p95FrametimeMs, tickTimeAvg, tickTimeP95, spikeCount,
+                lastDecisionReason, lastDecisionTimestamp,
                 sessionStartTime, stateVersion,
                 currentScenario, scenarioConfidence);
     }
@@ -122,9 +119,8 @@ public record RuntimeState(
                 executionHistorySize,
                 lastSnapshotHistorySize,
                 sessionChangesCount,
-                avgFrametimeMs, p95FrametimeMs, spikeCount,
-                lastDecisionReason,
-                lastDecisionTimestamp,
+                avgFrametimeMs, p95FrametimeMs, tickTimeAvg, tickTimeP95, spikeCount,
+                lastDecisionReason, lastDecisionTimestamp,
                 sessionStartTime, stateVersion,
                 currentScenario, scenarioConfidence);
     }
@@ -147,9 +143,8 @@ public record RuntimeState(
                 running, validity, startTime,
                 pendingAction, pendingActionsCount, executionHistorySize, lastSnapshotHistorySize,
                 sessionChangesCount,
-                avgFrametimeMs, p95FrametimeMs, spikeCount,
-                lastDecisionReason,
-                lastDecisionTimestamp,
+                avgFrametimeMs, p95FrametimeMs, tickTimeAvg, tickTimeP95, spikeCount,
+                lastDecisionReason, lastDecisionTimestamp,
                 sessionStartTime, stateVersion,
                 currentScenario, scenarioConfidence);
     }
@@ -164,9 +159,8 @@ public record RuntimeState(
                 benchmarkRunning, benchmarkValidity, benchmarkStartTimestamp,
                 pendingAction, pendingActionsCount, executionHistorySize, lastSnapshotHistorySize,
                 sessionChangesCount,
-                avg, p95, spikes,
-                lastDecisionReason,
-                lastDecisionTimestamp,
+                avg, p95, tickAvg, tickP95, spikes,
+                lastDecisionReason, lastDecisionTimestamp,
                 sessionStartTime, stateVersion,
                 currentScenario, scenarioConfidence);
     }
@@ -183,9 +177,8 @@ public record RuntimeState(
                 benchmarkRunning, benchmarkValidity, benchmarkStartTimestamp,
                 pendingAction, pendingActionsCount, executionHistorySize, lastSnapshotHistorySize,
                 sessionChangesCount,
-                avgFrametimeMs, p95FrametimeMs, spikeCount,
-                lastDecisionReason,
-                lastDecisionTimestamp,
+                avgFrametimeMs, p95FrametimeMs, tickTimeAvg, tickTimeP95, spikeCount,
+                lastDecisionReason, lastDecisionTimestamp,
                 sessionStartTime, stateVersion,
                 currentScenario, scenarioConfidence);
     }
@@ -200,9 +193,8 @@ public record RuntimeState(
                 benchmarkRunning, benchmarkValidity, benchmarkStartTimestamp,
                 pendingAction, pendingActionsCount, executionHistorySize, lastSnapshotHistorySize,
                 sessionChangesCount,
-                avgFrametimeMs, p95FrametimeMs, spikeCount,
-                lastDecisionReason,
-                lastDecisionTimestamp,
+                avgFrametimeMs, p95FrametimeMs, tickTimeAvg, tickTimeP95, spikeCount,
+                lastDecisionReason, lastDecisionTimestamp,
                 sessionStartTime, stateVersion,
                 scenario, confidence);
     }
@@ -216,6 +208,23 @@ public record RuntimeState(
     // REMOVED: withRecentAction() - uses deleted ActionHistoryEntry and
     // recentActions parameters
 
+    public RuntimeState withConfig(dev.nozh.core.config.NozhConfig config) {
+        return new RuntimeState(
+                config.enabled,
+                safeMode,
+                config.allowAutoTuning,
+                config.debugLogs,
+                governorDisabled, governorCooldownActive, governorLastActionTimestamp,
+                benchmarkRunning, benchmarkValidity, benchmarkStartTimestamp,
+                pendingAction,
+                pendingActionsCount, executionHistorySize, lastSnapshotHistorySize,
+                sessionChangesCount,
+                avgFrametimeMs, p95FrametimeMs, tickTimeAvg, tickTimeP95, spikeCount,
+                lastDecisionReason, lastDecisionTimestamp,
+                sessionStartTime, stateVersion,
+                currentScenario, scenarioConfidence);
+    }
+
     /**
      * Update last decision (immutable).
      */
@@ -223,29 +232,21 @@ public record RuntimeState(
         return new RuntimeState(
                 enabled, safeMode, autoTuning, debugLogs,
                 governorDisabled, governorCooldownActive, governorLastActionTimestamp,
-                benchmarkRunning, benchmarkStartTimestamp,
+                benchmarkRunning, benchmarkValidity, benchmarkStartTimestamp,
+                pendingAction,
                 pendingActionsCount, executionHistorySize, lastSnapshotHistorySize,
                 sessionChangesCount,
-                avgFrametimeMs, p95FrametimeMs, spikeCount,
+                avgFrametimeMs, p95FrametimeMs, tickTimeAvg, tickTimeP95, spikeCount,
                 reason != null ? reason : "",
                 timestamp,
                 sessionStartTime, stateVersion,
-                currentScenario);
+                currentScenario, scenarioConfidence);
     }
 
     /**
      * Create state from config (initialization).
      */
     public static RuntimeState fromConfig(dev.nozh.core.config.NozhConfig config) {
-        GovernorMode mode;
-        if (!config.enabled) {
-            mode = GovernorMode.OFF;
-        } else if (!config.allowAutoTuning) {
-            mode = GovernorMode.MANUAL_ASSIST;
-        } else {
-            mode = GovernorMode.AUTO_CONSERVATIVE;
-        }
-
         return new RuntimeState(
                 config.enabled,
                 config.safeModeForce, // safeMode from config
@@ -267,8 +268,7 @@ public record RuntimeState(
                 -1.0, // tickTimeAvg
                 -1.0, // tickTimeP95
                 0, // spikeCount
-                "",
-                0L,
+                "", 0L, // lastDecisionReason, lastDecisionTimestamp
                 System.currentTimeMillis(),
                 CURRENT_VERSION,
                 dev.nozh.core.context.Scenario.STANDARD,

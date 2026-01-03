@@ -99,30 +99,29 @@ class StateInvariantValidatorTest {
                                 base.safeMode(),
                                 base.autoTuning(),
                                 base.debugLogs(),
-                                false,
+                                false, // governorDisabled = false (INVALID when benchmark running)
                                 base.governorCooldownActive(),
                                 base.governorLastActionTimestamp(),
-                                true,
+                                true, // benchmarkRunning = true
+                                "NONE", // benchmarkValidity
                                 System.currentTimeMillis(),
-                                state.pendingActionsCount(),
-                                state.executionHistorySize(),
-                                state.lastSnapshotHistorySize(),
-                                state.sessionChangesCount(),
-                                state.avgFrametimeMs(),
-                                state.p95FrametimeMs(),
-                                state.tickTimeAvg(),
-                                state.tickTimeP95(),
-                                state.spikeCount(),
-                                state.sessionStartTime(),
-                                state.stateVersion(),
-                                state.currentScenario());
-
-                                Optional.<PendingAction>empty(),
-                                0,
-
+                                base.pendingAction(),
+                                base.pendingActionsCount(),
                                 base.executionHistorySize(),
                                 base.lastSnapshotHistorySize(),
                                 base.sessionChangesCount(),
+                                base.avgFrametimeMs(),
+                                base.p95FrametimeMs(),
+                                base.tickTimeAvg(),
+                                base.tickTimeP95(),
+                                base.spikeCount(),
+                                base.lastDecisionReason(),
+                                base.lastDecisionTimestamp(),
+                                base.sessionStartTime(),
+                                base.stateVersion(),
+                                base.currentScenario(),
+                                base.scenarioConfidence());
+        }
 
         @Test
         void testInvariant2_BenchmarkWithGovernorDisabled_IsValid() {
@@ -136,7 +135,9 @@ class StateInvariantValidatorTest {
                                 state.governorCooldownActive(),
                                 state.governorLastActionTimestamp(),
                                 true, // benchmarkRunning = true
+                                "NONE", // benchmarkValidity
                                 System.currentTimeMillis(),
+                                state.pendingAction(),
                                 state.pendingActionsCount(),
                                 state.executionHistorySize(),
                                 state.lastSnapshotHistorySize(),
@@ -146,9 +147,12 @@ class StateInvariantValidatorTest {
                                 state.tickTimeAvg(),
                                 state.tickTimeP95(),
                                 state.spikeCount(),
+                                state.lastDecisionReason(),
+                                state.lastDecisionTimestamp(),
                                 state.sessionStartTime(),
                                 state.stateVersion(),
-                                state.currentScenario());
+                                state.currentScenario(),
+                                state.scenarioConfidence());
 
                 assertTrue(StateInvariantValidator.validate(state).isInvalid());
         }

@@ -173,7 +173,8 @@ public final class ActionMatrix {
                 .max()
                 .orElse(0.0);
 
-        candidates.sort(Comparator.comparingDouble(candidate -> scoreCandidate(candidate, maxExpectedGain)).reversed());
+        candidates.sort(Comparator
+                .comparingDouble((ActionCandidate candidate) -> scoreCandidate(candidate, maxExpectedGain)).reversed());
 
         if (candidates.isEmpty() && !yieldCandidates.isEmpty()) {
             return List.of(yieldCandidates.get(0));

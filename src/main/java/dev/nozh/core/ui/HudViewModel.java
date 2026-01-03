@@ -19,83 +19,90 @@ import java.util.List;
  * PURE - zero MC dependencies.
  */
 public record HudViewModel(
-        // Dashboard data
-        boolean systemEnabled,
-        GovernorMode governorMode,
-        ParanoiaLevel paranoiaLevel,
-        HardwareTier activeTier,
-        long uptimeSeconds,
-        String currentBound, // "CPU_BOUND" / "GPU_BOUND" / "BALANCED" / "UNKNOWN"
+                // Dashboard data
+                boolean systemEnabled,
+                GovernorMode governorMode,
+                ParanoiaLevel paranoiaLevel,
+                HardwareTier activeTier,
+                long uptimeSeconds,
+                String currentBound, // "CPU_BOUND" / "GPU_BOUND" / "BALANCED" / "UNKNOWN"
 
-        // Performance metrics
-        double avgFrametimeMs,
-        double p95FrametimeMs,
-        int spikeCount,
-        int sampleCount,
-        int droppedSamples,
-        boolean sufficientData,
+                // Performance metrics
+                double avgFrametimeMs,
+                double p95FrametimeMs,
+                int spikeCount,
+                int sampleCount,
+                int droppedSamples,
+                boolean sufficientData,
 
-        // Provider summary
-        int providersTotal,
-        int providersHealthy,
-        int providersDegraded,
-        int providersBroken,
+                // Provider summary
+                int providersTotal,
+                int providersHealthy,
+                int providersDegraded,
+                int providersBroken,
 
-        // Issues summary
-        int issuesTotal,
-        int issuesCritical,
-        int issuesWarning,
+                // Issues summary
+                int issuesTotal,
+                int issuesCritical,
+                int issuesWarning,
 
-        // Governor decision (last)
-        String lastDecisionReason, // i18n key, or empty string if no decision
-        long lastDecisionTimestamp,
-        String directorSteward,
-        String lastActionSummary,
-        String lastActionOutcome,
-        Scenario currentScenario,
+                // Governor decision (last)
+                String lastDecisionReason, // i18n key, or empty string if no decision
+                long lastDecisionTimestamp,
+                String directorSteward,
+                String lastActionSummary,
+                String lastActionOutcome,
+                Scenario currentScenario,
 
-        // Benchmark status
-        boolean benchmarkRunning,
-        String benchmarkValidity, // "VALID" / "NOISY" / "INCONCLUSIVE" / "NONE"
+                // Benchmark status
+                boolean benchmarkRunning,
+                String benchmarkValidity, // "VALID" / "NOISY" / "INCONCLUSIVE" / "NONE"
 
-        // Detailed data (for respective sections)
-        List<ProviderViewModel> providers,
-        List<Issue> issues,
-        List<ActionHistoryEntryView> recentActions
-) {
-    /**
-     * Provider view model (nested DTO).
-     */
-    public record ProviderViewModel(
-            String capabilityId,
-            ProviderStatus status,
-            String statusReason, // Empty string if no reason
-            String steward
-    ) {
-    }
+                // Detailed data (for respective sections)
+                List<ProviderViewModel> providers,
+                List<Issue> issues,
+                List<ActionHistoryEntryView> recentActions) {
+        /**
+         * Provider view model (nested DTO).
+         */
+        public record ProviderViewModel(
+                        String capabilityId,
+                        ProviderStatus status,
+                        String statusReason, // Empty string if no reason
+                        String steward) {
+        }
 
-    /**
-     * Empty view model for when no data is available.
-     */
-    public static HudViewModel EMPTY = new HudViewModel(
-            false,
-            GovernorMode.OFF,
-            ParanoiaLevel.OFF,
-            HardwareTier.MEDIUM,
-            0,
-            "UNKNOWN",
-            0, 0, 0, 0, 0, false,
-            0, 0, 0, 0,
-            0, 0, 0,
-            "",
-            0,
-            "NOZH",
-            "",
-            "",
-            Scenario.STANDARD,
-            false,
-            "NONE",
-            List.of(),
-            List.of(),
-            List.of());
+        /**
+         * Action history entry view model (nested DTO).
+         */
+        public record ActionHistoryEntryView(
+                        long timestampMillis,
+                        String actionSummary,
+                        String outcome) {
+        }
+
+        /**
+         * Empty view model for when no data is available.
+         */
+        public static HudViewModel EMPTY = new HudViewModel(
+                        false,
+                        GovernorMode.OFF,
+                        ParanoiaLevel.OFF,
+                        HardwareTier.MEDIUM,
+                        0,
+                        "UNKNOWN",
+                        0, 0, 0, 0, 0, false,
+                        0, 0, 0, 0,
+                        0, 0, 0,
+                        "",
+                        0,
+                        "NOZH",
+                        "",
+                        "",
+                        Scenario.STANDARD,
+                        false,
+                        "NONE",
+                        List.of(),
+                        List.of(),
+                        List.of());
 }
