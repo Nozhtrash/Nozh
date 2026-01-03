@@ -190,9 +190,9 @@ public final class SessionLearning {
             lastSaveMillis = now;
             dirty = false;
 
-            NozhConstants.LOGGER.info("Session learning stats saved ({} entries)", history.size());
+            safeLog("Session learning stats saved ({} entries)", history.size());
         } catch (IOException e) {
-            NozhConstants.LOGGER.warn("Failed to save session stats: {}", e.getMessage());
+            safeWarn("Failed to save session stats: {}", e.getMessage());
 
             try {
                 Files.deleteIfExists(tmpPath);
@@ -214,7 +214,7 @@ public final class SessionLearning {
      */
     private void load() {
         if (!statsFile.exists()) {
-            NozhConstants.LOGGER.info("No session stats file found, starting fresh");
+            safeLog("No session stats file found, starting fresh");
             return;
         }
 
@@ -227,10 +227,30 @@ public final class SessionLearning {
                 history.putAll(loaded);
                 lastSavedHash = GSON.toJson(history).hashCode();
                 lastSaveMillis = System.currentTimeMillis();
-                NozhConstants.LOGGER.info("Session learning loaded ({} entries)", history.size());
+                safeLog("Session learning loaded ({} entries)", history.size());
             }
         } catch (Exception e) {
-            NozhConstants.LOGGER.warn("Failed to load session stats: {}", e.getMessage());
+            safeWarn("Failed to load session stats: {}", e.getMessage());
+        }
+    }
+
+    private void safeLog(String message, Object... args) {
+        try {
+            if (NozhConstants.LOGGER != null) {
+                NozhConstants.LOGGER.info(message, args);
+            }
+        } catch (Throwable ignored) {
+            // Tests may not have logger initialized
+        }
+    }
+
+    private void safeWarn(String message, Object... args) {
+        try {
+            if (NozhConstants.LOGGER != null) {
+                NozhConstants.LOGGER.warn(message, args);
+            }
+        } catch (Throwable ignored) {
+            // Tests may not have logger initialized
         }
     }
 
