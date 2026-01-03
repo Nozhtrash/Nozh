@@ -1,8 +1,9 @@
 package dev.nozh.core.ui;
 
 import dev.nozh.core.capability.ProviderStatus;
-import dev.nozh.core.issues.Issue;
+import dev.nozh.core.context.Scenario;
 import dev.nozh.core.governor.GovernorMode;
+import dev.nozh.core.issues.Issue;
 import dev.nozh.core.issues.ParanoiaLevel;
 import dev.nozh.core.preset.HardwareTier;
 
@@ -48,6 +49,10 @@ public record HudViewModel(
         // Governor decision (last)
         String lastDecisionReason, // i18n key, or empty string if no decision
         long lastDecisionTimestamp,
+        String directorSteward,
+        String lastActionSummary,
+        String lastActionOutcome,
+        Scenario currentScenario,
 
         // Benchmark status
         boolean benchmarkRunning,
@@ -56,7 +61,7 @@ public record HudViewModel(
         // Detailed data (for respective sections)
         List<ProviderViewModel> providers,
         List<Issue> issues,
-        List<String> historyEntries // String summaries (cheap)
+        List<ActionHistoryEntryView> recentActions
 ) {
     /**
      * Provider view model (nested DTO).
@@ -66,6 +71,16 @@ public record HudViewModel(
             ProviderStatus status,
             String statusReason, // Empty string if no reason
             String steward
+    ) {
+    }
+
+    /**
+     * Action history entry view model.
+     */
+    public record ActionHistoryEntryView(
+            long timestampMillis,
+            String actionSummary,
+            String outcome
     ) {
     }
 
@@ -84,6 +99,10 @@ public record HudViewModel(
             0, 0, 0,
             "",
             0,
+            "NOZH",
+            "",
+            "",
+            Scenario.STANDARD,
             false,
             "NONE",
             List.of(),

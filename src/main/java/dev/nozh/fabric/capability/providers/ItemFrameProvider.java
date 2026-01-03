@@ -128,7 +128,7 @@ public final class ItemFrameProvider implements CapabilityProvider {
 
         @Override
         public double expectedGainMs() {
-            return 1.2; // Gain in storage rooms
+            return 0.9; // Gain in storage rooms
         }
 
         @Override
