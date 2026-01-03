@@ -103,7 +103,7 @@ public final class ConfigManager {
      * Debounced to prevent race conditions on rapid saves
      */
     public static void save() {
-        saveInternal(false, true, false);
+        saveInternal(false, false, false);
     }
 
     /**
@@ -117,7 +117,7 @@ public final class ConfigManager {
      * Save immediately, bypassing debounce.
      */
     public static void saveNow() {
-        saveInternal(false, true, true);
+        saveInternal(false, false, true);
     }
 
     /**
