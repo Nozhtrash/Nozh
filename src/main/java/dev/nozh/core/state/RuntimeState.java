@@ -190,6 +190,7 @@ public record RuntimeState(
                 config.debugLogs,
                 governorDisabled, governorCooldownActive, governorLastActionTimestamp,
                 benchmarkRunning, benchmarkStartTimestamp,
+                pendingAction,
                 pendingActionsCount, executionHistorySize, lastSnapshotHistorySize,
                 sessionChangesCount,
                 avgFrametimeMs, p95FrametimeMs, spikeCount,
