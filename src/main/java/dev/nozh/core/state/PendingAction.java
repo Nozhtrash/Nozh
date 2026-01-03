@@ -19,4 +19,32 @@ public record PendingAction(
         CapabilityValue newValue,
         double baselineAvgMs,
         double baselineP95Ms) {
+    /**
+     * Compatibility constructor for older call sites that did not pass the command.
+     */
+    @Deprecated(forRemoval = false)
+    public PendingAction(
+            long timestampMillis,
+            CapabilityId capability,
+            Optional<CapabilityValue> previousValue,
+            CapabilityValue newValue,
+            double baselineAvgMs,
+            double baselineP95Ms) {
+        this(
+                timestampMillis,
+                capability,
+                new Command.ApplyCapability(capability, newValue),
+                previousValue,
+                newValue,
+                baselineAvgMs,
+                baselineP95Ms);
+    }
+
+    /**
+     * Compatibility alias for older call sites.
+     */
+    @Deprecated(forRemoval = false)
+    public Command actionCommand() {
+        return command;
+    }
 }
