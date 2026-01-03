@@ -8,5 +8,5 @@ public interface ScenarioDetector {
     /**
      * Detect current scenario based on game state.
      */
-    Scenario detect();
+    ScenarioSnapshot detect();
 }
