@@ -295,7 +295,7 @@ public final class NozhCommands {
         source.sendFeedback(Text.translatable("nozh.disable.success"));
     }
 
-    private static void runApply(FabricClientCommandSource source) {
+    public static void runApply(FabricClientCommandSource source) {
         runApplySuggestion(source);
     }
 
@@ -341,7 +341,7 @@ public final class NozhCommands {
         source.sendFeedback(Text.literal("Cleared pending suggestion"));
     }
 
-    private static String formatPendingAction(PendingAction pending) {
+    public static String formatPendingAction(PendingAction pending) {
         return pending.capability().name() + "=" + pending.newValue();
     }
 }
