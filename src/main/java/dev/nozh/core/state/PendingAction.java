@@ -20,9 +20,10 @@ public record PendingAction(
         double baselineAvgMs,
         double baselineP95Ms) {
     /**
-     * Compatibility constructor for older call sites that did not pass the command.
+     * Legacy compatibility constructor for older call sites that did not pass the command.
+     * Scheduled for removal in a cleanup pass.
      */
-    @Deprecated
+    @Deprecated(since = "1.0", forRemoval = true)
     public PendingAction(
             long timestampMillis,
             CapabilityId capability,
@@ -41,9 +42,10 @@ public record PendingAction(
     }
 
     /**
-     * Compatibility alias for older call sites.
+     * Legacy compatibility alias for older call sites.
+     * Scheduled for removal in a cleanup pass.
      */
-    @Deprecated
+    @Deprecated(since = "1.0", forRemoval = true)
     public Command actionCommand() {
         return command;
     }
