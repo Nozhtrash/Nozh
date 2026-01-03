@@ -86,7 +86,10 @@ public final class SimulationGovernor {
                 ModePolicy policy = ModePolicy.forMode(mode);
 
                 // Generate candidates
-                List<ActionCandidate> candidates = actionMatrix.generateCandidates(policy, currentBound);
+                List<ActionCandidate> candidates = actionMatrix.generateCandidates(
+                                policy,
+                                currentBound,
+                                state.currentScenario());
 
                 if (candidates.isEmpty()) {
                         return Optional.empty();

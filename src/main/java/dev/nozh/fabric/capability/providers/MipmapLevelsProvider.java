@@ -189,7 +189,7 @@ public final class MipmapLevelsProvider implements CapabilityProvider {
             // - 2 → 0 levels: ~1 FPS
             //
             // Only significant in GPU-bound scenarios
-            return 0.5;
+            return 0.4;
         }
 
         @Override

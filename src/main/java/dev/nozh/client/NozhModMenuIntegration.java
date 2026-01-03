@@ -6,6 +6,7 @@ import dev.nozh.NozhConstants;
 import dev.nozh.core.config.ConfigManager;
 import dev.nozh.core.config.NozhConfig;
 import dev.nozh.core.safety.CrashLoopGuard;
+import dev.nozh.core.state.StateStore;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
 import net.minecraft.client.gui.DrawContext;
@@ -101,6 +102,7 @@ public class NozhModMenuIntegration implements ModMenuApi {
                     button -> {
                         config.enabled = !config.enabled;
                         ConfigManager.save();
+                        StateStore.getInstance().update(state -> state.withConfig(config));
                         this.clearAndInit();
                     });
             addDrawableChild(enabledButton);
@@ -115,6 +117,7 @@ public class NozhModMenuIntegration implements ModMenuApi {
                     button -> {
                         config.debugLogs = !config.debugLogs;
                         ConfigManager.save();
+                        StateStore.getInstance().update(state -> state.withConfig(config));
                         this.clearAndInit();
                     });
             addDrawableChild(debugButton);
@@ -129,6 +132,7 @@ public class NozhModMenuIntegration implements ModMenuApi {
                     button -> {
                         config.rollbackEnabled = !config.rollbackEnabled;
                         ConfigManager.save();
+                        StateStore.getInstance().update(state -> state.withConfig(config));
                         this.clearAndInit();
                     });
             addDrawableChild(rollbackButton);
@@ -143,6 +147,7 @@ public class NozhModMenuIntegration implements ModMenuApi {
                     button -> {
                         config.allowAutoTuning = !config.allowAutoTuning;
                         ConfigManager.save();
+                        StateStore.getInstance().update(state -> state.withConfig(config));
                         this.clearAndInit();
                     });
             addDrawableChild(autoTuningButton);
@@ -165,6 +170,7 @@ public class NozhModMenuIntegration implements ModMenuApi {
                         }
                         config.targetFps = fpsOptions[(currentIndex + 1) % fpsOptions.length];
                         ConfigManager.save();
+                        StateStore.getInstance().update(state -> state.withConfig(config));
                         this.clearAndInit();
                     });
             addDrawableChild(targetFpsButton);
@@ -182,6 +188,7 @@ public class NozhModMenuIntegration implements ModMenuApi {
                     Text.translatable("nozh.config.preset.low.tooltip"),
                     button -> {
                         ConfigPresets.applyLowEnd();
+                        StateStore.getInstance().update(state -> state.withConfig(ConfigManager.getConfig()));
                         this.clearAndInit();
                     });
             addDrawableChild(lowButton);
@@ -193,6 +200,7 @@ public class NozhModMenuIntegration implements ModMenuApi {
                     Text.translatable("nozh.config.preset.mid.tooltip"),
                     button -> {
                         ConfigPresets.applyMidRange();
+                        StateStore.getInstance().update(state -> state.withConfig(ConfigManager.getConfig()));
                         this.clearAndInit();
                     });
             addDrawableChild(midButton);
@@ -204,6 +212,7 @@ public class NozhModMenuIntegration implements ModMenuApi {
                     Text.translatable("nozh.config.preset.high.tooltip"),
                     button -> {
                         ConfigPresets.applyHighEnd();
+                        StateStore.getInstance().update(state -> state.withConfig(ConfigManager.getConfig()));
                         this.clearAndInit();
                     });
             addDrawableChild(highButton);
@@ -287,6 +296,7 @@ public class NozhModMenuIntegration implements ModMenuApi {
                     Text.translatable("nozh.config.confirm.yes"),
                     button -> {
                         ConfigManager.resetToDefaults();
+                        StateStore.getInstance().update(state -> state.withConfig(ConfigManager.getConfig()));
                         this.client.setScreen(parent);
                     }).dimensions(centerX - 105, centerY + 20, 100, 20).build());
 
