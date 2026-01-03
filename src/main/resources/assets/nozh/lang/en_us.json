@@ -47,5 +47,12 @@
     "nozh.config.confirm.message": "This will reset ALL configuration to defaults. Continue?",
     "nozh.config.confirm.yes": "Yes, Reset",
     "nozh.config.confirm.no": "Cancel",
-    "nozh.config.done": "Done"
+    "nozh.config.done": "Done",
+    "nozh.scenario.standard": "Standard",
+    "nozh.scenario.combat": "Combat",
+    "nozh.scenario.building": "Building",
+    "nozh.scenario.mining": "Mining",
+    "nozh.scenario.afk": "AFK",
+    "nozh.scenario.menu": "Menu",
+    "nozh.scenario.loading": "Loading"
 }

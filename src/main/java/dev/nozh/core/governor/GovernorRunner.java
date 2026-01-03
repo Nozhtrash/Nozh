@@ -75,6 +75,14 @@ public final class GovernorRunner {
     }
 
     public void onTick() {
+        dev.nozh.core.context.ScenarioSnapshot scenarioSnapshot = scenarioDetector.detect();
+        try {
+            stateStore.update(s -> s.withScenario(
+                    scenarioSnapshot.scenario(),
+                    scenarioSnapshot.confidence()));
+        } catch (Exception e) {
+            // Ignore update failure
+        }
         tickCounter++;
         if (tickCounter < POLL_INTERVAL_TICKS) {
             return;
@@ -86,16 +94,6 @@ public final class GovernorRunner {
     private void runGovernorLoop() {
         long now = System.currentTimeMillis();
         NozhConfig config = ConfigManager.getConfig();
-
-        // 1. Detect scenario and update state reference
-        dev.nozh.core.context.ScenarioSnapshot scenarioSnapshot = scenarioDetector.detect();
-        try {
-            stateStore.update(s -> s.withScenario(
-                    scenarioSnapshot.scenario(),
-                    scenarioSnapshot.confidence()));
-        } catch (Exception e) {
-            // Ignore update failure
-        }
 
         RuntimeState state = stateStore.snapshotSafe();
 
