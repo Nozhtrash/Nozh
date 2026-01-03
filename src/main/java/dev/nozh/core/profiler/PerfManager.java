@@ -1,6 +1,7 @@
 package dev.nozh.core.profiler;
 
 import dev.nozh.NozhConstants;
+import dev.nozh.api.Bound;
 import dev.nozh.api.PerfSnapshot;
 import dev.nozh.core.config.ConfigManager;
 import dev.nozh.core.config.NozhConfig;
@@ -30,6 +31,8 @@ public class PerfManager {
     private int windowSeconds;
     private final PerfWindowController windowController;
     private long lastWindowAdjustMillis = 0L;
+    private Bound lastBound = Bound.UNKNOWN;
+    private PerfSnapshot lastTickSnapshot = PerfSnapshot.empty();
 
     public PerfManager() {
         // Calculate capacity based on strict rules
@@ -75,13 +78,45 @@ public class PerfManager {
         String timestamp = DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss")
                 .withZone(ZoneOffset.UTC)
                 .format(Instant.ofEpochMilli(snapshot.timestampMillis()));
-        String extension = format == TelemetryExportFormat.CSV ? "csv" : "json";
+        String extension = switch (format) {
+            case CSV, CSV_MINIMAL -> "csv";
+            case DEBUG -> "txt";
+            default -> "json";
+        };
         Path outputFile = outputDir.resolve("telemetry_" + timestamp + "." + extension);
-        return TelemetryExportWriter.write(snapshot, samples, outputFile, format);
+        return TelemetryExportWriter.write(snapshot, samples, outputFile, format, lastBound, lastTickSnapshot);
     }
 
     public void reset() {
         sampler.reset();
+    }
+
+    public void updateDiagnostics(PerfSnapshot frameSnapshot, PerfSnapshot tickSnapshot) {
+        if (tickSnapshot != null) {
+            lastTickSnapshot = tickSnapshot;
+        }
+        if (frameSnapshot != null) {
+            lastBound = estimateBound(frameSnapshot, tickSnapshot);
+        }
+    }
+
+    public Bound getLastBound() {
+        return lastBound;
+    }
+
+    public PerfSnapshot getLastTickSnapshot() {
+        return lastTickSnapshot;
+    }
+
+    public double[] getRecentSamplesMs(int maxSamples) {
+        long[] samples = stats.snapshotSamplesNanos();
+        int count = Math.min(samples.length, Math.max(0, maxSamples));
+        double[] ms = new double[count];
+        int start = samples.length - count;
+        for (int i = 0; i < count; i++) {
+            ms[i] = samples[start + i] / 1_000_000.0;
+        }
+        return ms;
     }
 
     private void adjustWindowIfNeeded(PerfSnapshot snapshot) {
@@ -106,5 +141,46 @@ public class PerfManager {
     private int calculateCapacity(int targetFps, int windowSeconds) {
         int calcCapacity = targetFps * windowSeconds;
         return Math.max(60, Math.min(calcCapacity, 600));
+    }
+
+    private Bound estimateBound(PerfSnapshot frameSnapshot, PerfSnapshot tickSnapshot) {
+        if (frameSnapshot == null) {
+            return Bound.UNKNOWN;
+        }
+        double avgMs = frameSnapshot.avgFrametimeMs();
+        double p95Ms = frameSnapshot.p95FrametimeMs();
+        boolean frameData = frameSnapshot.sufficientData() && avgMs > 0 && p95Ms > 0;
+        boolean tickData = tickSnapshot != null && tickSnapshot.sufficientData()
+                && tickSnapshot.avgFrametimeMs() > 0 && tickSnapshot.p95FrametimeMs() > 0;
+
+        if (!frameData && !tickData) {
+            return Bound.UNKNOWN;
+        }
+
+        if (!tickData) {
+            if (avgMs > 16.67) {
+                return Bound.CPU_BOUND;
+            }
+            if (p95Ms > avgMs * 1.5) {
+                return Bound.GPU_BOUND;
+            }
+            return Bound.UNKNOWN;
+        }
+
+        double tickAvgMs = tickSnapshot.avgFrametimeMs();
+        double tickP95Ms = tickSnapshot.p95FrametimeMs();
+        boolean tickHigh = tickAvgMs > 50.0 || tickP95Ms > 50.0;
+        boolean frameHigh = frameData && (avgMs > 16.67 || p95Ms > 16.67);
+
+        if (tickHigh && frameHigh) {
+            return Bound.MIXED;
+        }
+        if (tickHigh) {
+            return Bound.CPU_BOUND;
+        }
+        if (frameHigh) {
+            return Bound.GPU_BOUND;
+        }
+        return Bound.UNKNOWN;
     }
 }

@@ -73,9 +73,19 @@ public final class NozhCommands {
                                                         runTelemetryExport(context.getSource(), TelemetryExportFormat.CSV);
                                                         return 1;
                                                     }))
+                                            .then(ClientCommandManager.literal("minimal")
+                                                    .executes(context -> {
+                                                        runTelemetryExport(context.getSource(), TelemetryExportFormat.CSV_MINIMAL);
+                                                        return 1;
+                                                    }))
                                             .then(ClientCommandManager.literal("json")
                                                     .executes(context -> {
                                                         runTelemetryExport(context.getSource(), TelemetryExportFormat.JSON);
+                                                        return 1;
+                                                    }))
+                                            .then(ClientCommandManager.literal("debug")
+                                                    .executes(context -> {
+                                                        runTelemetryExport(context.getSource(), TelemetryExportFormat.DEBUG);
                                                         return 1;
                                                     }))))
                             .then(ClientCommandManager.literal("enable")

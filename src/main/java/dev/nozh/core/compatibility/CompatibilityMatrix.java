@@ -45,6 +45,10 @@ public final class CompatibilityMatrix {
         return conflictDetector.getSteward(capability);
     }
 
+    public double getPriorityMultiplier(CapabilityId capability) {
+        return compatRegistry.getPriorityMultiplier(capability);
+    }
+
     public boolean isBlockedByDependencies(ProviderMetadata metadata) {
         if (metadata == null) {
             return false;

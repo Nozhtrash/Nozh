@@ -84,6 +84,8 @@ public final class SimulationGovernor {
                         OptimizationProfile profile,
                         int targetFps,
                         double reverseEpsilonMs,
+                        long restoreStableMillis,
+                        long restoreCooldownMillis,
                         Map<dev.nozh.core.bus.CapabilityId, dev.nozh.core.bus.CapabilityValue> baselineSettings,
                         Map<dev.nozh.core.bus.CapabilityId, dev.nozh.core.bus.CapabilityValue> currentSettings) {
                 // OFF mode → no decisions
@@ -95,13 +97,18 @@ public final class SimulationGovernor {
                 ModePolicy policy = ModePolicy.forMode(mode);
 
                 // Generate candidates
-                if (shouldReverseOptimize(state, targetFps, reverseEpsilonMs, baselineSettings, currentSettings)) {
+                if (shouldReverseOptimize(state, targetFps, reverseEpsilonMs, restoreStableMillis, nowMillis,
+                                baselineSettings, currentSettings)) {
+                        Map<dev.nozh.core.bus.CapabilityId, Long> lastChangeMillis = resolveLastChangeMillis(state);
                         List<ActionCandidate> reverseCandidates = actionMatrix.generateReverseCandidates(
                                         policy,
                                         state.currentScenario(),
                                         profile,
                                         baselineSettings,
-                                        currentSettings);
+                                        currentSettings,
+                                        lastChangeMillis,
+                                        restoreCooldownMillis,
+                                        nowMillis);
                         if (!reverseCandidates.isEmpty()) {
                                 return Optional.of(reverseCandidates.get(0));
                         }
@@ -125,12 +132,20 @@ public final class SimulationGovernor {
                         RuntimeState state,
                         int targetFps,
                         double reverseEpsilonMs,
+                        long restoreStableMillis,
+                        long nowMillis,
                         Map<dev.nozh.core.bus.CapabilityId, dev.nozh.core.bus.CapabilityValue> baselineSettings,
                         Map<dev.nozh.core.bus.CapabilityId, dev.nozh.core.bus.CapabilityValue> currentSettings) {
                 if (baselineSettings == null || baselineSettings.isEmpty()) {
                         return false;
                 }
                 if (currentSettings == null || currentSettings.isEmpty()) {
+                        return false;
+                }
+                if (!state.performanceStable()) {
+                        return false;
+                }
+                if (state.performanceStableSince() <= 0 || nowMillis - state.performanceStableSince() < restoreStableMillis) {
                         return false;
                 }
                 double avg = state.avgFrametimeMs();
@@ -142,6 +157,22 @@ public final class SimulationGovernor {
                 double targetFrameMs = 1000.0 / safeTargetFps;
                 double headroomTarget = targetFrameMs - reverseEpsilonMs;
                 return avg <= headroomTarget && p95 <= targetFrameMs * 1.05;
+        }
+
+        private Map<dev.nozh.core.bus.CapabilityId, Long> resolveLastChangeMillis(RuntimeState state) {
+                Map<dev.nozh.core.bus.CapabilityId, Long> lastChange = new java.util.EnumMap<>(
+                                dev.nozh.core.bus.CapabilityId.class);
+                if (state.capabilityHistory() == null) {
+                        return lastChange;
+                }
+                for (Map.Entry<dev.nozh.core.bus.CapabilityId, List<dev.nozh.core.state.CapabilityChangeEntry>> entry : state
+                                .capabilityHistory().entrySet()) {
+                        List<dev.nozh.core.state.CapabilityChangeEntry> history = entry.getValue();
+                        if (history != null && !history.isEmpty()) {
+                                lastChange.put(entry.getKey(), history.get(history.size() - 1).timestampMillis());
+                        }
+                }
+                return lastChange;
         }
 
         /**

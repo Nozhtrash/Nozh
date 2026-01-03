@@ -12,6 +12,7 @@ import dev.nozh.core.ui.HudViewModel;
 import dev.nozh.core.ui.HudViewModelBuilder;
 import dev.nozh.core.safety.NozhState;
 import dev.nozh.core.safety.StateManager;
+import dev.nozh.fabric.compat.CompatRegistry;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
 import net.fabricmc.fabric.api.client.rendering.v1.HudRenderCallback;
@@ -32,12 +33,17 @@ public class NozhHudRenderer implements HudRenderCallback {
     private final StateStore stateStore;
     private final ProviderRegistry providerRegistry;
     private final Supplier<PerfSnapshot> perfSnapshotSupplier;
+    private final Supplier<double[]> frametimeSamplesSupplier;
+    private final CompatRegistry compatRegistry;
 
     public NozhHudRenderer(StateStore stateStore, ProviderRegistry providerRegistry,
-            Supplier<PerfSnapshot> perfSnapshotSupplier) {
+            Supplier<PerfSnapshot> perfSnapshotSupplier,
+            Supplier<double[]> frametimeSamplesSupplier) {
         this.stateStore = stateStore;
         this.providerRegistry = providerRegistry;
         this.perfSnapshotSupplier = perfSnapshotSupplier;
+        this.frametimeSamplesSupplier = frametimeSamplesSupplier;
+        this.compatRegistry = new CompatRegistry();
     }
 
     @Override
@@ -106,6 +112,8 @@ public class NozhHudRenderer implements HudRenderCallback {
 
         lines.add(Text.translatable("nozh.hud.last_action", resolveLastAction()));
         lines.add(Text.translatable("nozh.hud.suggestion", resolveSuggestion(state)));
+        appendCompatWarnings(lines);
+        appendFrametimeGraph(lines);
         return lines;
     }
 
@@ -141,6 +149,56 @@ public class NozhHudRenderer implements HudRenderCallback {
             return "--";
         }
         return String.format("%.1f", value);
+    }
+
+    private void appendCompatWarnings(List<Text> lines) {
+        List<String> warnings = compatRegistry.getActiveWarnings();
+        if (warnings.isEmpty()) {
+            return;
+        }
+        int limit = Math.min(2, warnings.size());
+        for (int i = 0; i < limit; i++) {
+            lines.add(Text.literal("Compat: " + warnings.get(i)));
+        }
+    }
+
+    private void appendFrametimeGraph(List<Text> lines) {
+        NozhConfig config = ConfigManager.getConfig();
+        if (config == null || !config.showHudGraph) {
+            return;
+        }
+        if (frametimeSamplesSupplier == null) {
+            return;
+        }
+        double[] samples = frametimeSamplesSupplier.get();
+        if (samples == null || samples.length == 0) {
+            return;
+        }
+        lines.add(Text.literal("FT " + buildSparkline(samples)));
+    }
+
+    private String buildSparkline(double[] samples) {
+        char[] blocks = new char[] { '▁', '▂', '▃', '▄', '▅', '▆', '▇', '█' };
+        double min = Double.MAX_VALUE;
+        double max = Double.MIN_VALUE;
+        for (double sample : samples) {
+            if (sample <= 0) {
+                continue;
+            }
+            min = Math.min(min, sample);
+            max = Math.max(max, sample);
+        }
+        if (min == Double.MAX_VALUE || max == Double.MIN_VALUE) {
+            return "--";
+        }
+        double range = Math.max(1.0, max - min);
+        StringBuilder sb = new StringBuilder(samples.length);
+        for (double sample : samples) {
+            double normalized = Math.min(1.0, Math.max(0.0, (sample - min) / range));
+            int index = (int) Math.round(normalized * (blocks.length - 1));
+            sb.append(blocks[index]);
+        }
+        return sb.toString();
     }
 
     private int resolveAnchorX(NozhConfig config, int maxWidth, int screenWidth) {

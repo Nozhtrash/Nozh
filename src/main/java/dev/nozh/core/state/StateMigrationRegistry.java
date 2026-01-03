@@ -21,7 +21,7 @@ import java.util.Optional;
  */
 public final class StateMigrationRegistry {
 
-    private static final int CURRENT_VERSION = 5; // Current state version
+    private static final int CURRENT_VERSION = 6; // Current state version
 
     private final Map<Integer, StateMigrator> migrators = new HashMap<>();
 
@@ -72,11 +72,14 @@ public final class StateMigrationRegistry {
                     oldState.spikeCount(),
                     "", 0L, // lastDecisionReason, lastDecisionTimestamp default
                     oldState.sessionStartTime(),
-                    5, // Target version is 5
+                    6, // Target version is 6
                     dev.nozh.core.context.Scenario.STANDARD,
                     0.5,
                     java.util.Map.of(),
-                    java.util.Map.of());
+                    java.util.Map.of(),
+                    java.util.Map.of(),
+                    0L,
+                    false);
         });
 
         registerMigrator(3, oldState -> new RuntimeState(
@@ -107,11 +110,14 @@ public final class StateMigrationRegistry {
                 oldState.lastDecisionReason(),
                 oldState.lastDecisionTimestamp(),
                 oldState.sessionStartTime(),
-                5,
+                6,
                 oldState.currentScenario(),
                 oldState.scenarioConfidence(),
                 java.util.Map.of(),
-                java.util.Map.of()));
+                java.util.Map.of(),
+                java.util.Map.of(),
+                0L,
+                false));
 
         registerMigrator(4, oldState -> new RuntimeState(
                 oldState.enabled(),
@@ -138,11 +144,14 @@ public final class StateMigrationRegistry {
                 oldState.lastDecisionReason(),
                 oldState.lastDecisionTimestamp(),
                 oldState.sessionStartTime(),
-                5,
+                6,
                 oldState.currentScenario(),
                 oldState.scenarioConfidence(),
                 java.util.Map.of(),
-                java.util.Map.of()));
+                java.util.Map.of(),
+                java.util.Map.of(),
+                0L,
+                false));
 
         NozhConstants.LOGGER.debug("StateMigrationRegistry initialized (current version: {})", CURRENT_VERSION);
     }

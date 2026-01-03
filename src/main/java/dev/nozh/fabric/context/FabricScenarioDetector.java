@@ -29,6 +29,10 @@ public class FabricScenarioDetector implements ScenarioDetector {
     private long lastChunkSampleTick = -1L;
     private int lastChunkLoadCount = 0;
     private int recentChunkLoads = 0;
+    private dev.nozh.core.context.Scenario lastScenario = dev.nozh.core.context.Scenario.STANDARD;
+    private double lastScenarioConfidence = 0.5;
+    private long lastScenarioChangeTick = -1L;
+    private long lastLoadingTick = -1L;
 
     // AFK threshold: 30 seconds
     private static final int AFK_THRESHOLD_TICKS = 20 * 30;
@@ -40,6 +44,9 @@ public class FabricScenarioDetector implements ScenarioDetector {
     private static final double MOVEMENT_FAST_DISTANCE_SQ = 0.06 * 0.06;
     private static final double MOVEMENT_SLOW_DISTANCE_SQ = 0.02 * 0.02;
     private static final int CHUNK_LOAD_SPIKE_THRESHOLD = 6;
+    private static final int SCENARIO_HOLD_TICKS = 40;
+    private static final double SCENARIO_SWITCH_MARGIN = 0.1;
+    private static final int LOADING_HOLD_TICKS = 60;
 
     public FabricScenarioDetector() {
         this.client = MinecraftClient.getInstance();
@@ -86,6 +93,9 @@ public class FabricScenarioDetector implements ScenarioDetector {
         boolean holdingBlockItem = player.getMainHandStack().getItem() instanceof BlockItem;
         boolean buildingCandidate = holdingBlockItem;
         boolean sprinting = player.isSprinting();
+        boolean usingItem = player.isUsingItem();
+        boolean sneaking = player.isSneaking();
+        boolean underwater = player.isSubmergedInWater();
 
         double combatConfidence = 0.0;
         if (holdingWeapon) {
@@ -99,6 +109,9 @@ public class FabricScenarioDetector implements ScenarioDetector {
         }
         if (handSwinging) {
             combatConfidence += 0.2;
+        }
+        if (underwater && holdingWeapon) {
+            combatConfidence += 0.1;
         }
         if (targetEntity) {
             combatConfidence += 0.2;
@@ -124,6 +137,9 @@ public class FabricScenarioDetector implements ScenarioDetector {
         if (!inputRecent && stationaryTicks > 40) {
             miningConfidence += 0.1;
         }
+        if (sneaking && holdingPickaxe) {
+            miningConfidence += 0.1;
+        }
         miningConfidence = clamp(miningConfidence + tpsDropConfidence * 0.05);
 
         double buildingConfidence = 0.0;
@@ -134,6 +150,9 @@ public class FabricScenarioDetector implements ScenarioDetector {
             buildingConfidence += 0.25;
         }
         if (player.isCreative()) {
+            buildingConfidence += 0.15;
+        }
+        if (usingItem && holdingBlockItem) {
             buildingConfidence += 0.15;
         }
         if (inputRecent) {
@@ -174,6 +193,9 @@ public class FabricScenarioDetector implements ScenarioDetector {
             loadingConfidence += Math.min(0.3, chunkLoadRate * 0.03);
         }
         loadingConfidence = clamp(loadingConfidence + tpsDropConfidence * 0.15);
+        if (loadingConfidence > 0.4) {
+            lastLoadingTick = client.world.getTime();
+        }
 
         dev.nozh.core.context.Scenario scenario = dev.nozh.core.context.Scenario.STANDARD;
         double confidence = standardConfidence;
@@ -201,6 +223,31 @@ public class FabricScenarioDetector implements ScenarioDetector {
         if (loadingConfidence > confidence) {
             scenario = dev.nozh.core.context.Scenario.LOADING;
             confidence = loadingConfidence;
+        }
+
+        long worldTick = client.world.getTime();
+        if (lastLoadingTick >= 0 && worldTick - lastLoadingTick < LOADING_HOLD_TICKS) {
+            scenario = dev.nozh.core.context.Scenario.LOADING;
+            confidence = Math.max(confidence, 0.6);
+        }
+
+        if (lastScenarioChangeTick < 0) {
+            lastScenarioChangeTick = worldTick;
+            lastScenario = scenario;
+            lastScenarioConfidence = confidence;
+        } else if (scenario != lastScenario) {
+            long ticksSinceChange = worldTick - lastScenarioChangeTick;
+            if (ticksSinceChange < SCENARIO_HOLD_TICKS
+                    && confidence < lastScenarioConfidence + SCENARIO_SWITCH_MARGIN) {
+                scenario = lastScenario;
+                confidence = lastScenarioConfidence;
+            } else {
+                lastScenario = scenario;
+                lastScenarioConfidence = confidence;
+                lastScenarioChangeTick = worldTick;
+            }
+        } else {
+            lastScenarioConfidence = confidence;
         }
 
         return new ScenarioSnapshot(scenario, confidence);

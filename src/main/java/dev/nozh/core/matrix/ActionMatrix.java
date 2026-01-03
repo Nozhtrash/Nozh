@@ -153,8 +153,13 @@ public final class ActionMatrix {
                 continue;
             }
 
+            double priorityMultiplier = compatibilityMatrix != null
+                    ? compatibilityMatrix.getPriorityMultiplier(id)
+                    : 1.0;
+            double adjustedExpectedGain = metadata.expectedGainMs() * priorityMultiplier;
+
             // Skip if no expected gain
-            if (metadata.expectedGainMs() <= 0) {
+            if (adjustedExpectedGain <= 0) {
                 continue;
             }
 
@@ -163,7 +168,7 @@ public final class ActionMatrix {
                     id,
                     targetValue, // Capability value object
                     determineTier(metadata),
-                    metadata.expectedGainMs(),
+                    adjustedExpectedGain,
                     metadata.safetyLevel(),
                     metadata.rollbackGuarantee(),
                     metadata.gameplayImpact(),
@@ -200,7 +205,10 @@ public final class ActionMatrix {
             Scenario scenario,
             OptimizationProfile profile,
             Map<CapabilityId, CapabilityValue> baselineSettings,
-            Map<CapabilityId, CapabilityValue> currentSettings) {
+            Map<CapabilityId, CapabilityValue> currentSettings,
+            Map<CapabilityId, Long> lastChangeMillis,
+            long cooldownMillis,
+            long nowMillis) {
         List<ActionCandidate> candidates = new ArrayList<>();
         long now = System.currentTimeMillis();
 
@@ -224,6 +232,12 @@ public final class ActionMatrix {
 
             if (compatibilityMatrix != null && compatibilityMatrix.isExternallyManaged(id, metadata)) {
                 continue;
+            }
+            if (lastChangeMillis != null) {
+                long lastChange = lastChangeMillis.getOrDefault(id, 0L);
+                if (lastChange > 0 && nowMillis - lastChange < cooldownMillis) {
+                    continue;
+                }
             }
 
             double historicalSuccess = successTracker.getSuccessRate(id);

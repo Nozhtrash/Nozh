@@ -12,10 +12,10 @@ package dev.nozh.core.state;
 import dev.nozh.core.bus.CapabilityId;
 import dev.nozh.core.bus.CapabilityValue;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-
-import dev.nozh.core.state.ActionHistoryEntry;
 
 /**
  * Runtime state (Contract 1).
@@ -59,8 +59,11 @@ public record RuntimeState(
         dev.nozh.core.context.Scenario currentScenario,
         double scenarioConfidence,
         Map<CapabilityId, CapabilityValue> baselineSettings,
-        Map<CapabilityId, CapabilityValue> currentSettings) {
-    private static final int CURRENT_VERSION = 5; // Bump version
+        Map<CapabilityId, CapabilityValue> currentSettings,
+        Map<CapabilityId, List<CapabilityChangeEntry>> capabilityHistory,
+        long performanceStableSince,
+        boolean performanceStable) {
+    private static final int CURRENT_VERSION = 6; // Bump version
 
     /**
      * Create default initial state.
@@ -95,7 +98,10 @@ public record RuntimeState(
                 System.currentTimeMillis(), CURRENT_VERSION,
                 dev.nozh.core.context.Scenario.STANDARD, 0.5,
                 Map.of(),
-                Map.of());
+                Map.of(),
+                Map.of(),
+                0L,
+                false);
     }
 
     /**
@@ -104,6 +110,7 @@ public record RuntimeState(
     public RuntimeState withGovernorAction(long timestamp, PendingAction pending, ActionHistoryEntry actionEntry,
             int maxHistoryEntries) {
         List<ActionHistoryEntry> updatedHistory = mergeHistory(actionHistory, actionEntry, maxHistoryEntries);
+        int nextHistorySize = executionHistorySize + 1;
         return new RuntimeState(
                 enabled, safeMode, autoTuning, debugLogs,
                 governorDisabled,
@@ -122,7 +129,32 @@ public record RuntimeState(
                 lastDecisionReason, lastDecisionTimestamp,
                 sessionStartTime, stateVersion,
                 currentScenario, scenarioConfidence,
-                baselineSettings, currentSettings);
+                baselineSettings, currentSettings,
+                capabilityHistory, performanceStableSince, performanceStable);
+    }
+
+    public RuntimeState withGovernorAction(long timestamp, PendingAction pending) {
+        int nextHistorySize = executionHistorySize + 1;
+        return new RuntimeState(
+                enabled, safeMode, autoTuning, debugLogs,
+                governorDisabled,
+                true,
+                timestamp,
+                benchmarkRunning, benchmarkValidity, benchmarkStartTimestamp,
+                Optional.of(pending),
+                suggestedAction,
+                pendingAction.isPresent() ? pendingActionsCount + 1 : 1,
+                nextHistorySize,
+                lastSnapshotHistorySize,
+                actionHistory,
+                sessionChangesCount + 1,
+                avgFrametimeMs, p95FrametimeMs, p99FrametimeMs, frametimeStddevMs, tickTimeAvg, tickTimeP95,
+                spikeCount,
+                lastDecisionReason, lastDecisionTimestamp,
+                sessionStartTime, stateVersion,
+                currentScenario, scenarioConfidence,
+                baselineSettings, currentSettings,
+                capabilityHistory, performanceStableSince, performanceStable);
     }
 
     public RuntimeState withAppliedSuggestion(long timestamp, PendingAction pending, ActionHistoryEntry actionEntry,
@@ -146,7 +178,8 @@ public record RuntimeState(
                 lastDecisionReason, lastDecisionTimestamp,
                 sessionStartTime, stateVersion,
                 currentScenario, scenarioConfidence,
-                baselineSettings, currentSettings);
+                baselineSettings, currentSettings,
+                capabilityHistory, performanceStableSince, performanceStable);
     }
 
     /**
@@ -171,7 +204,8 @@ public record RuntimeState(
                 lastDecisionReason, lastDecisionTimestamp,
                 sessionStartTime, stateVersion,
                 currentScenario, scenarioConfidence,
-                baselineSettings, currentSettings);
+                baselineSettings, currentSettings,
+                capabilityHistory, performanceStableSince, performanceStable);
     }
 
     /**
@@ -196,7 +230,8 @@ public record RuntimeState(
                 lastDecisionReason, lastDecisionTimestamp,
                 sessionStartTime, stateVersion,
                 currentScenario, scenarioConfidence,
-                baselineSettings, currentSettings);
+                baselineSettings, currentSettings,
+                capabilityHistory, performanceStableSince, performanceStable);
     }
 
     /**
@@ -221,7 +256,8 @@ public record RuntimeState(
                 lastDecisionReason, lastDecisionTimestamp,
                 sessionStartTime, stateVersion,
                 currentScenario, scenarioConfidence,
-                baselineSettings, currentSettings);
+                baselineSettings, currentSettings,
+                capabilityHistory, performanceStableSince, performanceStable);
     }
 
     /**
@@ -248,7 +284,8 @@ public record RuntimeState(
                 lastDecisionReason, lastDecisionTimestamp,
                 sessionStartTime, stateVersion,
                 currentScenario, scenarioConfidence,
-                baselineSettings, currentSettings);
+                baselineSettings, currentSettings,
+                capabilityHistory, performanceStableSince, performanceStable);
     }
 
     /**
@@ -267,7 +304,8 @@ public record RuntimeState(
                 lastDecisionReason, lastDecisionTimestamp,
                 sessionStartTime, stateVersion,
                 currentScenario, scenarioConfidence,
-                baselineSettings, currentSettings);
+                baselineSettings, currentSettings,
+                capabilityHistory, performanceStableSince, performanceStable);
     }
 
     /**
@@ -288,7 +326,8 @@ public record RuntimeState(
                 lastDecisionReason, lastDecisionTimestamp,
                 sessionStartTime, stateVersion,
                 currentScenario, scenarioConfidence,
-                baselineSettings, currentSettings);
+                baselineSettings, currentSettings,
+                capabilityHistory, performanceStableSince, performanceStable);
     }
 
     /**
@@ -307,7 +346,8 @@ public record RuntimeState(
                 lastDecisionReason, lastDecisionTimestamp,
                 sessionStartTime, stateVersion,
                 scenario, confidence,
-                baselineSettings, currentSettings);
+                baselineSettings, currentSettings,
+                capabilityHistory, performanceStableSince, performanceStable);
     }
 
     // REMOVED: withGovernorSnapshot() - uses deleted GovernorMode and ParanoiaLevel
@@ -337,7 +377,8 @@ public record RuntimeState(
                 lastDecisionReason, lastDecisionTimestamp,
                 sessionStartTime, stateVersion,
                 currentScenario, scenarioConfidence,
-                baselineSettings, currentSettings);
+                baselineSettings, currentSettings,
+                capabilityHistory, performanceStableSince, performanceStable);
     }
 
     /**
@@ -359,7 +400,8 @@ public record RuntimeState(
                 timestamp,
                 sessionStartTime, stateVersion,
                 currentScenario, scenarioConfidence,
-                baselineSettings, currentSettings);
+                baselineSettings, currentSettings,
+                capabilityHistory, performanceStableSince, performanceStable);
     }
 
     public RuntimeState withPendingSuggestion(PendingAction suggestion) {
@@ -377,7 +419,8 @@ public record RuntimeState(
                 lastDecisionReason, lastDecisionTimestamp,
                 sessionStartTime, stateVersion,
                 currentScenario, scenarioConfidence,
-                baselineSettings, currentSettings);
+                baselineSettings, currentSettings,
+                capabilityHistory, performanceStableSince, performanceStable);
     }
 
     public RuntimeState withPendingSuggestionCleared() {
@@ -395,7 +438,8 @@ public record RuntimeState(
                 lastDecisionReason, lastDecisionTimestamp,
                 sessionStartTime, stateVersion,
                 currentScenario, scenarioConfidence,
-                baselineSettings, currentSettings);
+                baselineSettings, currentSettings,
+                capabilityHistory, performanceStableSince, performanceStable);
     }
 
     /**
@@ -433,7 +477,10 @@ public record RuntimeState(
                 dev.nozh.core.context.Scenario.STANDARD,
                 0.5,
                 Map.of(),
-                Map.of());
+                Map.of(),
+                Map.of(),
+                0L,
+                false);
     }
 
     public RuntimeState withBaselineSettings(Map<CapabilityId, CapabilityValue> baseline) {
@@ -442,13 +489,16 @@ public record RuntimeState(
                 governorDisabled, governorCooldownActive, governorLastActionTimestamp,
                 benchmarkRunning, benchmarkValidity, benchmarkStartTimestamp,
                 pendingAction, suggestedAction, pendingActionsCount, executionHistorySize, lastSnapshotHistorySize,
+                actionHistory,
                 sessionChangesCount,
-                avgFrametimeMs, p95FrametimeMs, tickTimeAvg, tickTimeP95, spikeCount,
+                avgFrametimeMs, p95FrametimeMs, p99FrametimeMs, frametimeStddevMs, tickTimeAvg, tickTimeP95,
+                spikeCount,
                 lastDecisionReason, lastDecisionTimestamp,
                 sessionStartTime, stateVersion,
                 currentScenario, scenarioConfidence,
                 baseline,
-                currentSettings);
+                currentSettings,
+                capabilityHistory, performanceStableSince, performanceStable);
     }
 
     public RuntimeState withCurrentSettings(Map<CapabilityId, CapabilityValue> settings) {
@@ -457,13 +507,85 @@ public record RuntimeState(
                 governorDisabled, governorCooldownActive, governorLastActionTimestamp,
                 benchmarkRunning, benchmarkValidity, benchmarkStartTimestamp,
                 pendingAction, suggestedAction, pendingActionsCount, executionHistorySize, lastSnapshotHistorySize,
+                actionHistory,
                 sessionChangesCount,
-                avgFrametimeMs, p95FrametimeMs, tickTimeAvg, tickTimeP95, spikeCount,
+                avgFrametimeMs, p95FrametimeMs, p99FrametimeMs, frametimeStddevMs, tickTimeAvg, tickTimeP95,
+                spikeCount,
                 lastDecisionReason, lastDecisionTimestamp,
                 sessionStartTime, stateVersion,
                 currentScenario, scenarioConfidence,
                 baselineSettings,
-                settings);
+                settings,
+                capabilityHistory, performanceStableSince, performanceStable);
+    }
+
+    public RuntimeState withCapabilityHistoryEntry(
+            CapabilityId capabilityId,
+            CapabilityValue previousValue,
+            CapabilityValue newValue,
+            CapabilityChangeType type,
+            int maxEntries,
+            long timestampMillis) {
+        if (capabilityId == null) {
+            return this;
+        }
+        Map<CapabilityId, List<CapabilityChangeEntry>> updated = new java.util.EnumMap<>(CapabilityId.class);
+        if (capabilityHistory != null) {
+            updated.putAll(capabilityHistory);
+        }
+        List<CapabilityChangeEntry> history = new ArrayList<>(updated.getOrDefault(capabilityId, List.of()));
+        history.add(new CapabilityChangeEntry(timestampMillis, capabilityId, previousValue, newValue, type));
+        while (history.size() > maxEntries && maxEntries > 0) {
+            history.remove(0);
+        }
+        updated.put(capabilityId, List.copyOf(history));
+        return new RuntimeState(
+                enabled, safeMode, autoTuning, debugLogs,
+                governorDisabled, governorCooldownActive, governorLastActionTimestamp,
+                benchmarkRunning, benchmarkValidity, benchmarkStartTimestamp,
+                pendingAction, suggestedAction, pendingActionsCount, executionHistorySize, lastSnapshotHistorySize,
+                actionHistory,
+                sessionChangesCount,
+                avgFrametimeMs, p95FrametimeMs, p99FrametimeMs, frametimeStddevMs, tickTimeAvg, tickTimeP95,
+                spikeCount,
+                lastDecisionReason, lastDecisionTimestamp,
+                sessionStartTime, stateVersion,
+                currentScenario, scenarioConfidence,
+                baselineSettings,
+                currentSettings,
+                updated, performanceStableSince, performanceStable);
+    }
+
+    public RuntimeState withPerformanceStability(boolean stable, long stableSinceMillis) {
+        long nextStableSince = stable ? stableSinceMillis : 0L;
+        return new RuntimeState(
+                enabled, safeMode, autoTuning, debugLogs,
+                governorDisabled, governorCooldownActive, governorLastActionTimestamp,
+                benchmarkRunning, benchmarkValidity, benchmarkStartTimestamp,
+                pendingAction, suggestedAction, pendingActionsCount, executionHistorySize, lastSnapshotHistorySize,
+                actionHistory,
+                sessionChangesCount,
+                avgFrametimeMs, p95FrametimeMs, p99FrametimeMs, frametimeStddevMs, tickTimeAvg, tickTimeP95,
+                spikeCount,
+                lastDecisionReason, lastDecisionTimestamp,
+                sessionStartTime, stateVersion,
+                currentScenario, scenarioConfidence,
+                baselineSettings,
+                currentSettings,
+                capabilityHistory,
+                nextStableSince,
+                stable);
+    }
+
+    public long getLastCapabilityChangeMillis(CapabilityId capabilityId) {
+        if (capabilityId == null || capabilityHistory == null) {
+            return 0L;
+        }
+        List<CapabilityChangeEntry> history = capabilityHistory.get(capabilityId);
+        if (history == null || history.isEmpty()) {
+            return 0L;
+        }
+        return history.get(history.size() - 1).timestampMillis();
     }
 
     public RuntimeState withActionOutcome(long timestampMillis, ActionHistoryEntry updatedEntry) {
@@ -489,7 +611,9 @@ public record RuntimeState(
                 spikeCount,
                 lastDecisionReason, lastDecisionTimestamp,
                 sessionStartTime, stateVersion,
-                currentScenario, scenarioConfidence);
+                currentScenario, scenarioConfidence,
+                baselineSettings, currentSettings,
+                capabilityHistory, performanceStableSince, performanceStable);
     }
 
     private List<ActionHistoryEntry> mergeHistory(

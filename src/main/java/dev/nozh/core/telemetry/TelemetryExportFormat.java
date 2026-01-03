@@ -2,5 +2,7 @@ package dev.nozh.core.telemetry;
 
 public enum TelemetryExportFormat {
     CSV,
-    JSON
+    CSV_MINIMAL,
+    JSON,
+    DEBUG
 }

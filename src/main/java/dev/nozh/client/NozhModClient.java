@@ -12,6 +12,8 @@ import dev.nozh.core.governor.GovernorRunner;
 import dev.nozh.core.matrix.ActionSuccessTracker;
 import dev.nozh.core.safety.CrashLoopGuard;
 import dev.nozh.core.state.PendingAction;
+import dev.nozh.core.state.ActionHistoryEntry;
+import dev.nozh.core.state.CapabilityChangeType;
 import dev.nozh.core.state.StateStore;
 import dev.nozh.fabric.FabricNozhLogger;
 import dev.nozh.fabric.capability.MinecraftOptionsAdapter;
@@ -19,6 +21,7 @@ import dev.nozh.fabric.capability.ProductionMinecraftOptionsAdapter;
 import dev.nozh.fabric.capability.ProviderBootstrap;
 import dev.nozh.fabric.capability.StandardCapabilityExecutor;
 import dev.nozh.client.hud.NozhHudRenderer;
+import dev.nozh.fabric.compat.CompatRegistry;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
@@ -33,7 +36,6 @@ import net.minecraft.client.util.InputUtil;
 import net.minecraft.text.Text;
 import org.lwjgl.glfw.GLFW;
 
-import java.util.function.Consumer;
 
 /**
  * NOZH Client-side initializer - FULL INTEGRATION.
@@ -55,10 +57,11 @@ public class NozhModClient implements ClientModInitializer {
     private static KeyBinding toggleHudKey;
     private static KeyBinding applySuggestionKey;
     private static boolean safeModeNotified = false;
+    private static PendingAction pendingConfirmation;
+    private static long confirmationExpiresAt = 0L;
 
     private static int tickCounter = 0;
     private static final int TELEMETRY_UPDATE_INTERVAL = 20; // Every second (20 ticks)
-    private static final int GOVERNOR_POLL_INTERVAL = 100; // Every 5 seconds (100 ticks)
     private static final int SESSION_SAVE_INTERVAL = 1200; // Every 60 seconds (1200 ticks)
 
     @Override
@@ -89,6 +92,10 @@ public class NozhModClient implements ClientModInitializer {
         providerRegistry = new ProviderRegistry(healthTracker);
         ProviderBootstrap.registerAll(providerRegistry, optionsAdapter);
         logger.info("Registered " + providerRegistry.getAllProviders().size() + " capability providers");
+        CompatRegistry compatRegistry = new CompatRegistry();
+        for (String warning : compatRegistry.getActiveWarnings()) {
+            logger.warn("Compat: " + warning);
+        }
 
         // 5. Create ActionSuccessTracker (uses in-memory storage for now)
         String storagePath = ".minecraft/config/nozh/action_success.json";
@@ -155,7 +162,8 @@ public class NozhModClient implements ClientModInitializer {
         HudRenderCallback.EVENT.register(new NozhHudRenderer(
                 stateStore,
                 providerRegistry,
-                () -> perfManager != null ? perfManager.getSnapshot() : dev.nozh.api.PerfSnapshot.empty()));
+                () -> perfManager != null ? perfManager.getSnapshot() : dev.nozh.api.PerfSnapshot.empty(),
+                () -> perfManager != null ? perfManager.getRecentSamplesMs(30) : new double[0]));
 
         // === TICK HANDLER SETUP ===
 
@@ -202,9 +210,7 @@ public class NozhModClient implements ClientModInitializer {
             }
 
             // Run governor decision loop every 5 seconds
-            if (tickCounter % GOVERNOR_POLL_INTERVAL == 0) {
-                governorRunner.onTick();
-            }
+            governorRunner.onTick();
 
             if (tickCounter % SESSION_SAVE_INTERVAL == 0) {
                 sessionLearning.saveIfDue();
@@ -259,10 +265,34 @@ public class NozhModClient implements ClientModInitializer {
                         tickSnapshot.sufficientData() ? tickSnapshot.avgFrametimeMs() : state.tickTimeAvg(),
                         tickSnapshot.sufficientData() ? tickSnapshot.p95FrametimeMs() : state.tickTimeP95()));
             }
+            perfManager.updateDiagnostics(frameSnapshot, tickSnapshot);
+            updatePerformanceStability(frameSnapshot);
         } catch (Exception e) {
             // Never crash telemetry update
             NozhConstants.LOGGER.debug("Telemetry update failed: " + e.getMessage());
         }
+    }
+
+    private void updatePerformanceStability(dev.nozh.api.PerfSnapshot frameSnapshot) {
+        if (frameSnapshot == null || !frameSnapshot.sufficientData()) {
+            return;
+        }
+        NozhConfig config = ConfigManager.getConfig();
+        double targetFrameMs = 1000.0 / Math.max(1, config.targetFps);
+        boolean stable = frameSnapshot.avgFrametimeMs() > 0
+                && frameSnapshot.p95FrametimeMs() > 0
+                && frameSnapshot.avgFrametimeMs() <= targetFrameMs - config.reverseEpsilonMs
+                && frameSnapshot.p95FrametimeMs() <= targetFrameMs * 1.05;
+        long now = System.currentTimeMillis();
+        stateStore.update(state -> {
+            if (!stable) {
+                return state.withPerformanceStability(false, 0L);
+            }
+            if (state.performanceStable()) {
+                return state;
+            }
+            return state.withPerformanceStability(true, now);
+        });
     }
 
     public static dev.nozh.core.profiler.PerfManager getPerfManager() {
@@ -299,6 +329,7 @@ public class NozhModClient implements ClientModInitializer {
 
         RuntimeState state = StateStore.getInstance().snapshotSafe();
         if (state.suggestedAction().isEmpty()) {
+            clearConfirmation();
             notifyClient(client,
                     Text.translatable("nozh.suggestion.apply.none"),
                     Text.translatable("nozh.suggestion.apply.none_detail"));
@@ -306,8 +337,20 @@ public class NozhModClient implements ClientModInitializer {
         }
 
         PendingAction pending = state.suggestedAction().get();
-        var command = pending.command();
         long now = System.currentTimeMillis();
+        boolean isRestore = state.baselineSettings() != null
+                && state.baselineSettings().containsKey(pending.capability())
+                && pending.newValue().equals(state.baselineSettings().get(pending.capability()));
+        CapabilityChangeType changeType = isRestore ? CapabilityChangeType.RESTORE : CapabilityChangeType.REDUCE;
+        if (!isConfirmationReady(pending, now)) {
+            queueConfirmation(pending, now);
+            notifyClient(client,
+                    Text.literal("NOZH"),
+                    Text.literal("Press again to confirm: " + pending.capability().name()));
+            return;
+        }
+        var command = pending.command();
+        clearConfirmation();
 
         actionBus.dispatch(command, report -> {
             if (report.succeeded()) {
@@ -315,6 +358,7 @@ public class NozhModClient implements ClientModInitializer {
                         Text.translatable("nozh.suggestion.apply.success"),
                         Text.translatable("nozh.suggestion.apply.success_detail",
                                 pending.capability().name(), pending.newValue().toString()));
+                recordCapabilityChange(pending, changeType, now);
             } else {
                 String reason = report.error().orElse("unknown");
                 notifyClient(client,
@@ -324,9 +368,47 @@ public class NozhModClient implements ClientModInitializer {
             }
         });
 
+        ActionHistoryEntry actionEntry = new ActionHistoryEntry(
+                now,
+                pending.capability().name() + "=" + pending.newValue(),
+                pending.scenario(),
+                pending.scenarioConfidence(),
+                pending.baselineSnapshot(),
+                dev.nozh.api.PerfSnapshot.empty(),
+                dev.nozh.core.governor.ActionOutcome.NEUTRAL,
+                false);
+
         StateStore.getInstance().update(currentState -> currentState
-                .withGovernorAction(now, pending)
+                .withAppliedSuggestion(now, pending, actionEntry, ConfigManager.getConfig().historyMaxEntries)
                 .withSuggestedActionCleared());
+    }
+
+    private static boolean isConfirmationReady(PendingAction pending, long now) {
+        if (pendingConfirmation == null || now > confirmationExpiresAt) {
+            return false;
+        }
+        return pendingConfirmation.capability() == pending.capability()
+                && pendingConfirmation.newValue().equals(pending.newValue());
+    }
+
+    private static void queueConfirmation(PendingAction pending, long now) {
+        pendingConfirmation = pending;
+        confirmationExpiresAt = now + 5000L;
+    }
+
+    private static void clearConfirmation() {
+        pendingConfirmation = null;
+        confirmationExpiresAt = 0L;
+    }
+
+    private static void recordCapabilityChange(PendingAction pending, CapabilityChangeType type, long now) {
+        StateStore.getInstance().update(state -> state.withCapabilityHistoryEntry(
+                pending.capability(),
+                pending.previousValue().orElse(null),
+                pending.newValue(),
+                type,
+                ConfigManager.getConfig().capabilityHistoryMaxEntries,
+                now));
     }
 
     private static void notifyClient(MinecraftClient client, Text title, Text message) {

@@ -14,10 +14,12 @@ import dev.nozh.core.matrix.ActionSuccessTracker;
 import dev.nozh.core.matrix.ConfidenceCalculator;
 import dev.nozh.core.governor.OptimizationProfile;
 import dev.nozh.core.compatibility.CompatibilityMatrix;
-import dev.nozh.core.compatibility.ModConflictDetector;
+import dev.nozh.api.PerfSnapshot;
 import dev.nozh.core.state.RuntimeState;
 import dev.nozh.core.state.StateStore;
 import dev.nozh.core.state.PendingAction;
+import dev.nozh.core.state.ActionHistoryEntry;
+import dev.nozh.core.governor.ActionOutcome;
 import dev.nozh.core.bus.CapabilityValue;
 
 import dev.nozh.core.monitoring.ChunkLoadMonitor;
@@ -176,6 +178,8 @@ public final class GovernorRunner {
                 OptimizationProfile.fromConfig(config.optimizationProfile),
                 config.targetFps,
                 config.reverseEpsilonMs,
+                config.restoreStableMillis,
+                config.restoreCooldownMillis,
                 state.baselineSettings(),
                 state.currentSettings());
 
@@ -224,6 +228,12 @@ public final class GovernorRunner {
 
         // Dispatch via ActionBus
         if (decision.targetValue() != null) {
+            boolean isRestore = state.baselineSettings() != null
+                    && state.baselineSettings().containsKey(decision.capabilityId())
+                    && decision.targetValue().equals(state.baselineSettings().get(decision.capabilityId()));
+            dev.nozh.core.state.CapabilityChangeType changeType = isRestore
+                    ? dev.nozh.core.state.CapabilityChangeType.RESTORE
+                    : dev.nozh.core.state.CapabilityChangeType.REDUCE;
             PerfSnapshot baselineSnapshot = perfSnapshotSupplier.get();
             Optional<dev.nozh.core.bus.CapabilityValue> previousValue = providerRegistry.get(decision.capabilityId())
                     .flatMap(provider -> provider.getCurrentValueSafe());
@@ -258,6 +268,17 @@ public final class GovernorRunner {
                     logger.info("Governor action succeeded");
                     predictiveAnalyzer.reset();
                     refreshCurrentSettings();
+                    try {
+                        stateStore.update(stateSnapshot -> stateSnapshot.withCapabilityHistoryEntry(
+                                pending.capability(),
+                                pending.previousValue().orElse(null),
+                                pending.newValue(),
+                                changeType,
+                                config.capabilityHistoryMaxEntries,
+                                now));
+                    } catch (Exception e) {
+                        logger.warn("Failed to record capability history: " + e.getMessage());
+                    }
                 } else {
                     logger.warn("Governor action failed: " +
                             report.error().orElse("unknown"));
@@ -418,6 +439,16 @@ public final class GovernorRunner {
         boolean p95Worsened = p95 > pending.baselineP95Ms() + config.improvementEpsilonP95Ms;
         boolean p95Ineffective = p95 > pending.baselineP95Ms() - config.improvementEpsilonP95Ms;
 
+        PerfSnapshot currentSnapshot = perfSnapshotSupplier.get();
+        ActionOutcome outcome;
+        if (avgWorsened || p95Worsened) {
+            outcome = ActionOutcome.NEGATIVE;
+        } else if (avgIneffective || p95Ineffective) {
+            outcome = ActionOutcome.NEUTRAL;
+        } else {
+            outcome = ActionOutcome.POSITIVE;
+        }
+
         boolean rollbackApplied = false;
         if (outcome == ActionOutcome.NEGATIVE) {
             if (config.rollbackEnabled) {
@@ -430,6 +461,17 @@ public final class GovernorRunner {
                             .ifPresentOrElse(rollback -> actionBus.dispatch(rollback, r -> {
                                 if (r.succeeded()) {
                                     logger.info("Rollback succeeded (Action was harmful)");
+                                    try {
+                                        stateStore.update(stateSnapshot -> stateSnapshot.withCapabilityHistoryEntry(
+                                                pending.capability(),
+                                                pending.newValue(),
+                                                pending.previousValue().orElse(null),
+                                                dev.nozh.core.state.CapabilityChangeType.ROLLBACK,
+                                                config.capabilityHistoryMaxEntries,
+                                                nowMillis()));
+                                    } catch (Exception e) {
+                                        logger.warn("Failed to record rollback history: " + e.getMessage());
+                                    }
                                 } else {
                                     logger.warn("Rollback failed");
                                 }

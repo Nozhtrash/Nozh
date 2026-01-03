@@ -4,7 +4,8 @@ import dev.nozh.core.bus.CapabilityId;
 
 import java.util.EnumSet;
 
-public record CompatModule(String modId, String displayName, EnumSet<CapabilityId> managedCapabilities) {
+public record CompatModule(String modId, String displayName, EnumSet<CapabilityId> managedCapabilities,
+        double priorityMultiplier, String warningMessage) {
     public boolean manages(CapabilityId capability) {
         return managedCapabilities.contains(capability);
     }
