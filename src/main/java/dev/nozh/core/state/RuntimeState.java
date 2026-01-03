@@ -36,6 +36,7 @@ public record RuntimeState(
         String benchmarkValidity,
         long benchmarkStartTimestamp,
         Optional<PendingAction> pendingAction,
+        Optional<PendingAction> suggestedAction,
         int pendingActionsCount,
         int executionHistorySize,
         int lastSnapshotHistorySize,
@@ -51,7 +52,7 @@ public record RuntimeState(
         int stateVersion,
         dev.nozh.core.context.Scenario currentScenario,
         double scenarioConfidence) {
-    private static final int CURRENT_VERSION = 3; // Bump version
+    private static final int CURRENT_VERSION = 4; // Bump version
 
     /**
      * Create default initial state.
@@ -69,6 +70,7 @@ public record RuntimeState(
                 "NONE", // benchmarkValidity
                 0L, // benchmarkStartTimestamp
                 Optional.empty(), // pendingAction
+                Optional.empty(), // suggestedAction
                 0, // pendingActionsCount
                 0, // executionHistorySize
                 0, // lastSnapshotHistorySize
@@ -94,6 +96,7 @@ public record RuntimeState(
                 timestamp, // governorLastActionTimestamp
                 benchmarkRunning, benchmarkValidity, benchmarkStartTimestamp,
                 Optional.of(pending),
+                suggestedAction,
                 pendingAction.isPresent() ? pendingActionsCount + 1 : 1,
                 executionHistorySize + 1, // increment history
                 lastSnapshotHistorySize,
@@ -115,6 +118,7 @@ public record RuntimeState(
                 governorLastActionTimestamp,
                 benchmarkRunning, benchmarkValidity, benchmarkStartTimestamp,
                 Optional.empty(),
+                suggestedAction,
                 0,
                 executionHistorySize,
                 lastSnapshotHistorySize,
@@ -123,6 +127,58 @@ public record RuntimeState(
                 lastDecisionReason, lastDecisionTimestamp,
                 sessionStartTime, stateVersion,
                 currentScenario, scenarioConfidence);
+    }
+
+    /**
+     * Update suggested action (manual assist).
+     */
+    public RuntimeState withSuggestedAction(PendingAction pending) {
+        return new RuntimeState(
+                enabled, safeMode, autoTuning, debugLogs,
+                governorDisabled,
+                governorCooldownActive,
+                governorLastActionTimestamp,
+                benchmarkRunning, benchmarkValidity, benchmarkStartTimestamp,
+                pendingAction,
+                Optional.of(pending),
+                pendingActionsCount,
+                executionHistorySize,
+                lastSnapshotHistorySize,
+                sessionChangesCount,
+                avgFrametimeMs, p95FrametimeMs, tickTimeAvg, tickTimeP95, spikeCount,
+                lastDecisionReason, lastDecisionTimestamp,
+                sessionStartTime, stateVersion,
+                currentScenario, scenarioConfidence);
+    }
+
+    /**
+     * Clear any suggested action (manual assist).
+     */
+    public RuntimeState withSuggestedActionCleared() {
+        return new RuntimeState(
+                enabled, safeMode, autoTuning, debugLogs,
+                governorDisabled,
+                governorCooldownActive,
+                governorLastActionTimestamp,
+                benchmarkRunning, benchmarkValidity, benchmarkStartTimestamp,
+                pendingAction,
+                Optional.empty(),
+                pendingActionsCount,
+                executionHistorySize,
+                lastSnapshotHistorySize,
+                sessionChangesCount,
+                avgFrametimeMs, p95FrametimeMs, tickTimeAvg, tickTimeP95, spikeCount,
+                lastDecisionReason, lastDecisionTimestamp,
+                sessionStartTime, stateVersion,
+                currentScenario, scenarioConfidence);
+    }
+
+    /**
+     * Compatibility alias for older callers.
+     */
+    @Deprecated
+    public Optional<PendingAction> pendingSuggestion() {
+        return suggestedAction;
     }
 
     /**
@@ -141,7 +197,7 @@ public record RuntimeState(
                 running ? true : governorDisabled, // disable governor during benchmark
                 governorCooldownActive, governorLastActionTimestamp,
                 running, validity, startTime,
-                pendingAction, pendingActionsCount, executionHistorySize, lastSnapshotHistorySize,
+                pendingAction, suggestedAction, pendingActionsCount, executionHistorySize, lastSnapshotHistorySize,
                 sessionChangesCount,
                 avgFrametimeMs, p95FrametimeMs, tickTimeAvg, tickTimeP95, spikeCount,
                 lastDecisionReason, lastDecisionTimestamp,
@@ -157,7 +213,7 @@ public record RuntimeState(
                 enabled, safeMode, autoTuning, debugLogs,
                 governorDisabled, governorCooldownActive, governorLastActionTimestamp,
                 benchmarkRunning, benchmarkValidity, benchmarkStartTimestamp,
-                pendingAction, pendingActionsCount, executionHistorySize, lastSnapshotHistorySize,
+                pendingAction, suggestedAction, pendingActionsCount, executionHistorySize, lastSnapshotHistorySize,
                 sessionChangesCount,
                 avg, p95, tickAvg, tickP95, spikes,
                 lastDecisionReason, lastDecisionTimestamp,
@@ -175,7 +231,7 @@ public record RuntimeState(
                 false, // governorCooldownActive = false
                 governorLastActionTimestamp,
                 benchmarkRunning, benchmarkValidity, benchmarkStartTimestamp,
-                pendingAction, pendingActionsCount, executionHistorySize, lastSnapshotHistorySize,
+                pendingAction, suggestedAction, pendingActionsCount, executionHistorySize, lastSnapshotHistorySize,
                 sessionChangesCount,
                 avgFrametimeMs, p95FrametimeMs, tickTimeAvg, tickTimeP95, spikeCount,
                 lastDecisionReason, lastDecisionTimestamp,
@@ -191,7 +247,7 @@ public record RuntimeState(
                 enabled, safeMode, autoTuning, debugLogs,
                 governorDisabled, governorCooldownActive, governorLastActionTimestamp,
                 benchmarkRunning, benchmarkValidity, benchmarkStartTimestamp,
-                pendingAction, pendingActionsCount, executionHistorySize, lastSnapshotHistorySize,
+                pendingAction, suggestedAction, pendingActionsCount, executionHistorySize, lastSnapshotHistorySize,
                 sessionChangesCount,
                 avgFrametimeMs, p95FrametimeMs, tickTimeAvg, tickTimeP95, spikeCount,
                 lastDecisionReason, lastDecisionTimestamp,
@@ -217,6 +273,7 @@ public record RuntimeState(
                 governorDisabled, governorCooldownActive, governorLastActionTimestamp,
                 benchmarkRunning, benchmarkValidity, benchmarkStartTimestamp,
                 pendingAction,
+                suggestedAction,
                 pendingActionsCount, executionHistorySize, lastSnapshotHistorySize,
                 sessionChangesCount,
                 avgFrametimeMs, p95FrametimeMs, tickTimeAvg, tickTimeP95, spikeCount,
@@ -234,6 +291,7 @@ public record RuntimeState(
                 governorDisabled, governorCooldownActive, governorLastActionTimestamp,
                 benchmarkRunning, benchmarkValidity, benchmarkStartTimestamp,
                 pendingAction,
+                suggestedAction,
                 pendingActionsCount, executionHistorySize, lastSnapshotHistorySize,
                 sessionChangesCount,
                 avgFrametimeMs, p95FrametimeMs, tickTimeAvg, tickTimeP95, spikeCount,
@@ -259,6 +317,7 @@ public record RuntimeState(
                 "NONE", // benchmarkValidity
                 0L, // benchmarkStartTimestamp
                 Optional.empty(), // pendingAction
+                Optional.empty(), // suggestedAction
                 0, // pendingActionsCount
                 0, // executionHistorySize
                 0, // lastSnapshotHistorySize

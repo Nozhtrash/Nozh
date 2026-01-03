@@ -23,7 +23,7 @@ public final class ConfigPresets {
         config.rollbackEnabled = true;
         config.cooldownActionMillis = 60000; // 1 min
         config.maxChangesPerSession = 5; // Allow more changes
-        ConfigManager.save();
+        ConfigManager.saveAndNotify();
     }
 
     /**
@@ -38,7 +38,7 @@ public final class ConfigPresets {
         config.rollbackEnabled = true;
         config.cooldownActionMillis = 120000; // 2 min (default)
         config.maxChangesPerSession = 2; // Default
-        ConfigManager.save();
+        ConfigManager.saveAndNotify();
     }
 
     /**
@@ -53,6 +53,6 @@ public final class ConfigPresets {
         config.rollbackEnabled = true;
         config.cooldownActionMillis = 180000; // 3 min
         config.maxChangesPerSession = 1; // Minimal changes
-        ConfigManager.save();
+        ConfigManager.saveAndNotify();
     }
 }
