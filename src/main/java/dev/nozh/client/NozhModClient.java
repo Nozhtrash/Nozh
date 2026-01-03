@@ -12,7 +12,6 @@ import dev.nozh.core.governor.GovernorRunner;
 import dev.nozh.core.matrix.ActionSuccessTracker;
 import dev.nozh.core.safety.CrashLoopGuard;
 import dev.nozh.core.state.PendingAction;
-import dev.nozh.core.state.RuntimeState;
 import dev.nozh.core.state.StateStore;
 import dev.nozh.fabric.FabricNozhLogger;
 import dev.nozh.fabric.capability.MinecraftOptionsAdapter;
@@ -29,6 +28,7 @@ import net.fabricmc.fabric.api.client.rendering.v1.HudRenderCallback;
 import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.option.KeyBinding;
+import net.minecraft.client.toast.SystemToast;
 import net.minecraft.client.util.InputUtil;
 import net.minecraft.text.Text;
 import org.lwjgl.glfw.GLFW;
@@ -54,6 +54,7 @@ public class NozhModClient implements ClientModInitializer {
     private static ProviderRegistry providerRegistry;
     private static KeyBinding toggleHudKey;
     private static KeyBinding applySuggestionKey;
+    private static boolean safeModeNotified = false;
 
     private static int tickCounter = 0;
     private static final int TELEMETRY_UPDATE_INTERVAL = 20; // Every second (20 ticks)
@@ -143,7 +144,7 @@ public class NozhModClient implements ClientModInitializer {
         applySuggestionKey = KeyBindingHelper.registerKeyBinding(new KeyBinding(
                 "key.nozh.apply_suggestion",
                 InputUtil.Type.KEYSYM,
-                GLFW.GLFW_KEY_UNKNOWN,
+                GLFW.GLFW_KEY_K,
                 "category.nozh"));
 
         // Register Frametime Sampler (called every frame)
@@ -186,6 +187,13 @@ public class NozhModClient implements ClientModInitializer {
                 while (applySuggestionKey.wasPressed()) {
                     applySuggestedAction(client);
                 }
+            }
+
+            if (!safeModeNotified && CrashLoopGuard.isInSafeMode()) {
+                safeModeNotified = true;
+                notifyClient(client,
+                        Text.translatable("nozh.safemode.entered.title"),
+                        Text.translatable("nozh.safemode.entered.message"));
             }
 
             // Update RuntimeState with telemetry data every second
@@ -267,58 +275,63 @@ public class NozhModClient implements ClientModInitializer {
         return stateStore;
     }
 
+    public static KeyBinding getApplySuggestionKey() {
+        return applySuggestionKey;
+    }
+
     public static void applySuggestedAction(MinecraftClient client) {
         if (client == null) {
             return;
         }
-        applySuggestedAction(
-                message -> notifyClient(client, message),
-                message -> notifyClient(client, message));
-    }
-
-    public static void applySuggestedAction(Consumer<Text> feedback, Consumer<Text> errorFeedback) {
-        if (feedback == null || errorFeedback == null) {
-            return;
-        }
-        var bus = actionBus;
-        if (bus == null) {
-            errorFeedback.accept(Text.literal("Action bus unavailable"));
-            NozhConstants.LOGGER.warn("Manual apply failed: action bus unavailable");
+        var actionBus = getActionBus();
+        if (actionBus == null) {
+            notifyClient(client,
+                    Text.translatable("nozh.suggestion.apply.failed"),
+                    Text.translatable("nozh.suggestion.apply.unavailable"));
             return;
         }
 
-        RuntimeState state = stateStore.snapshotSafe();
+        RuntimeState state = StateStore.getInstance().snapshotSafe();
         if (state.suggestedAction().isEmpty()) {
-            feedback.accept(Text.literal("No pending suggestion"));
+            notifyClient(client,
+                    Text.translatable("nozh.suggestion.apply.none"),
+                    Text.translatable("nozh.suggestion.apply.none_detail"));
             return;
         }
 
         PendingAction pending = state.suggestedAction().get();
-        Command command = pending.command();
+        var command = pending.command();
         long now = System.currentTimeMillis();
 
-        bus.dispatchUserCommand(command, report -> {
+        actionBus.dispatch(command, report -> {
             if (report.succeeded()) {
-                feedback.accept(Text.literal("Applied suggested change"));
-                NozhConstants.LOGGER.info("Manual suggestion applied: " + pending.capability().name());
+                notifyClient(client,
+                        Text.translatable("nozh.suggestion.apply.success"),
+                        Text.translatable("nozh.suggestion.apply.success_detail",
+                                pending.capability().name(), pending.newValue().toString()));
             } else {
                 String reason = report.error().orElse("unknown");
-                errorFeedback.accept(Text.literal("Suggestion rejected: " + reason));
-                NozhConstants.LOGGER.warn(
-                        "Manual suggestion rejected for " + pending.capability().name() + ": " + reason);
-                stateStore.update(currentState -> currentState
-                        .withPendingActionCleared()
-                        .withSuggestedAction(pending));
+                notifyClient(client,
+                        Text.translatable("nozh.suggestion.apply.failed"),
+                        Text.translatable("nozh.suggestion.apply.failed_detail", reason));
+                StateStore.getInstance().update(RuntimeState::withPendingActionCleared);
             }
         });
 
-        stateStore.update(currentState -> currentState.withAppliedSuggestion(now, pending));
+        StateStore.getInstance().update(currentState -> currentState
+                .withGovernorAction(now, pending)
+                .withSuggestedActionCleared());
     }
 
-    private static void notifyClient(MinecraftClient client, Text message) {
-        if (client == null || client.player == null) {
+    private static void notifyClient(MinecraftClient client, Text title, Text message) {
+        if (client == null) {
             return;
         }
-        client.player.sendMessage(message, false);
+        if (client.getToastManager() != null) {
+            SystemToast.add(client.getToastManager(), SystemToast.Type.TUTORIAL_HINT, title, message);
+        }
+        if (client.inGameHud != null) {
+            client.inGameHud.getChatHud().addMessage(title.copy().append(Text.literal(" ")).append(message));
+        }
     }
 }

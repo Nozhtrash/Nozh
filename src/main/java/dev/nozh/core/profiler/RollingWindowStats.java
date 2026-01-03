@@ -135,4 +135,17 @@ public class RollingWindowStats {
         count = 0;
         spikeCount = 0;
     }
+
+    public synchronized long[] snapshotSamplesNanos() {
+        long[] samples = new long[count];
+        int startIndex = writeIndex - count;
+        if (startIndex < 0) {
+            startIndex += capacity;
+        }
+        for (int i = 0; i < count; i++) {
+            int index = (startIndex + i) % capacity;
+            samples[i] = buffer[index];
+        }
+        return samples;
+    }
 }

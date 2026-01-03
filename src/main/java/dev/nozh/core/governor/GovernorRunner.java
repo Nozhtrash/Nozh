@@ -153,10 +153,6 @@ public final class GovernorRunner {
         }
 
         GovernorMode mode = determineMode(state);
-        if (state.safeMode()) {
-            logger.debug("Safe mode active: skipping governor decision");
-            return;
-        }
         if (mode == GovernorMode.MANUAL_ASSIST && state.suggestedAction().isPresent()) {
             logger.debug("Manual assist active: suggestion pending, awaiting user confirmation");
             return;
@@ -200,14 +196,10 @@ public final class GovernorRunner {
             PerfSnapshot baselineSnapshot = perfSnapshotSupplier.get();
             Optional<dev.nozh.core.bus.CapabilityValue> previousValue = providerRegistry.get(decision.capabilityId())
                     .flatMap(provider -> provider.getCurrentValueSafe());
-            Command cmd = new Command.ApplyCapability(
-                    decision.capabilityId(),
-                    decision.targetValue());
             PendingAction pending = new PendingAction(
                     now,
                     totalTicks,
                     decision.capabilityId(),
-                    cmd,
                     previousValue,
                     decision.targetValue(),
                     state.avgFrametimeMs(),

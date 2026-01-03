@@ -23,6 +23,9 @@ public final class JsonMini {
                 "  \"debugLogs\": " + c.debugLogs + ",\n" +
                 "  \"language\": \"" + (c.language == null ? "auto" : c.language) + "\",\n" +
                 "  \"showHud\": " + c.showHud + ",\n" +
+                "  \"hudAnchor\": \"" + (c.hudAnchor == null ? "TOP_LEFT" : c.hudAnchor) + "\",\n" +
+                "  \"hudOffsetX\": " + c.hudOffsetX + ",\n" +
+                "  \"hudOffsetY\": " + c.hudOffsetY + ",\n" +
 
                 "  \"targetFps\": " + c.targetFps + ",\n" +
 
@@ -103,6 +106,9 @@ public final class JsonMini {
             c.debugLogs = getBool(json, "debugLogs", getBool(json, "debug", c.debugLogs));
             c.language = getString(json, "language", c.language);
             c.showHud = getBool(json, "showHud", c.showHud);
+            c.hudAnchor = getString(json, "hudAnchor", c.hudAnchor);
+            c.hudOffsetX = getInt(json, "hudOffsetX", c.hudOffsetX);
+            c.hudOffsetY = getInt(json, "hudOffsetY", c.hudOffsetY);
 
             // Targets
             c.targetFps = getInt(json, "targetFps", c.targetFps);

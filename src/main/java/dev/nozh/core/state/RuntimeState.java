@@ -215,15 +215,6 @@ public record RuntimeState(
     }
 
     /**
-     * Legacy compatibility alias for older callers.
-     * Scheduled for removal in a cleanup pass.
-     */
-    @Deprecated(since = "1.0", forRemoval = true)
-    public Optional<PendingAction> pendingSuggestion() {
-        return suggestedAction;
-    }
-
-    /**
      * Update benchmark status (immutable).
      */
     public RuntimeState withBenchmarkStatus(boolean running, long startTime) {
