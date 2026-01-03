@@ -131,6 +131,14 @@ public final class GovernorRunner {
         }
 
         GovernorMode mode = determineMode(state);
+        if (state.safeMode()) {
+            logger.debug("Safe mode active: skipping governor decision");
+            return;
+        }
+        if (mode == GovernorMode.MANUAL_ASSIST && state.suggestedAction().isPresent()) {
+            logger.debug("Manual assist active: suggestion pending, awaiting user confirmation");
+            return;
+        }
         String bound = detectBound(state);
 
         // 3. Detect performance bound from telemetry
@@ -165,20 +173,45 @@ public final class GovernorRunner {
             logger.warn("Failed to update state decision: " + e.getMessage());
         }
 
-        // Dispatch via ActionBus
-        if (decision.targetValue() != null) {
+        // Manual Assist: stage suggestion only
+        if (mode == GovernorMode.MANUAL_ASSIST && decision.targetValue() != null) {
             Optional<dev.nozh.core.bus.CapabilityValue> previousValue = providerRegistry.get(decision.capabilityId())
                     .flatMap(provider -> provider.getCurrentValueSafe());
+            Command cmd = new Command.ApplyCapability(
+                    decision.capabilityId(),
+                    decision.targetValue());
             PendingAction pending = new PendingAction(
                     now,
                     decision.capabilityId(),
+                    cmd,
                     previousValue,
                     decision.targetValue(),
                     state.avgFrametimeMs(),
                     state.p95FrametimeMs());
+            try {
+                stateStore.update(currentState -> currentState.withSuggestedAction(pending));
+            } catch (Exception e) {
+                logger.warn("Failed to store suggested action: " + e.getMessage());
+            }
+            logger.info("Governor suggestion queued for manual assist: " + actionSummary);
+            return;
+        }
+
+        // Dispatch via ActionBus
+        if (decision.targetValue() != null) {
+            Optional<dev.nozh.core.bus.CapabilityValue> previousValue = providerRegistry.get(decision.capabilityId())
+                    .flatMap(provider -> provider.getCurrentValueSafe());
             Command cmd = new Command.ApplyCapability(
                     decision.capabilityId(),
                     decision.targetValue());
+            PendingAction pending = new PendingAction(
+                    now,
+                    decision.capabilityId(),
+                    cmd,
+                    previousValue,
+                    decision.targetValue(),
+                    state.avgFrametimeMs(),
+                    state.p95FrametimeMs());
 
             actionBus.dispatch(cmd, report -> {
                 if (report.succeeded()) {

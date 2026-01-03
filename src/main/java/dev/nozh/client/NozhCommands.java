@@ -4,10 +4,13 @@ import dev.nozh.NozhConstants;
 import dev.nozh.core.compat.CompatService;
 import dev.nozh.core.config.ConfigManager;
 import dev.nozh.core.config.NozhConfig;
+import dev.nozh.core.state.PendingAction;
+import dev.nozh.core.state.RuntimeState;
+import dev.nozh.core.state.StateStore;
+import dev.nozh.core.bus.Command;
 import dev.nozh.core.safety.CrashLoopGuard;
 import dev.nozh.core.safety.StateManager;
 import dev.nozh.core.safety.NozhState;
-import dev.nozh.core.state.StateStore;
 import dev.nozh.core.util.NozhText;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
@@ -67,6 +70,17 @@ public final class NozhCommands {
                                         runDisable(context.getSource());
                                         return 1;
                                     }))
+                            .then(ClientCommandManager.literal("apply")
+                                    .executes(context -> {
+                                        runApply(context.getSource());
+                                        return 1;
+                                    }))
+                            .then(ClientCommandManager.literal("suggestion")
+                                    .then(ClientCommandManager.literal("clear")
+                                            .executes(context -> {
+                                                runClearSuggestion(context.getSource());
+                                                return 1;
+                                            })))
                             .then(ClientCommandManager.literal("safemode")
                                     .then(ClientCommandManager.literal("reset")
                                             .executes(context -> {
@@ -192,6 +206,7 @@ public final class NozhCommands {
         NozhConfig config = ConfigManager.getConfig();
         boolean safeMode = CrashLoopGuard.isInSafeMode();
         long uptimeSec = (System.currentTimeMillis() - StateManager.getState().sessionStartTime) / 1000;
+        RuntimeState runtimeState = StateStore.getInstance().snapshotSafe();
 
         String modeKey = safeMode ? "nozh.status.mode.safemode"
                 : (config.allowAutoTuning ? "nozh.status.mode.active" : "nozh.status.mode.passive");
@@ -201,6 +216,11 @@ public final class NozhCommands {
                 .append(Text.translatable(modeKey).styled(s -> s.withColor(color))));
         ctx.getSource().sendFeedback(Text.translatable("nozh.status.uptime", uptimeSec));
         ctx.getSource().sendFeedback(Text.translatable("nozh.status.target", config.targetFps));
+
+        runtimeState.suggestedAction().ifPresent(pending -> ctx.getSource().sendFeedback(Text.literal(
+                "Suggestion pending: " + formatPendingAction(pending) + " (/nozh apply)")));
+        runtimeState.pendingAction().ifPresent(pending -> ctx.getSource().sendFeedback(Text.literal(
+                "Action pending evaluation: " + formatPendingAction(pending))));
     }
 
     private static void runHistory(CommandContext<FabricClientCommandSource> ctx) {
@@ -257,8 +277,7 @@ public final class NozhCommands {
         NozhConfig config = ConfigManager.getConfig();
         config.enabled = true;
         config.allowAutoTuning = true;
-        ConfigManager.save();
-        StateStore.getInstance().update(state -> state.withConfig(config));
+        ConfigManager.saveAndNotify();
 
         source.sendFeedback(Text.translatable("nozh.enable.success"));
     }
@@ -266,9 +285,58 @@ public final class NozhCommands {
     private static void runDisable(FabricClientCommandSource source) {
         NozhConfig config = ConfigManager.getConfig();
         config.enabled = false;
-        ConfigManager.save();
-        StateStore.getInstance().update(state -> state.withConfig(config));
+        ConfigManager.saveAndNotify();
 
         source.sendFeedback(Text.translatable("nozh.disable.success"));
+    }
+
+    private static void runApply(FabricClientCommandSource source) {
+        runApplySuggestion(source);
+    }
+
+    private static void runApplySuggestion(FabricClientCommandSource source) {
+        var actionBus = NozhModClient.getActionBus();
+        if (actionBus == null) {
+            source.sendFeedback(Text.literal("NOZH action bus unavailable"));
+            return;
+        }
+
+        RuntimeState state = StateStore.getInstance().snapshotSafe();
+        if (state.suggestedAction().isEmpty()) {
+            source.sendFeedback(Text.literal("No pending suggestion to apply"));
+            return;
+        }
+
+        PendingAction pending = state.suggestedAction().get();
+        Command command = pending.command();
+        long now = System.currentTimeMillis();
+
+        actionBus.dispatch(command, report -> {
+            if (report.succeeded()) {
+                source.sendFeedback(Text.literal("Applied suggested change"));
+            } else {
+                String reason = report.error().orElse("unknown");
+                source.sendFeedback(Text.literal("Failed to apply suggestion: " + reason));
+                StateStore.getInstance().update(RuntimeState::withPendingActionCleared);
+            }
+        });
+
+        StateStore.getInstance().update(currentState -> currentState
+                .withGovernorAction(now, pending)
+                .withSuggestedActionCleared());
+    }
+
+    private static void runClearSuggestion(FabricClientCommandSource source) {
+        RuntimeState state = StateStore.getInstance().snapshotSafe();
+        if (state.suggestedAction().isEmpty()) {
+            source.sendFeedback(Text.literal("No pending suggestion to clear"));
+            return;
+        }
+        StateStore.getInstance().update(RuntimeState::withSuggestedActionCleared);
+        source.sendFeedback(Text.literal("Cleared pending suggestion"));
+    }
+
+    private static String formatPendingAction(PendingAction pending) {
+        return pending.capability().name() + "=" + pending.newValue();
     }
 }
