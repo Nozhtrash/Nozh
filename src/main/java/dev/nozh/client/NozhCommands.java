@@ -60,6 +60,11 @@ public final class NozhCommands {
                                         runHistory(context);
                                         return 1;
                                     }))
+                            .then(ClientCommandManager.literal("apply")
+                                    .executes(context -> {
+                                        runApply(context.getSource());
+                                        return 1;
+                                    }))
                             .then(ClientCommandManager.literal("enable")
                                     .executes(context -> {
                                         runEnable(context.getSource());
@@ -209,6 +214,20 @@ public final class NozhCommands {
                 .append(Text.translatable(modeKey).styled(s -> s.withColor(color))));
         ctx.getSource().sendFeedback(Text.translatable("nozh.status.uptime", uptimeSec));
         ctx.getSource().sendFeedback(Text.translatable("nozh.status.target", config.targetFps));
+
+        StateStore stateStore = NozhModClient.getStateStore();
+        if (stateStore != null) {
+            RuntimeState runtimeState = stateStore.snapshotSafe();
+            if (runtimeState.pendingSuggestion().isPresent()) {
+                PendingAction pending = runtimeState.pendingSuggestion().get();
+                ctx.getSource().sendFeedback(NozhText.warning(
+                        "Suggestion pending: " + formatPendingAction(pending) + " (/nozh apply)"));
+            } else if (runtimeState.pendingAction().isPresent()) {
+                PendingAction pending = runtimeState.pendingAction().get();
+                ctx.getSource().sendFeedback(NozhText.info(
+                        "Action pending evaluation: " + formatPendingAction(pending)));
+            }
+        }
     }
 
     private static void runHistory(CommandContext<FabricClientCommandSource> ctx) {

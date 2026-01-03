@@ -27,6 +27,8 @@
     "nozh.config.enabled.tooltip": "Enable/Disable NOZH FPS optimization. When enabled, the mod will automatically adjust graphics settings to maintain target FPS.",
     "nozh.config.debug": "Debug Logs: %s",
     "nozh.config.debug.tooltip": "Enable detailed debug logging for troubleshooting. Warning: May impact performance slightly.",
+    "nozh.config.hud": "HUD: %s",
+    "nozh.config.hud.tooltip": "Toggle the on-screen NOZH HUD overlay.",
     "nozh.config.rollback": "Rollback: %s",
     "nozh.config.rollback.tooltip": "Automatically revert changes if FPS worsens after an action. Recommended: ON for safety.",
     "nozh.config.autotuning": "Auto-Tuning: %s",
@@ -47,5 +49,17 @@
     "nozh.config.confirm.message": "This will reset ALL configuration to defaults. Continue?",
     "nozh.config.confirm.yes": "Yes, Reset",
     "nozh.config.confirm.no": "Cancel",
-    "nozh.config.done": "Done"
+    "nozh.config.done": "Done",
+    "nozh.hud.title": "NOZH HUD",
+    "nozh.hud.mode": "Mode: %s",
+    "nozh.hud.scenario": "Scenario: %s",
+    "nozh.hud.metrics.avg": "Avg Frametime: %s ms",
+    "nozh.hud.metrics.p95": "P95 Frametime: %s ms",
+    "nozh.hud.metrics.spikes": "Spikes: %d",
+    "nozh.hud.last_action": "Last Action: %s",
+    "nozh.hud.suggestion": "Suggestion: %s",
+    "nozh.hud.suggestion.revert": "Consider reverting to %s",
+    "nozh.hud.suggestion.pending": "Monitor performance",
+    "key.nozh.toggle_hud": "Toggle NOZH HUD",
+    "category.nozh": "NOZH"
 }

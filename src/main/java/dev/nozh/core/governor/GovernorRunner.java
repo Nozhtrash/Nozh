@@ -35,6 +35,7 @@ public final class GovernorRunner {
     private final StateStore stateStore;
     private final ProviderRegistry providerRegistry;
     private final SessionLearning sessionLearning;
+    private final ActionSuccessTracker successTracker;
 
     // Intelligent components
     private final dev.nozh.core.governor.PredictiveAnalyzer predictiveAnalyzer;
@@ -66,6 +67,7 @@ public final class GovernorRunner {
         this.logger = logger;
         this.providerRegistry = registry;
         this.sessionLearning = sessionLearning;
+        this.successTracker = successTracker;
         this.scenarioDetector = scenarioDetector;
         this.conflictDetector = new ModConflictDetector();
 
@@ -75,6 +77,14 @@ public final class GovernorRunner {
     }
 
     public void onTick() {
+        dev.nozh.core.context.ScenarioSnapshot scenarioSnapshot = scenarioDetector.detect();
+        try {
+            stateStore.update(s -> s.withScenario(
+                    scenarioSnapshot.scenario(),
+                    scenarioSnapshot.confidence()));
+        } catch (Exception e) {
+            // Ignore update failure
+        }
         tickCounter++;
         if (tickCounter < POLL_INTERVAL_TICKS) {
             return;
@@ -86,16 +96,6 @@ public final class GovernorRunner {
     private void runGovernorLoop() {
         long now = System.currentTimeMillis();
         NozhConfig config = ConfigManager.getConfig();
-
-        // 1. Detect scenario and update state reference
-        dev.nozh.core.context.ScenarioSnapshot scenarioSnapshot = scenarioDetector.detect();
-        try {
-            stateStore.update(s -> s.withScenario(
-                    scenarioSnapshot.scenario(),
-                    scenarioSnapshot.confidence()));
-        } catch (Exception e) {
-            // Ignore update failure
-        }
 
         RuntimeState state = stateStore.snapshotSafe();
 
@@ -112,6 +112,11 @@ public final class GovernorRunner {
             }
 
             evaluatePendingAction(state, pending, config);
+            return;
+        }
+
+        if (state.pendingSuggestion().isPresent()) {
+            logger.debug("Pending suggestion awaiting confirmation");
             return;
         }
 
@@ -136,6 +141,7 @@ public final class GovernorRunner {
             return;
         }
         String bound = detectBound(state);
+        ModeController modeController = ModeController.forMode(mode);
 
         // 3. Detect performance bound from telemetry
         String currentBound = detectBound(state);
@@ -156,6 +162,7 @@ public final class GovernorRunner {
         }
 
         ActionCandidate decision = decisionOpt.get();
+        successTracker.recordDecision(decision);
         String steward = conflictDetector.getSteward(decision.capabilityId());
         // REMOVED: withDecision() tracking no longer available
         String actionSummary = formatActionSummary(decision);
@@ -295,38 +302,44 @@ public final class GovernorRunner {
 
     private void evaluatePendingAction(RuntimeState state, PendingAction pending, NozhConfig config) {
         double avg = state.avgFrametimeMs();
-        // double p95 = state.p95FrametimeMs(); // Not strictly using p95 decision yet,
-        // focusing on avg latency gain
+        double p95 = state.p95FrametimeMs();
+        double preP95 = resolvePreP95(pending);
+        double preAvg = pending.baselineAvgMs();
+        double epsilonP95 = config.improvementEpsilonP95Ms;
+
+        boolean p95Valid = isValidPerfValue(preP95) && isValidPerfValue(p95);
+        double baselineMetric = p95Valid ? preP95 : preAvg;
+        double currentMetric = p95Valid ? p95 : avg;
+        double epsilon = p95Valid ? epsilonP95 : config.improvementEpsilonAvgMs;
 
         // Strict Evaluation:
-        // 1. Worsened: Avg increased significantly ( > baseline + epsilon)
-        // 2. Ineffective: Avg didn't decrease enough ( > baseline - epsilon)
-        // Goal: avg < baseline - epsilon
+        // 1. Worsened: P95 increased significantly ( > baseline + epsilon)
+        // 2. Ineffective: P95 didn't decrease enough ( > baseline - epsilon)
+        // Goal: P95 < baseline - epsilon
 
-        boolean worsened = avg > pending.baselineAvgMs() + config.improvementEpsilonAvgMs;
-        boolean ineffective = avg > pending.baselineAvgMs() - config.improvementEpsilonAvgMs;
+        boolean worsened = currentMetric > baselineMetric + epsilon;
+        boolean ineffective = currentMetric > baselineMetric - epsilon;
 
         if (worsened || ineffective) {
             if (config.rollbackEnabled) {
-                Command rollback = pending.previousValue()
-                        .<Command>map(v -> new Command.ApplyCapability(pending.capability(), v))
-                        .orElseGet(() -> new Command.ResetCapability(pending.capability()));
-
-                actionBus.dispatch(rollback, r -> {
-                    if (r.succeeded()) {
-                        logger.info("Rollback succeeded (Action was " + (worsened ? "harmful" : "ineffective") + ")");
-                    } else {
-                        logger.warn("Rollback failed");
-                    }
-                });
+                pending.actionCommand()
+                        .inverse(pending.previousValue())
+                        .ifPresentOrElse(rollback -> actionBus.dispatch(rollback, r -> {
+                            if (r.succeeded()) {
+                                logger.info(
+                                        "Rollback succeeded (Action was " + (worsened ? "harmful" : "ineffective") + ")");
+                            } else {
+                                logger.warn("Rollback failed");
+                            }
+                        }), () -> logger.warn("No inverse action available, rollback skipped."));
             } else {
                 logger.info("Rollback disabled in config, keeping ineffective action.");
             }
 
             sessionLearning.recordFailure(pending.capability());
         } else {
-            // Success: avg <= baseline - epsilon
-            double gain = Math.max(0, pending.baselineAvgMs() - avg);
+            // Success: metric <= baseline - epsilon
+            double gain = Math.max(0, baselineMetric - currentMetric);
             sessionLearning.recordSuccess(pending.capability(), gain);
         }
         // Clear pending action
@@ -335,6 +348,20 @@ public final class GovernorRunner {
         } catch (Exception e) {
             logger.warn("Failed to clear pending action");
         }
+        successTracker.clearDecisionSnapshot(pending.capability());
+    }
+
+    private double resolvePreP95(PendingAction pending) {
+        return successTracker.getDecisionSnapshot(pending.capability())
+                .map(snapshot -> snapshot.preSnapshot())
+                .filter(snapshot -> snapshot != null)
+                .map(snapshot -> snapshot.p95FrametimeMs())
+                .filter(this::isValidPerfValue)
+                .orElse(pending.baselineP95Ms());
+    }
+
+    private boolean isValidPerfValue(double value) {
+        return Double.isFinite(value) && value > 0;
     }
 
     private String formatActionSummary(ActionCandidate decision) {
