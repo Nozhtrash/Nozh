@@ -4,6 +4,7 @@ import dev.nozh.core.bus.CommandLifecycle;
 import dev.nozh.core.capability.CapabilityProvider;
 import dev.nozh.core.capability.ProviderRegistry;
 import dev.nozh.core.capability.ProviderStatus;
+import dev.nozh.core.context.Scenario;
 import dev.nozh.core.issues.Issue;
 import dev.nozh.core.issues.IssueSeverity;
 import dev.nozh.core.preset.HardwareTier;
@@ -100,6 +101,9 @@ public final class HudViewModelBuilder {
 
         String lastActionSummary = "";
         String lastActionOutcome = "";
+        Scenario scenario = state.currentScenario() != null ? state.currentScenario() : Scenario.STANDARD;
+        String scenarioKey = scenario.translationKey();
+        double scenarioConfidence = state.scenarioConfidence();
 
         return new HudViewModel(
                 state.enabled(),
@@ -130,7 +134,9 @@ public final class HudViewModelBuilder {
                 directorSteward,
                 lastActionSummary,
                 lastActionOutcome,
-                state.currentScenario(),
+                scenario,
+                scenarioKey,
+                scenarioConfidence,
 
                 benchmarkRunning,
                 benchmarkValidity,

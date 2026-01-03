@@ -60,6 +60,11 @@ public final class NozhCommands {
                                         runHistory(context);
                                         return 1;
                                     }))
+                            .then(ClientCommandManager.literal("apply")
+                                    .executes(context -> {
+                                        runApply(context.getSource());
+                                        return 1;
+                                    }))
                             .then(ClientCommandManager.literal("enable")
                                     .executes(context -> {
                                         runEnable(context.getSource());

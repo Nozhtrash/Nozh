@@ -22,6 +22,7 @@ public final class JsonMini {
                 "  \"enabled\": " + c.enabled + ",\n" +
                 "  \"debugLogs\": " + c.debugLogs + ",\n" +
                 "  \"language\": \"" + (c.language == null ? "auto" : c.language) + "\",\n" +
+                "  \"showHud\": " + c.showHud + ",\n" +
 
                 "  \"targetFps\": " + c.targetFps + ",\n" +
 
@@ -99,6 +100,7 @@ public final class JsonMini {
             // Migration: debug -> debugLogs
             c.debugLogs = getBool(json, "debugLogs", getBool(json, "debug", c.debugLogs));
             c.language = getString(json, "language", c.language);
+            c.showHud = getBool(json, "showHud", c.showHud);
 
             // Targets
             c.targetFps = getInt(json, "targetFps", c.targetFps);

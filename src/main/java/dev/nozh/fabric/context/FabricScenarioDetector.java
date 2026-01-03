@@ -9,6 +9,7 @@ import net.minecraft.item.BlockItem;
 import net.minecraft.item.Item;
 import net.minecraft.item.Items;
 import net.minecraft.util.math.Vec3d;
+import net.minecraft.util.hit.HitResult;
 
 import java.lang.reflect.Method;
 import java.util.List;
@@ -33,6 +34,8 @@ public class FabricScenarioDetector implements ScenarioDetector {
     private static final int ENTITY_CHECK_INTERVAL_TICKS = 20;
     private static final double ENTITY_RADIUS = 12.0;
     private static final int COMBAT_ENTITY_THRESHOLD = 8;
+    private static final double MOVEMENT_FAST_DISTANCE_SQ = 0.06 * 0.06;
+    private static final double MOVEMENT_SLOW_DISTANCE_SQ = 0.02 * 0.02;
 
     public FabricScenarioDetector() {
         this.client = MinecraftClient.getInstance();
@@ -52,7 +55,8 @@ public class FabricScenarioDetector implements ScenarioDetector {
 
         // Detect AFK (Stationary + No Input)
         Vec3d currentPos = player.getPos();
-        if (currentPos.squaredDistanceTo(lastPos) < 0.0001) {
+        double moveDistanceSq = currentPos.squaredDistanceTo(lastPos);
+        if (moveDistanceSq < 0.0001) {
             stationaryTicks++;
         } else {
             stationaryTicks = 0;
@@ -64,43 +68,71 @@ public class FabricScenarioDetector implements ScenarioDetector {
 
         int nearbyEntities = sampleNearbyEntities(player);
         double tpsDropConfidence = getTpsDropConfidence();
+        HitResult.Type targetType = getCrosshairTargetType();
+        boolean targetEntity = targetType == HitResult.Type.ENTITY;
+        boolean targetBlock = targetType == HitResult.Type.BLOCK;
+        boolean handSwinging = player.handSwinging;
+        boolean breakingBlock = client.interactionManager != null && client.interactionManager.isBreakingBlock();
 
         // Detect Mining (Underground + Pickaxe)
         boolean underground = currentPos.y < 50 && !client.world.isSkyVisible(player.getBlockPos());
         boolean holdingPickaxe = isPickaxe(player.getMainHandStack().getItem());
         boolean holdingWeapon = isWeapon(player.getMainHandStack().getItem());
-        boolean buildingCandidate = player.isCreative() && player.getMainHandStack().getItem() instanceof BlockItem;
+        boolean holdingBlockItem = player.getMainHandStack().getItem() instanceof BlockItem;
+        boolean buildingCandidate = holdingBlockItem;
+        boolean sprinting = player.isSprinting();
 
         double combatConfidence = 0.0;
         if (holdingWeapon) {
-            combatConfidence += 0.45;
+            combatConfidence += 0.35;
         }
         if (player.hurtTime > 0) {
-            combatConfidence += 0.35;
+            combatConfidence += 0.3;
         }
         if (nearbyEntities >= COMBAT_ENTITY_THRESHOLD) {
-            combatConfidence += 0.35;
+            combatConfidence += 0.3;
+        }
+        if (handSwinging) {
+            combatConfidence += 0.2;
+        }
+        if (targetEntity) {
+            combatConfidence += 0.2;
+        }
+        if (sprinting) {
+            combatConfidence += 0.1;
         }
         combatConfidence = clamp(combatConfidence + tpsDropConfidence * 0.1);
 
         double miningConfidence = 0.0;
         if (underground) {
-            miningConfidence += 0.35;
+            miningConfidence += 0.3;
         }
         if (holdingPickaxe) {
-            miningConfidence += 0.35;
+            miningConfidence += 0.25;
+        }
+        if (breakingBlock) {
+            miningConfidence += 0.25;
+        }
+        if (holdingPickaxe && (handSwinging || targetBlock)) {
+            miningConfidence += 0.2;
         }
         if (!inputRecent && stationaryTicks > 40) {
-            miningConfidence += 0.15;
+            miningConfidence += 0.1;
         }
         miningConfidence = clamp(miningConfidence + tpsDropConfidence * 0.05);
 
         double buildingConfidence = 0.0;
         if (buildingCandidate) {
-            buildingConfidence += 0.7;
+            buildingConfidence += 0.4;
+        }
+        if (holdingBlockItem && (handSwinging || targetBlock)) {
+            buildingConfidence += 0.25;
+        }
+        if (player.isCreative()) {
+            buildingConfidence += 0.15;
         }
         if (inputRecent) {
-            buildingConfidence += 0.15;
+            buildingConfidence += 0.1;
         }
         buildingConfidence = clamp(buildingConfidence);
 
@@ -116,7 +148,18 @@ public class FabricScenarioDetector implements ScenarioDetector {
         }
         afkConfidence = clamp(afkConfidence - tpsDropConfidence * 0.2);
 
+        double movementConfidence = 0.0;
+        if (moveDistanceSq > MOVEMENT_SLOW_DISTANCE_SQ) {
+            movementConfidence += 0.15;
+        }
+        if (moveDistanceSq > MOVEMENT_FAST_DISTANCE_SQ) {
+            movementConfidence += 0.2;
+        }
+        if (sprinting) {
+            movementConfidence += 0.15;
+        }
         double standardConfidence = inputRecent ? 0.55 : 0.4;
+        standardConfidence = clamp(standardConfidence + movementConfidence - tpsDropConfidence * 0.05);
 
         dev.nozh.core.context.Scenario scenario = dev.nozh.core.context.Scenario.STANDARD;
         double confidence = standardConfidence;
@@ -169,6 +212,13 @@ public class FabricScenarioDetector implements ScenarioDetector {
         return item == Items.DIAMOND_SWORD ||
                 item == Items.NETHERITE_SWORD ||
                 item == Items.NETHERITE_AXE;
+    }
+
+    private HitResult.Type getCrosshairTargetType() {
+        if (client.crosshairTarget == null) {
+            return HitResult.Type.MISS;
+        }
+        return client.crosshairTarget.getType();
     }
 
     private double getTpsDropConfidence() {
