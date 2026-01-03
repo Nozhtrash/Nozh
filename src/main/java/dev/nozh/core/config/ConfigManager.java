@@ -10,6 +10,10 @@ import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Configuration manager for NOZH.
@@ -22,6 +26,12 @@ public final class ConfigManager {
     private static final Object LOCK = new Object();
     private static volatile NozhConfig config = null;
     private static final List<ConfigListener> listeners = new CopyOnWriteArrayList<>();
+    private static final ScheduledExecutorService SAVE_EXECUTOR = Executors.newSingleThreadScheduledExecutor(r -> {
+        Thread thread = new Thread(r, "NOZH-ConfigSave");
+        thread.setDaemon(true);
+        return thread;
+    });
+    private static ScheduledFuture<?> pendingSave;
 
     private ConfigManager() {
         // Utility class
@@ -63,20 +73,20 @@ public final class ConfigManager {
                         boolean corrected = config.validate();
                         if (corrected || migrated != loaded) {
                             NozhConstants.LOGGER.warn("Config had invalid values or was migrated, re-saving");
-                            save(); // Re-save migrated/corrected config
+                            saveNowSilently(); // Re-save migrated/corrected config
                         }
                         NozhConstants.LOGGER.debug("Loaded config from {}", configFile);
                     } else {
                         NozhConstants.LOGGER.warn("Config file was empty or corrupted, using defaults");
                         config = new NozhConfig();
                         config.configVersion = 2; // Set current version
-                        save();
+                        saveNowSilently();
                     }
                 } else {
                     NozhConstants.LOGGER.info("No config found, creating default at {}", configFile);
                     config = new NozhConfig();
                     config.configVersion = 2; // Set current version
-                    save();
+                    saveNowSilently();
                 }
             } catch (Exception e) {
                 NozhConstants.LOGGER.error("Failed to load config, using defaults", e);
@@ -93,29 +103,46 @@ public final class ConfigManager {
      * Debounced to prevent race conditions on rapid saves
      */
     public static void save() {
-        saveInternal(false);
+        saveInternal(false, true, false);
     }
 
     /**
      * Save and notify listeners even if the write is debounced.
      */
     public static void saveAndNotify() {
-        saveInternal(true);
+        saveInternal(true, true, false);
     }
 
-    private static void saveInternal(boolean notifyOnDebounce) {
+    /**
+     * Save immediately, bypassing debounce.
+     */
+    public static void saveNow() {
+        saveInternal(false, true, true);
+    }
+
+    /**
+     * Save immediately and notify listeners, bypassing debounce.
+     */
+    public static void saveNowAndNotify() {
+        saveInternal(true, true, true);
+    }
+
+    private static void saveInternal(boolean notifyOnDebounce, boolean notifyOnSave, boolean ignoreDebounce) {
         NozhConfig snapshot = null;
         boolean shouldNotify = false;
         synchronized (LOCK) {
             // Debounce: prevent rapid successive saves
             long now = System.currentTimeMillis();
-            if (now - lastSaveTime < SAVE_DEBOUNCE_MS) {
+            long elapsed = now - lastSaveTime;
+            if (!ignoreDebounce && elapsed < SAVE_DEBOUNCE_MS) {
                 NozhConstants.LOGGER.debug("Skipping config save (debounce)");
                 snapshot = config;
                 shouldNotify = notifyOnDebounce;
+                boolean deferredNotify = notifyOnDebounce ? false : notifyOnSave;
+                scheduleDeferredSave(SAVE_DEBOUNCE_MS - elapsed, deferredNotify);
             } else {
                 lastSaveTime = now;
-                shouldNotify = true;
+                shouldNotify = notifyOnSave;
 
                 if (config == null) {
                     NozhConstants.LOGGER.warn("Cannot save null config");
@@ -189,7 +216,7 @@ public final class ConfigManager {
                 config.clearCorrectedFlag(); // Fresh reset, not a correction
 
                 // Persist atomically
-                save();
+                saveNowSilently();
 
                 NozhConstants.LOGGER.info("Config reset complete - defaults written successfully");
             } catch (Exception e) {
@@ -232,5 +259,20 @@ public final class ConfigManager {
                 NozhConstants.LOGGER.warn("Config listener failed: {}", e.getMessage());
             }
         }
+    }
+
+    private static void scheduleDeferredSave(long delayMillis, boolean notifyOnSave) {
+        if (delayMillis < 0) {
+            delayMillis = 0;
+        }
+        if (pendingSave != null && !pendingSave.isDone()) {
+            return;
+        }
+        pendingSave = SAVE_EXECUTOR.schedule(() -> saveInternal(false, notifyOnSave, true), delayMillis,
+                TimeUnit.MILLISECONDS);
+    }
+
+    private static void saveNowSilently() {
+        saveInternal(false, false, true);
     }
 }
