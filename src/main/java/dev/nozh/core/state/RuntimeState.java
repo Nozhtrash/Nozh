@@ -9,6 +9,8 @@
  */
 package dev.nozh.core.state;
 
+import java.util.Optional;
+
 /**
  * Runtime state (Contract 1).
  *
@@ -29,19 +31,22 @@ public record RuntimeState(
         long governorLastActionTimestamp,
         boolean benchmarkRunning,
         long benchmarkStartTimestamp,
+        Optional<PendingAction> pendingAction,
         int pendingActionsCount,
         int executionHistorySize,
         int lastSnapshotHistorySize,
         int sessionChangesCount,
         double avgFrametimeMs,
         double p95FrametimeMs,
+        double tickTimeAvg,
+        double tickTimeP95,
         int spikeCount,
         String lastDecisionReason,
         long lastDecisionTimestamp,
         long sessionStartTime,
         int stateVersion,
         dev.nozh.core.context.Scenario currentScenario) {
-    private static final int CURRENT_VERSION = 2; // Bump version
+    private static final int CURRENT_VERSION = 3; // Bump version
 
     /**
      * Create default initial state.
@@ -57,12 +62,15 @@ public record RuntimeState(
                 0L, // governorLastActionTimestamp
                 false, // benchmarkRunning
                 0L, // benchmarkStartTimestamp
+                Optional.empty(), // pendingAction
                 0, // pendingActionsCount
                 0, // executionHistorySize
                 0, // lastSnapshotHistorySize
                 0, // sessionChangesCount
                 -1.0, // avgFrametimeMs (sentinel)
                 -1.0, // p95FrametimeMs (sentinel)
+                -1.0, // tickTimeAvg (sentinel)
+                -1.0, // tickTimeP95 (sentinel)
                 0, // spikeCount
                 "",
                 0L,
@@ -74,17 +82,39 @@ public record RuntimeState(
     /**
      * Update after governor action (immutable).
      */
-    public RuntimeState withGovernorAction(long timestamp) {
+    public RuntimeState withGovernorAction(long timestamp, PendingAction pendingAction) {
+        Optional<PendingAction> pending = Optional.ofNullable(pendingAction);
         return new RuntimeState(
                 enabled, safeMode, autoTuning, debugLogs,
                 governorDisabled,
                 true, // governorCooldownActive = true after action
                 timestamp, // governorLastActionTimestamp
                 benchmarkRunning, benchmarkStartTimestamp,
-                pendingActionsCount,
+                pending,
+                pending.isPresent() ? 1 : 0,
                 executionHistorySize + 1, // increment history
                 lastSnapshotHistorySize,
                 sessionChangesCount + 1, // increment changes
+                avgFrametimeMs, p95FrametimeMs, tickTimeAvg, tickTimeP95, spikeCount,
+                sessionStartTime, stateVersion,
+                currentScenario);
+    }
+
+    /**
+     * Clear any pending action (immutable).
+     */
+    public RuntimeState withPendingActionCleared() {
+        return new RuntimeState(
+                enabled, safeMode, autoTuning, debugLogs,
+                governorDisabled,
+                governorCooldownActive,
+                governorLastActionTimestamp,
+                benchmarkRunning, benchmarkStartTimestamp,
+                Optional.empty(),
+                0,
+                executionHistorySize,
+                lastSnapshotHistorySize,
+                sessionChangesCount,
                 avgFrametimeMs, p95FrametimeMs, spikeCount,
                 lastDecisionReason,
                 lastDecisionTimestamp,
@@ -101,6 +131,7 @@ public record RuntimeState(
                 running ? true : governorDisabled, // disable governor during benchmark
                 governorCooldownActive, governorLastActionTimestamp,
                 running, startTime,
+                pendingAction,
                 pendingActionsCount, executionHistorySize, lastSnapshotHistorySize,
                 sessionChangesCount,
                 avgFrametimeMs, p95FrametimeMs, spikeCount,
@@ -113,11 +144,12 @@ public record RuntimeState(
     /**
      * Update telemetry metrics (immutable).
      */
-    public RuntimeState withTelemetry(double avg, double p95, int spikes) {
+    public RuntimeState withTelemetry(double avg, double p95, int spikes, double tickAvg, double tickP95) {
         return new RuntimeState(
                 enabled, safeMode, autoTuning, debugLogs,
                 governorDisabled, governorCooldownActive, governorLastActionTimestamp,
                 benchmarkRunning, benchmarkStartTimestamp,
+                pendingAction,
                 pendingActionsCount, executionHistorySize, lastSnapshotHistorySize,
                 sessionChangesCount,
                 avg, p95, spikes,
@@ -137,6 +169,7 @@ public record RuntimeState(
                 false, // governorCooldownActive = false
                 governorLastActionTimestamp,
                 benchmarkRunning, benchmarkStartTimestamp,
+                pendingAction,
                 pendingActionsCount, executionHistorySize, lastSnapshotHistorySize,
                 sessionChangesCount,
                 avgFrametimeMs, p95FrametimeMs, spikeCount,
@@ -154,6 +187,7 @@ public record RuntimeState(
                 enabled, safeMode, autoTuning, debugLogs,
                 governorDisabled, governorCooldownActive, governorLastActionTimestamp,
                 benchmarkRunning, benchmarkStartTimestamp,
+                pendingAction,
                 pendingActionsCount, executionHistorySize, lastSnapshotHistorySize,
                 sessionChangesCount,
                 avgFrametimeMs, p95FrametimeMs, spikeCount,
@@ -194,12 +228,15 @@ public record RuntimeState(
                 0L, // governorLastActionTimestamp
                 false, // benchmarkRunning (runtime only)
                 0L, // benchmarkStartTimestamp
+                Optional.empty(), // pendingAction
                 0, // pendingActionsCount
                 0, // executionHistorySize
                 0, // lastSnapshotHistorySize
                 0, // sessionChangesCount
                 -1.0, // avgFrametimeMs
                 -1.0, // p95FrametimeMs
+                -1.0, // tickTimeAvg
+                -1.0, // tickTimeP95
                 0, // spikeCount
                 "",
                 0L,

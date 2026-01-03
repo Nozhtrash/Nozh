@@ -128,7 +128,7 @@ public final class AnimationProvider implements CapabilityProvider {
 
         @Override
         public double expectedGainMs() {
-            return 1.0;
+            return 0.8;
         }
 
         @Override

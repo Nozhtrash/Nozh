@@ -92,7 +92,7 @@ public final class FogProvider implements CapabilityProvider {
 
         @Override
         public double expectedGainMs() {
-            return 0.0;
+            return 0.4;
         }
 
         @Override
