@@ -12,6 +12,8 @@ package dev.nozh.core.state;
 import dev.nozh.core.bus.CapabilityId;
 import dev.nozh.core.bus.CapabilityValue;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
@@ -104,6 +106,7 @@ public record RuntimeState(
     public RuntimeState withGovernorAction(long timestamp, PendingAction pending, ActionHistoryEntry actionEntry,
             int maxHistoryEntries) {
         List<ActionHistoryEntry> updatedHistory = mergeHistory(actionHistory, actionEntry, maxHistoryEntries);
+        int nextHistorySize = executionHistorySize + 1;
         return new RuntimeState(
                 enabled, safeMode, autoTuning, debugLogs,
                 governorDisabled,
@@ -442,8 +445,10 @@ public record RuntimeState(
                 governorDisabled, governorCooldownActive, governorLastActionTimestamp,
                 benchmarkRunning, benchmarkValidity, benchmarkStartTimestamp,
                 pendingAction, suggestedAction, pendingActionsCount, executionHistorySize, lastSnapshotHistorySize,
+                actionHistory,
                 sessionChangesCount,
-                avgFrametimeMs, p95FrametimeMs, tickTimeAvg, tickTimeP95, spikeCount,
+                avgFrametimeMs, p95FrametimeMs, p99FrametimeMs, frametimeStddevMs, tickTimeAvg, tickTimeP95,
+                spikeCount,
                 lastDecisionReason, lastDecisionTimestamp,
                 sessionStartTime, stateVersion,
                 currentScenario, scenarioConfidence,
@@ -457,8 +462,10 @@ public record RuntimeState(
                 governorDisabled, governorCooldownActive, governorLastActionTimestamp,
                 benchmarkRunning, benchmarkValidity, benchmarkStartTimestamp,
                 pendingAction, suggestedAction, pendingActionsCount, executionHistorySize, lastSnapshotHistorySize,
+                actionHistory,
                 sessionChangesCount,
-                avgFrametimeMs, p95FrametimeMs, tickTimeAvg, tickTimeP95, spikeCount,
+                avgFrametimeMs, p95FrametimeMs, p99FrametimeMs, frametimeStddevMs, tickTimeAvg, tickTimeP95,
+                spikeCount,
                 lastDecisionReason, lastDecisionTimestamp,
                 sessionStartTime, stateVersion,
                 currentScenario, scenarioConfidence,
@@ -489,7 +496,8 @@ public record RuntimeState(
                 spikeCount,
                 lastDecisionReason, lastDecisionTimestamp,
                 sessionStartTime, stateVersion,
-                currentScenario, scenarioConfidence);
+                currentScenario, scenarioConfidence,
+                baselineSettings, currentSettings);
     }
 
     private List<ActionHistoryEntry> mergeHistory(

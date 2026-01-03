@@ -5,6 +5,7 @@ import dev.nozh.core.capability.ProviderRegistry;
 import dev.nozh.core.capability.ProviderStatus;
 import dev.nozh.core.context.Scenario;
 import dev.nozh.core.compatibility.CompatibilityMatrix;
+import dev.nozh.core.governor.ActionOutcome;
 import dev.nozh.core.issues.Issue;
 import dev.nozh.core.issues.IssueSeverity;
 import dev.nozh.core.preset.HardwareTier;

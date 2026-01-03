@@ -18,7 +18,10 @@ import dev.nozh.core.compatibility.CompatibilityMatrix;
 import dev.nozh.core.state.RuntimeState;
 import dev.nozh.core.state.StateStore;
 import dev.nozh.core.state.PendingAction;
+import dev.nozh.core.state.ActionHistoryEntry;
 import dev.nozh.core.bus.CapabilityValue;
+import dev.nozh.api.PerfSnapshot;
+import dev.nozh.core.governor.ActionOutcome;
 
 import dev.nozh.core.monitoring.ChunkLoadMonitor;
 import dev.nozh.core.monitoring.SystemMonitor;
@@ -202,10 +205,14 @@ public final class GovernorRunner {
             PerfSnapshot baselineSnapshot = perfSnapshotSupplier.get();
             Optional<dev.nozh.core.bus.CapabilityValue> previousValue = providerRegistry.get(decision.capabilityId())
                     .flatMap(provider -> provider.getCurrentValueSafe());
+            Command cmd = new Command.ApplyCapability(
+                    decision.capabilityId(),
+                    decision.targetValue());
             PendingAction pending = new PendingAction(
                     now,
                     totalTicks,
                     decision.capabilityId(),
+                    cmd,
                     previousValue,
                     decision.targetValue(),
                     state.avgFrametimeMs(),
@@ -428,10 +435,7 @@ public final class GovernorRunner {
         // 2. Ineffective: P95 didn't decrease enough ( > baseline - epsilon)
         // Goal: P95 < baseline - epsilon
 
-        boolean avgWorsened = avg > pending.baselineAvgMs() + config.improvementEpsilonAvgMs;
-        boolean avgIneffective = avg > pending.baselineAvgMs() - config.improvementEpsilonAvgMs;
-        boolean p95Worsened = p95 > pending.baselineP95Ms() + config.improvementEpsilonP95Ms;
-        boolean p95Ineffective = p95 > pending.baselineP95Ms() - config.improvementEpsilonP95Ms;
+        ActionOutcome outcome = governor.evaluateOutcome(pending.baselineSnapshot(), currentSnapshot);
 
         boolean improved = !avgIneffective && !p95Ineffective;
         boolean worsened = avgWorsened || p95Worsened;
