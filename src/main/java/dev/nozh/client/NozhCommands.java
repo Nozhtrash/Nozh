@@ -66,7 +66,7 @@ public final class NozhCommands {
                                     }))
                             .then(ClientCommandManager.literal("apply")
                                     .executes(context -> {
-                                        runApply(context.getSource());
+                                        runApplySuggestion(context.getSource());
                                         return 1;
                                     }))
                             .then(ClientCommandManager.literal("enable")
@@ -221,9 +221,9 @@ public final class NozhCommands {
         ctx.getSource().sendFeedback(Text.translatable("nozh.status.target", config.targetFps));
 
         runtimeState.suggestedAction().ifPresent(pending -> ctx.getSource().sendFeedback(Text.literal(
-                "Suggestion pending: " + formatPendingAction(pending) + " (/nozh apply)")));
+                "Suggestion pending: " + pending.capability().name() + "=" + pending.newValue() + " (/nozh apply)")));
         runtimeState.pendingAction().ifPresent(pending -> ctx.getSource().sendFeedback(Text.literal(
-                "Action pending evaluation: " + formatPendingAction(pending))));
+                "Action pending evaluation: " + pending.capability().name() + "=" + pending.newValue())));
     }
 
     private static void runHistory(CommandContext<FabricClientCommandSource> ctx) {

@@ -25,7 +25,7 @@ public enum RollbackGuarantee {
     /**
      * Legacy alias for BEST_EFFORT.
      */
-    @Deprecated
+    @Deprecated(forRemoval = false)
     WEAK,
 
     /**

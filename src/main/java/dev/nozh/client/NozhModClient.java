@@ -267,25 +267,15 @@ public class NozhModClient implements ClientModInitializer {
         if (client == null) {
             return;
         }
-        applySuggestedAction(
-                message -> notifyClient(client, message),
-                message -> notifyClient(client, message));
-    }
-
-    public static void applySuggestedAction(Consumer<Text> feedback, Consumer<Text> errorFeedback) {
-        if (feedback == null || errorFeedback == null) {
-            return;
-        }
         var bus = actionBus;
         if (bus == null) {
-            errorFeedback.accept(Text.literal("Action bus unavailable"));
-            NozhConstants.LOGGER.warn("Manual apply failed: action bus unavailable");
+            notifyClient(client, Text.literal("Action bus unavailable"));
             return;
         }
 
         RuntimeState state = stateStore.snapshotSafe();
         if (state.suggestedAction().isEmpty()) {
-            feedback.accept(Text.literal("No pending suggestion"));
+            notifyClient(client, Text.literal("No pending suggestion"));
             return;
         }
 
@@ -293,22 +283,19 @@ public class NozhModClient implements ClientModInitializer {
         Command command = pending.command();
         long now = System.currentTimeMillis();
 
-        bus.dispatchUserCommand(command, report -> {
+        bus.dispatch(command, report -> {
             if (report.succeeded()) {
-                feedback.accept(Text.literal("Applied suggested change"));
-                NozhConstants.LOGGER.info("Manual suggestion applied: " + pending.capability().name());
+                notifyClient(client, Text.literal("Applied suggested change"));
             } else {
                 String reason = report.error().orElse("unknown");
-                errorFeedback.accept(Text.literal("Suggestion rejected: " + reason));
-                NozhConstants.LOGGER.warn(
-                        "Manual suggestion rejected for " + pending.capability().name() + ": " + reason);
-                stateStore.update(currentState -> currentState
-                        .withPendingActionCleared()
-                        .withSuggestedAction(pending));
+                notifyClient(client, Text.literal("Failed to apply: " + reason));
+                stateStore.update(RuntimeState::withPendingActionCleared);
             }
         });
 
-        stateStore.update(currentState -> currentState.withAppliedSuggestion(now, pending));
+        stateStore.update(currentState -> currentState
+                .withGovernorAction(now, pending)
+                .withSuggestedActionCleared());
     }
 
     private static void notifyClient(MinecraftClient client, Text message) {
