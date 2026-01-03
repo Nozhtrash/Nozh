@@ -6,6 +6,7 @@ import dev.nozh.NozhConstants;
 import dev.nozh.core.config.ConfigManager;
 import dev.nozh.core.config.NozhConfig;
 import dev.nozh.core.safety.CrashLoopGuard;
+import dev.nozh.core.state.StateStore;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
 import net.minecraft.client.gui.DrawContext;
@@ -93,6 +94,8 @@ public class NozhModMenuIntegration implements ModMenuApi {
 
             y += 10;
 
+            y = addSectionHeader(centerX, y, "nozh.config.section.general");
+
             // Toggle: Enabled
             TooltipButton enabledButton = new TooltipButton(
                     centerX - 150, y, 300, 20,
@@ -100,7 +103,7 @@ public class NozhModMenuIntegration implements ModMenuApi {
                     Text.translatable("nozh.config.enabled.tooltip"),
                     button -> {
                         config.enabled = !config.enabled;
-                        ConfigManager.saveAndNotify();
+                        saveConfigAndSync();
                         this.clearAndInit();
                     });
             addDrawableChild(enabledButton);
@@ -114,26 +117,14 @@ public class NozhModMenuIntegration implements ModMenuApi {
                     Text.translatable("nozh.config.debug.tooltip"),
                     button -> {
                         config.debugLogs = !config.debugLogs;
-                        ConfigManager.saveAndNotify();
+                        saveConfigAndSync();
                         this.clearAndInit();
                     });
             addDrawableChild(debugButton);
             tooltipButtons.add(debugButton);
             y += 25;
 
-            // Toggle: HUD
-            TooltipButton hudButton = new TooltipButton(
-                    centerX - 150, y, 300, 20,
-                    Text.translatable("nozh.config.hud", config.showHud ? "ON" : "OFF"),
-                    Text.translatable("nozh.config.hud.tooltip"),
-                    button -> {
-                        config.showHud = !config.showHud;
-                        ConfigManager.saveAndNotify();
-                        this.clearAndInit();
-                    });
-            addDrawableChild(hudButton);
-            tooltipButtons.add(hudButton);
-            y += 25;
+            y = addSectionHeader(centerX, y, "nozh.config.section.auto");
 
             // Toggle: Rollback
             TooltipButton rollbackButton = new TooltipButton(
@@ -142,7 +133,7 @@ public class NozhModMenuIntegration implements ModMenuApi {
                     Text.translatable("nozh.config.rollback.tooltip"),
                     button -> {
                         config.rollbackEnabled = !config.rollbackEnabled;
-                        ConfigManager.saveAndNotify();
+                        saveConfigAndSync();
                         this.clearAndInit();
                     });
             addDrawableChild(rollbackButton);
@@ -156,7 +147,7 @@ public class NozhModMenuIntegration implements ModMenuApi {
                     Text.translatable("nozh.config.autotuning.tooltip"),
                     button -> {
                         config.allowAutoTuning = !config.allowAutoTuning;
-                        ConfigManager.saveAndNotify();
+                        saveConfigAndSync();
                         this.clearAndInit();
                     });
             addDrawableChild(autoTuningButton);
@@ -178,11 +169,91 @@ public class NozhModMenuIntegration implements ModMenuApi {
                             }
                         }
                         config.targetFps = fpsOptions[(currentIndex + 1) % fpsOptions.length];
-                        ConfigManager.saveAndNotify();
+                        saveConfigAndSync();
                         this.clearAndInit();
                     });
             addDrawableChild(targetFpsButton);
             tooltipButtons.add(targetFpsButton);
+            y += 35;
+
+            y = addSectionHeader(centerX, y, "nozh.config.section.scenarios");
+            TooltipButton scenariosInfo = new TooltipButton(
+                    centerX - 150, y, 300, 20,
+                    Text.translatable("nozh.config.scenarios.info"),
+                    Text.translatable("nozh.config.scenarios.info.tooltip"),
+                    button -> {
+                    });
+            scenariosInfo.active = false;
+            addDrawableChild(scenariosInfo);
+            tooltipButtons.add(scenariosInfo);
+            y += 35;
+
+            y = addSectionHeader(centerX, y, "nozh.config.section.compat");
+            TooltipButton compatInfo = new TooltipButton(
+                    centerX - 150, y, 300, 20,
+                    Text.translatable("nozh.config.compat.info"),
+                    Text.translatable("nozh.config.compat.info.tooltip"),
+                    button -> {
+                    });
+            compatInfo.active = false;
+            addDrawableChild(compatInfo);
+            tooltipButtons.add(compatInfo);
+            y += 35;
+
+            y = addSectionHeader(centerX, y, "nozh.config.section.hud");
+
+            // Toggle: HUD
+            TooltipButton hudButton = new TooltipButton(
+                    centerX - 150, y, 300, 20,
+                    Text.translatable("nozh.config.hud", config.showHud ? "ON" : "OFF"),
+                    Text.translatable("nozh.config.hud.tooltip"),
+                    button -> {
+                        config.showHud = !config.showHud;
+                        saveConfigAndSync();
+                        this.clearAndInit();
+                    });
+            addDrawableChild(hudButton);
+            tooltipButtons.add(hudButton);
+            y += 25;
+
+            TooltipButton hudAnchorButton = new TooltipButton(
+                    centerX - 150, y, 300, 20,
+                    Text.translatable("nozh.config.hud.anchor",
+                            Text.translatable("nozh.config.hud.anchor." + config.hudAnchor.toLowerCase())),
+                    Text.translatable("nozh.config.hud.anchor.tooltip"),
+                    button -> {
+                        config.hudAnchor = nextHudAnchor(config.hudAnchor);
+                        saveConfigAndSync();
+                        this.clearAndInit();
+                    });
+            addDrawableChild(hudAnchorButton);
+            tooltipButtons.add(hudAnchorButton);
+            y += 25;
+
+            TooltipButton hudOffsetXButton = new TooltipButton(
+                    centerX - 150, y, 300, 20,
+                    Text.translatable("nozh.config.hud.offset_x", config.hudOffsetX),
+                    Text.translatable("nozh.config.hud.offset_x.tooltip"),
+                    button -> {
+                        config.hudOffsetX = cycleOffset(config.hudOffsetX);
+                        saveConfigAndSync();
+                        this.clearAndInit();
+                    });
+            addDrawableChild(hudOffsetXButton);
+            tooltipButtons.add(hudOffsetXButton);
+            y += 25;
+
+            TooltipButton hudOffsetYButton = new TooltipButton(
+                    centerX - 150, y, 300, 20,
+                    Text.translatable("nozh.config.hud.offset_y", config.hudOffsetY),
+                    Text.translatable("nozh.config.hud.offset_y.tooltip"),
+                    button -> {
+                        config.hudOffsetY = cycleOffset(config.hudOffsetY);
+                        saveConfigAndSync();
+                        this.clearAndInit();
+                    });
+            addDrawableChild(hudOffsetYButton);
+            tooltipButtons.add(hudOffsetYButton);
             y += 35;
 
             // Preset Buttons
@@ -256,6 +327,42 @@ public class NozhModMenuIntegration implements ModMenuApi {
         @Override
         public void close() {
             this.client.setScreen(parent);
+        }
+
+        private void saveConfigAndSync() {
+            ConfigManager.saveAndNotify();
+            StateStore.getInstance().update(state -> state.withConfig(ConfigManager.getConfig()));
+        }
+
+        private int addSectionHeader(int centerX, int y, String key) {
+            ButtonWidget header = ButtonWidget.builder(Text.translatable(key), button -> {
+            }).dimensions(centerX - 150, y, 300, 20).build();
+            header.active = false;
+            addDrawableChild(header);
+            return y + 25;
+        }
+
+        private String nextHudAnchor(String current) {
+            if ("TOP_LEFT".equals(current)) {
+                return "TOP_RIGHT";
+            }
+            if ("TOP_RIGHT".equals(current)) {
+                return "BOTTOM_RIGHT";
+            }
+            if ("BOTTOM_RIGHT".equals(current)) {
+                return "BOTTOM_LEFT";
+            }
+            return "TOP_LEFT";
+        }
+
+        private int cycleOffset(int current) {
+            int[] options = { -40, -20, 0, 20, 40 };
+            for (int i = 0; i < options.length; i++) {
+                if (options[i] == current) {
+                    return options[(i + 1) % options.length];
+                }
+            }
+            return 0;
         }
     }
 

@@ -139,6 +139,26 @@ class ActionMatrixTest {
         assertFalse(byId.containsKey(CapabilityId.CLOUDS));
     }
 
+    @Test
+    void combatScenarioPrioritizesCombatTargets() {
+        ProviderRegistry registry = registryWith(
+                provider(CapabilityId.PARTICLES, metadata(ImpactLevel.LOW, ImpactLevel.MED, SafetyLevel.SAFE, 3.0)),
+                provider(CapabilityId.CLOUDS, metadata(ImpactLevel.LOW, ImpactLevel.LOW, SafetyLevel.SAFE, 2.0)));
+
+        ActionMatrix matrix = new ActionMatrix(
+                registry,
+                successTrackerWith(CapabilityId.PARTICLES, CapabilityId.CLOUDS),
+                new ConfidenceCalculator(),
+                new SessionLearning(tempDir.toFile()));
+
+        List<ActionCandidate> candidates = matrix.generateCandidates(ModePolicy.manualAssist(), "BALANCED",
+                Scenario.COMBAT);
+
+        Map<CapabilityId, ActionCandidate> byId = byId(candidates);
+        assertEquals("MINIMAL", candidateValue(byId.get(CapabilityId.PARTICLES)));
+        assertEquals("OFF", candidateValue(byId.get(CapabilityId.CLOUDS)));
+    }
+
     private ProviderRegistry registryWith(CapabilityProvider... providers) {
         ProviderRegistry registry = new ProviderRegistry(new ProviderHealthTracker());
         for (CapabilityProvider provider : providers) {

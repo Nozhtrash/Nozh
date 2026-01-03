@@ -10,11 +10,7 @@ import dev.nozh.core.state.StateStore;
 import dev.nozh.core.safety.CrashLoopGuard;
 import dev.nozh.core.safety.StateManager;
 import dev.nozh.core.safety.NozhState;
-import dev.nozh.core.bus.ActionBus;
-import dev.nozh.core.bus.Command;
-import dev.nozh.core.safety.CrashLoopGuard;
-import dev.nozh.core.safety.StateManager;
-import dev.nozh.core.safety.NozhState;
+import dev.nozh.core.telemetry.TelemetryExportFormat;
 import dev.nozh.core.util.NozhText;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
@@ -22,6 +18,7 @@ import net.fabricmc.fabric.api.client.command.v2.ClientCommandManager;
 import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallback;
 import net.fabricmc.fabric.api.client.command.v2.FabricClientCommandSource;
 import net.fabricmc.loader.api.FabricLoader;
+import net.minecraft.client.MinecraftClient;
 import net.minecraft.SharedConstants;
 import com.mojang.brigadier.context.CommandContext;
 import net.minecraft.text.Text;
@@ -69,6 +66,18 @@ public final class NozhCommands {
                                         runApplySuggestion(context.getSource());
                                         return 1;
                                     }))
+                            .then(ClientCommandManager.literal("telemetry")
+                                    .then(ClientCommandManager.literal("export")
+                                            .then(ClientCommandManager.literal("csv")
+                                                    .executes(context -> {
+                                                        runTelemetryExport(context.getSource(), TelemetryExportFormat.CSV);
+                                                        return 1;
+                                                    }))
+                                            .then(ClientCommandManager.literal("json")
+                                                    .executes(context -> {
+                                                        runTelemetryExport(context.getSource(), TelemetryExportFormat.JSON);
+                                                        return 1;
+                                                    }))))
                             .then(ClientCommandManager.literal("enable")
                                     .executes(context -> {
                                         runEnable(context.getSource());
@@ -293,18 +302,43 @@ public final class NozhCommands {
         source.sendFeedback(Text.translatable("nozh.disable.success"));
     }
 
+    private static void runApply(FabricClientCommandSource source) {
+        runApplySuggestion(source);
+    }
+
     private static void runApplySuggestion(FabricClientCommandSource source) {
-        var actionBus = NozhModClient.getActionBus();
-        if (actionBus == null) {
-            source.sendFeedback(Text.literal("NOZH action bus unavailable"));
+        MinecraftClient client = MinecraftClient.getInstance();
+        if (client == null) {
+            source.sendFeedback(Text.translatable("nozh.suggestion.apply.unavailable"));
             return;
         }
+        NozhModClient.applySuggestedAction(client);
+    }
 
         RuntimeState state = StateStore.getInstance().snapshotSafe();
         if (state.suggestedAction().isEmpty()) {
-            source.sendFeedback(Text.literal("No pending suggestion to apply"));
+            source.sendFeedback(Text.translatable("nozh.suggestion.clear.none"));
             return;
         }
+        StateStore.getInstance().update(RuntimeState::withSuggestedActionCleared);
+        source.sendFeedback(Text.translatable("nozh.suggestion.clear.success"));
+    }
+
+    private static void runTelemetryExport(FabricClientCommandSource source, TelemetryExportFormat format) {
+        var perfManager = NozhModClient.getPerfManager();
+        if (perfManager == null) {
+            source.sendFeedback(Text.translatable("nozh.telemetry.export.unavailable"));
+            return;
+        }
+        try {
+            var output = perfManager.exportTelemetry(
+                    NozhConstants.CONFIG_DIR.resolve("telemetry_exports"),
+                    format);
+            source.sendFeedback(Text.translatable("nozh.telemetry.export.success", output.toString()));
+        } catch (Exception e) {
+            source.sendFeedback(Text.translatable("nozh.telemetry.export.failed", e.getMessage()));
+        }
+    }
 
         PendingAction pending = state.suggestedAction().get();
         Command command = new Command.ApplyCapability(pending.capability(), pending.newValue());
