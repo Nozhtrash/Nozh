@@ -51,12 +51,10 @@ public final class StateStore {
     private int lastPersistedHash; // For dirty flag optimization
 
     private StateStore() {
-        // Initialize from config to respect user preferences
-        this.currentState = RuntimeState.fromConfig(dev.nozh.core.config.ConfigManager.getConfig());
+        this.currentState = RuntimeState.defaults();
         this.lastPersistedHash = currentState.hashCode();
-        NozhConstants.LOGGER.info("StateStore initialized from config (version {})",
+        NozhConstants.LOGGER.info("StateStore initialized with defaults (version {})",
                 currentState.stateVersion());
-        dev.nozh.core.config.ConfigManager.addListener(config -> update(state -> state.withConfig(config)));
     }
 
     /**
