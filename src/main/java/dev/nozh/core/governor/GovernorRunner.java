@@ -215,6 +215,7 @@ public final class GovernorRunner {
         boolean frameHigh = frameDataAvailable && (avgMs > frameThresholdMs || p95Ms > frameThresholdMs);
         if (frameHigh) {
             return "GPU";
+        }
         return "BALANCED";
     }
 
