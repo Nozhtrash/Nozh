@@ -22,6 +22,11 @@ public enum RollbackGuarantee {
      * Example: Render distance (may fail if memory constraints changed).
      */
     BEST_EFFORT,
+    /**
+     * Legacy alias for BEST_EFFORT.
+     */
+    @Deprecated
+    WEAK,
 
     /**
      * Provider CANNOT rollback.
