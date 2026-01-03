@@ -136,6 +136,10 @@ public final class GovernorRunner {
         }
 
         GovernorMode mode = determineMode(state);
+        if (state.safeMode()) {
+            logger.debug("Safe mode active: skipping governor decision");
+            return;
+        }
         if (mode == GovernorMode.MANUAL_ASSIST && state.suggestedAction().isPresent()) {
             logger.debug("Manual assist active: suggestion pending, awaiting user confirmation");
             return;

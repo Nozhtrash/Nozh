@@ -205,6 +205,7 @@ public final class NozhCommands {
         NozhConfig config = ConfigManager.getConfig();
         boolean safeMode = CrashLoopGuard.isInSafeMode();
         long uptimeSec = (System.currentTimeMillis() - StateManager.getState().sessionStartTime) / 1000;
+        RuntimeState runtimeState = StateStore.getInstance().snapshotSafe();
 
         String modeKey = safeMode ? "nozh.status.mode.safemode"
                 : (config.allowAutoTuning ? "nozh.status.mode.active" : "nozh.status.mode.passive");
@@ -215,19 +216,10 @@ public final class NozhCommands {
         ctx.getSource().sendFeedback(Text.translatable("nozh.status.uptime", uptimeSec));
         ctx.getSource().sendFeedback(Text.translatable("nozh.status.target", config.targetFps));
 
-        StateStore stateStore = NozhModClient.getStateStore();
-        if (stateStore != null) {
-            RuntimeState runtimeState = stateStore.snapshotSafe();
-            if (runtimeState.pendingSuggestion().isPresent()) {
-                PendingAction pending = runtimeState.pendingSuggestion().get();
-                ctx.getSource().sendFeedback(NozhText.warning(
-                        "Suggestion pending: " + formatPendingAction(pending) + " (/nozh apply)"));
-            } else if (runtimeState.pendingAction().isPresent()) {
-                PendingAction pending = runtimeState.pendingAction().get();
-                ctx.getSource().sendFeedback(NozhText.info(
-                        "Action pending evaluation: " + formatPendingAction(pending)));
-            }
-        }
+        runtimeState.suggestedAction().ifPresent(pending -> ctx.getSource().sendFeedback(Text.literal(
+                "Suggestion pending: " + formatPendingAction(pending) + " (/nozh apply)")));
+        runtimeState.pendingAction().ifPresent(pending -> ctx.getSource().sendFeedback(Text.literal(
+                "Action pending evaluation: " + formatPendingAction(pending))));
     }
 
     private static void runHistory(CommandContext<FabricClientCommandSource> ctx) {
