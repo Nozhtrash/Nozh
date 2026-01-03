@@ -4,9 +4,15 @@ import dev.nozh.NozhConstants;
 import dev.nozh.core.compat.CompatService;
 import dev.nozh.core.config.ConfigManager;
 import dev.nozh.core.config.NozhConfig;
+import dev.nozh.core.bus.ActionBus;
+import dev.nozh.core.bus.Command;
+import dev.nozh.core.bus.CapabilityValue;
 import dev.nozh.core.safety.CrashLoopGuard;
 import dev.nozh.core.safety.StateManager;
 import dev.nozh.core.safety.NozhState;
+import dev.nozh.core.state.PendingAction;
+import dev.nozh.core.state.RuntimeState;
+import dev.nozh.core.state.StateStore;
 import dev.nozh.core.util.NozhText;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
@@ -54,6 +60,11 @@ public final class NozhCommands {
                             .then(ClientCommandManager.literal("history")
                                     .executes(context -> {
                                         runHistory(context);
+                                        return 1;
+                                    }))
+                            .then(ClientCommandManager.literal("apply")
+                                    .executes(context -> {
+                                        runApply(context.getSource());
                                         return 1;
                                     }))
                             .then(ClientCommandManager.literal("enable")
@@ -200,6 +211,20 @@ public final class NozhCommands {
                 .append(Text.translatable(modeKey).styled(s -> s.withColor(color))));
         ctx.getSource().sendFeedback(Text.translatable("nozh.status.uptime", uptimeSec));
         ctx.getSource().sendFeedback(Text.translatable("nozh.status.target", config.targetFps));
+
+        StateStore stateStore = NozhModClient.getStateStore();
+        if (stateStore != null) {
+            RuntimeState runtimeState = stateStore.snapshotSafe();
+            if (runtimeState.pendingSuggestion().isPresent()) {
+                PendingAction pending = runtimeState.pendingSuggestion().get();
+                ctx.getSource().sendFeedback(NozhText.warning(
+                        "Suggestion pending: " + formatPendingAction(pending) + " (/nozh apply)"));
+            } else if (runtimeState.pendingAction().isPresent()) {
+                PendingAction pending = runtimeState.pendingAction().get();
+                ctx.getSource().sendFeedback(NozhText.info(
+                        "Action pending evaluation: " + formatPendingAction(pending)));
+            }
+        }
     }
 
     private static void runHistory(CommandContext<FabricClientCommandSource> ctx) {
@@ -267,5 +292,69 @@ public final class NozhCommands {
         ConfigManager.saveAndNotify();
 
         source.sendFeedback(Text.translatable("nozh.disable.success"));
+    }
+
+    private static void runApply(FabricClientCommandSource source) {
+        StateStore stateStore = NozhModClient.getStateStore();
+        ActionBus actionBus = NozhModClient.getActionBus();
+        if (stateStore == null || actionBus == null) {
+            source.sendFeedback(NozhText.error("NOZH not initialized"));
+            return;
+        }
+
+        RuntimeState state = stateStore.snapshotSafe();
+        if (state.pendingSuggestion().isEmpty()) {
+            source.sendFeedback(NozhText.warning("No pending suggestion to apply"));
+            return;
+        }
+
+        PendingAction pending = state.pendingSuggestion().get();
+        Command cmd = new Command.ApplyCapability(pending.capability(), pending.newValue());
+
+        actionBus.dispatchUserCommand(cmd, report -> {
+            if (report.succeeded()) {
+                source.sendFeedback(NozhText.success("Suggestion applied"));
+            } else {
+                source.sendFeedback(NozhText.error(
+                        "Failed to apply suggestion: " + report.error().orElse("unknown")));
+                try {
+                    stateStore.update(RuntimeState::withPendingActionCleared);
+                } catch (Exception ignored) {
+                }
+            }
+        });
+
+        try {
+            stateStore.update(currentState -> currentState.withAppliedSuggestion(System.currentTimeMillis(), pending));
+        } catch (Exception e) {
+            source.sendFeedback(NozhText.error("Failed to update state for suggestion"));
+        }
+    }
+
+    private static String formatPendingAction(PendingAction pending) {
+        String value = formatCapabilityValue(pending.newValue());
+        if (value.isEmpty()) {
+            return pending.capability().toString();
+        }
+        return pending.capability() + "=" + value;
+    }
+
+    private static String formatCapabilityValue(CapabilityValue value) {
+        if (value == null) {
+            return "";
+        }
+        if (value instanceof CapabilityValue.IntValue intValue) {
+            return Integer.toString(intValue.value());
+        }
+        if (value instanceof CapabilityValue.EnumValue enumValue) {
+            return enumValue.name();
+        }
+        if (value instanceof CapabilityValue.BoolValue boolValue) {
+            return Boolean.toString(boolValue.value());
+        }
+        if (value instanceof CapabilityValue.FloatValue floatValue) {
+            return Float.toString(floatValue.value());
+        }
+        return value.toString();
     }
 }

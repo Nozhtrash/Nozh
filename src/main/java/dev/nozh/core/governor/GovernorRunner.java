@@ -115,6 +115,11 @@ public final class GovernorRunner {
             return;
         }
 
+        if (state.pendingSuggestion().isPresent()) {
+            logger.debug("Pending suggestion awaiting confirmation");
+            return;
+        }
+
         // Feed predictor
         if (state.avgFrametimeMs() > 0) {
             predictiveAnalyzer.addSample(state.avgFrametimeMs());
@@ -132,6 +137,7 @@ public final class GovernorRunner {
 
         GovernorMode mode = determineMode(state);
         String bound = detectBound(state);
+        ModeController modeController = ModeController.forMode(mode);
 
         // 3. Detect performance bound from telemetry
         String currentBound = detectBound(state);
@@ -179,6 +185,16 @@ public final class GovernorRunner {
             Command cmd = new Command.ApplyCapability(
                     decision.capabilityId(),
                     decision.targetValue());
+
+            if (modeController.requiresUserConfirmation()) {
+                try {
+                    stateStore.update(currentState -> currentState.withPendingSuggestion(pending));
+                    logger.info("Governor suggestion awaiting confirmation: " + actionSummary);
+                } catch (Exception e) {
+                    logger.warn("Failed to store pending suggestion: " + e.getMessage());
+                }
+                return;
+            }
 
             actionBus.dispatch(cmd, report -> {
                 if (report.succeeded()) {

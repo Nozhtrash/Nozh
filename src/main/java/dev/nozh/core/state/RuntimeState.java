@@ -36,6 +36,7 @@ public record RuntimeState(
         String benchmarkValidity,
         long benchmarkStartTimestamp,
         Optional<PendingAction> pendingAction,
+        Optional<PendingAction> pendingSuggestion,
         int pendingActionsCount,
         int executionHistorySize,
         int lastSnapshotHistorySize,
@@ -51,7 +52,7 @@ public record RuntimeState(
         int stateVersion,
         dev.nozh.core.context.Scenario currentScenario,
         double scenarioConfidence) {
-    private static final int CURRENT_VERSION = 3; // Bump version
+    private static final int CURRENT_VERSION = 4; // Bump version
 
     /**
      * Create default initial state.
@@ -69,6 +70,7 @@ public record RuntimeState(
                 "NONE", // benchmarkValidity
                 0L, // benchmarkStartTimestamp
                 Optional.empty(), // pendingAction
+                Optional.empty(), // pendingSuggestion
                 0, // pendingActionsCount
                 0, // executionHistorySize
                 0, // lastSnapshotHistorySize
@@ -94,10 +96,30 @@ public record RuntimeState(
                 timestamp, // governorLastActionTimestamp
                 benchmarkRunning, benchmarkValidity, benchmarkStartTimestamp,
                 Optional.of(pending),
+                pendingSuggestion,
                 pendingAction.isPresent() ? pendingActionsCount + 1 : 1,
                 executionHistorySize + 1, // increment history
                 lastSnapshotHistorySize,
                 sessionChangesCount + 1, // increment changes
+                avgFrametimeMs, p95FrametimeMs, tickTimeAvg, tickTimeP95, spikeCount,
+                lastDecisionReason, lastDecisionTimestamp,
+                sessionStartTime, stateVersion,
+                currentScenario, scenarioConfidence);
+    }
+
+    public RuntimeState withAppliedSuggestion(long timestamp, PendingAction pending) {
+        return new RuntimeState(
+                enabled, safeMode, autoTuning, debugLogs,
+                governorDisabled,
+                true,
+                timestamp,
+                benchmarkRunning, benchmarkValidity, benchmarkStartTimestamp,
+                Optional.of(pending),
+                Optional.empty(),
+                pendingAction.isPresent() ? pendingActionsCount + 1 : 1,
+                executionHistorySize + 1,
+                lastSnapshotHistorySize,
+                sessionChangesCount + 1,
                 avgFrametimeMs, p95FrametimeMs, tickTimeAvg, tickTimeP95, spikeCount,
                 lastDecisionReason, lastDecisionTimestamp,
                 sessionStartTime, stateVersion,
@@ -115,6 +137,7 @@ public record RuntimeState(
                 governorLastActionTimestamp,
                 benchmarkRunning, benchmarkValidity, benchmarkStartTimestamp,
                 Optional.empty(),
+                pendingSuggestion,
                 0,
                 executionHistorySize,
                 lastSnapshotHistorySize,
@@ -141,7 +164,7 @@ public record RuntimeState(
                 running ? true : governorDisabled, // disable governor during benchmark
                 governorCooldownActive, governorLastActionTimestamp,
                 running, validity, startTime,
-                pendingAction, pendingActionsCount, executionHistorySize, lastSnapshotHistorySize,
+                pendingAction, pendingSuggestion, pendingActionsCount, executionHistorySize, lastSnapshotHistorySize,
                 sessionChangesCount,
                 avgFrametimeMs, p95FrametimeMs, tickTimeAvg, tickTimeP95, spikeCount,
                 lastDecisionReason, lastDecisionTimestamp,
@@ -157,7 +180,7 @@ public record RuntimeState(
                 enabled, safeMode, autoTuning, debugLogs,
                 governorDisabled, governorCooldownActive, governorLastActionTimestamp,
                 benchmarkRunning, benchmarkValidity, benchmarkStartTimestamp,
-                pendingAction, pendingActionsCount, executionHistorySize, lastSnapshotHistorySize,
+                pendingAction, pendingSuggestion, pendingActionsCount, executionHistorySize, lastSnapshotHistorySize,
                 sessionChangesCount,
                 avg, p95, tickAvg, tickP95, spikes,
                 lastDecisionReason, lastDecisionTimestamp,
@@ -175,7 +198,7 @@ public record RuntimeState(
                 false, // governorCooldownActive = false
                 governorLastActionTimestamp,
                 benchmarkRunning, benchmarkValidity, benchmarkStartTimestamp,
-                pendingAction, pendingActionsCount, executionHistorySize, lastSnapshotHistorySize,
+                pendingAction, pendingSuggestion, pendingActionsCount, executionHistorySize, lastSnapshotHistorySize,
                 sessionChangesCount,
                 avgFrametimeMs, p95FrametimeMs, tickTimeAvg, tickTimeP95, spikeCount,
                 lastDecisionReason, lastDecisionTimestamp,
@@ -191,7 +214,7 @@ public record RuntimeState(
                 enabled, safeMode, autoTuning, debugLogs,
                 governorDisabled, governorCooldownActive, governorLastActionTimestamp,
                 benchmarkRunning, benchmarkValidity, benchmarkStartTimestamp,
-                pendingAction, pendingActionsCount, executionHistorySize, lastSnapshotHistorySize,
+                pendingAction, pendingSuggestion, pendingActionsCount, executionHistorySize, lastSnapshotHistorySize,
                 sessionChangesCount,
                 avgFrametimeMs, p95FrametimeMs, tickTimeAvg, tickTimeP95, spikeCount,
                 lastDecisionReason, lastDecisionTimestamp,
@@ -217,6 +240,7 @@ public record RuntimeState(
                 governorDisabled, governorCooldownActive, governorLastActionTimestamp,
                 benchmarkRunning, benchmarkValidity, benchmarkStartTimestamp,
                 pendingAction,
+                pendingSuggestion,
                 pendingActionsCount, executionHistorySize, lastSnapshotHistorySize,
                 sessionChangesCount,
                 avgFrametimeMs, p95FrametimeMs, tickTimeAvg, tickTimeP95, spikeCount,
@@ -234,11 +258,42 @@ public record RuntimeState(
                 governorDisabled, governorCooldownActive, governorLastActionTimestamp,
                 benchmarkRunning, benchmarkValidity, benchmarkStartTimestamp,
                 pendingAction,
+                pendingSuggestion,
                 pendingActionsCount, executionHistorySize, lastSnapshotHistorySize,
                 sessionChangesCount,
                 avgFrametimeMs, p95FrametimeMs, tickTimeAvg, tickTimeP95, spikeCount,
                 reason != null ? reason : "",
                 timestamp,
+                sessionStartTime, stateVersion,
+                currentScenario, scenarioConfidence);
+    }
+
+    public RuntimeState withPendingSuggestion(PendingAction suggestion) {
+        return new RuntimeState(
+                enabled, safeMode, autoTuning, debugLogs,
+                governorDisabled, governorCooldownActive, governorLastActionTimestamp,
+                benchmarkRunning, benchmarkValidity, benchmarkStartTimestamp,
+                pendingAction,
+                Optional.of(suggestion),
+                pendingActionsCount, executionHistorySize, lastSnapshotHistorySize,
+                sessionChangesCount,
+                avgFrametimeMs, p95FrametimeMs, tickTimeAvg, tickTimeP95, spikeCount,
+                lastDecisionReason, lastDecisionTimestamp,
+                sessionStartTime, stateVersion,
+                currentScenario, scenarioConfidence);
+    }
+
+    public RuntimeState withPendingSuggestionCleared() {
+        return new RuntimeState(
+                enabled, safeMode, autoTuning, debugLogs,
+                governorDisabled, governorCooldownActive, governorLastActionTimestamp,
+                benchmarkRunning, benchmarkValidity, benchmarkStartTimestamp,
+                pendingAction,
+                Optional.empty(),
+                pendingActionsCount, executionHistorySize, lastSnapshotHistorySize,
+                sessionChangesCount,
+                avgFrametimeMs, p95FrametimeMs, tickTimeAvg, tickTimeP95, spikeCount,
+                lastDecisionReason, lastDecisionTimestamp,
                 sessionStartTime, stateVersion,
                 currentScenario, scenarioConfidence);
     }
@@ -259,6 +314,7 @@ public record RuntimeState(
                 "NONE", // benchmarkValidity
                 0L, // benchmarkStartTimestamp
                 Optional.empty(), // pendingAction
+                Optional.empty(), // pendingSuggestion
                 0, // pendingActionsCount
                 0, // executionHistorySize
                 0, // lastSnapshotHistorySize
