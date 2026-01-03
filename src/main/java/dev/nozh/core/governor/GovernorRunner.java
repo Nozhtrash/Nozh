@@ -260,12 +260,7 @@ public final class GovernorRunner {
             return dev.nozh.core.governor.GovernorMode.AUTO_AGGRESSIVE;
         }
 
-        if (state.currentScenario() == dev.nozh.core.context.Scenario.MINING) {
-            // Mining usually stable
-            return dev.nozh.core.governor.GovernorMode.AUTO_CONSERVATIVE;
-        }
-
-        // Default auto mode
+        // Default auto mode (covers MINING and undefined)
         return dev.nozh.core.governor.GovernorMode.AUTO_CONSERVATIVE;
     }
 
@@ -287,8 +282,9 @@ public final class GovernorRunner {
                     "Pending action worsened telemetry (avg %.2f→%.2f, p95 %.2f→%.2f), rolling back",
                     pending.baselineAvgMs(), currentAvg, pending.baselineP95Ms(), currentP95));
             Command rollbackCommand = pending.previousValue()
-                    .map(previous -> new Command.ApplyCapability(pending.capability(), previous))
+                    .<Command>map(previous -> new Command.ApplyCapability(pending.capability(), previous))
                     .orElseGet(() -> new Command.ResetCapability(pending.capability()));
+
             actionBus.dispatch(rollbackCommand, report -> {
                 if (report.succeeded()) {
                     logger.info("Rollback action succeeded");
