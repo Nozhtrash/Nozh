@@ -174,6 +174,7 @@ public final class GovernorRunner {
         logger.info("Governor decision: " + decision.reason());
 
         // Dispatch via ActionBus
+        Command cmd;
         if (decision.targetValue() != null) {
             Optional<dev.nozh.core.bus.CapabilityValue> previousValue = providerRegistry.get(decision.capabilityId())
                     .flatMap(provider -> provider.getCurrentValueSafe());
@@ -205,6 +206,13 @@ public final class GovernorRunner {
             } catch (Exception e) {
                 logger.warn("Failed to update state after governor action: " + e.getMessage());
             }
+        });
+
+        // Update state after action dispatch
+        try {
+            stateStore.update(currentState -> currentState.withGovernorAction(now));
+        } catch (Exception e) {
+            logger.warn("Failed to update state after governor action: " + e.getMessage());
         }
     }
 

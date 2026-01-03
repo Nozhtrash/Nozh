@@ -186,7 +186,7 @@ public final class BiomeBlendRadiusProvider implements CapabilityProvider {
             // - 1 → 0 blocks: ~1 FPS
             //
             // EASY WIN with minimal visual impact
-            return 0.7;
+            return 0.6;
         }
 
         @Override
