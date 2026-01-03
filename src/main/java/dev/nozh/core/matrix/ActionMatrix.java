@@ -229,7 +229,7 @@ public final class ActionMatrix {
             }
             case ENTITY_SHADOWS -> {
                 if (combat || gpuBound || cpuBound) {
-                    return new CapabilityValue.BoolValue(false);
+                    return new CapabilityValue.EnumValue("OFF");
                 }
             }
             case RENDER_DISTANCE -> {
