@@ -42,9 +42,12 @@ public record RuntimeState(
         int pendingActionsCount,
         int executionHistorySize,
         int lastSnapshotHistorySize,
+        List<ActionHistoryEntry> actionHistory,
         int sessionChangesCount,
         double avgFrametimeMs,
         double p95FrametimeMs,
+        double p99FrametimeMs,
+        double frametimeStddevMs,
         double tickTimeAvg,
         double tickTimeP95,
         int spikeCount,
@@ -54,7 +57,7 @@ public record RuntimeState(
         int stateVersion,
         dev.nozh.core.context.Scenario currentScenario,
         double scenarioConfidence) {
-    private static final int CURRENT_VERSION = 4; // Bump version
+    private static final int CURRENT_VERSION = 5; // Bump version
 
     /**
      * Create default initial state.
@@ -76,9 +79,12 @@ public record RuntimeState(
                 0, // pendingActionsCount
                 0, // executionHistorySize
                 0, // lastSnapshotHistorySize
+                List.of(), // actionHistory
                 0, // sessionChangesCount
                 -1.0, // avgFrametimeMs
                 -1.0, // p95FrametimeMs
+                -1.0, // p99FrametimeMs
+                -1.0, // frametimeStddevMs
                 -1.0, // tickTimeAvg
                 -1.0, // tickTimeP95
                 0, // spikeCount
@@ -90,19 +96,9 @@ public record RuntimeState(
     /**
      * Update after governor action (immutable).
      */
-    public RuntimeState withGovernorAction(long timestamp, PendingAction pending) {
-        return withGovernorAction(timestamp, pending, null, executionHistorySize + 1);
-    }
-
-    /**
-     * Update after governor action (immutable) with history metadata.
-     */
-    public RuntimeState withGovernorAction(
-            long timestamp,
-            PendingAction pending,
-            ActionHistoryEntry historyEntry,
-            int historySize) {
-        int nextHistorySize = historySize > 0 ? historySize : executionHistorySize + 1;
+    public RuntimeState withGovernorAction(long timestamp, PendingAction pending, ActionHistoryEntry actionEntry,
+            int maxHistoryEntries) {
+        List<ActionHistoryEntry> updatedHistory = mergeHistory(actionHistory, actionEntry, maxHistoryEntries);
         return new RuntimeState(
                 enabled, safeMode, autoTuning, debugLogs,
                 governorDisabled,
@@ -114,14 +110,18 @@ public record RuntimeState(
                 pendingAction.isPresent() ? pendingActionsCount + 1 : 1,
                 nextHistorySize,
                 lastSnapshotHistorySize,
+                updatedHistory,
                 sessionChangesCount + 1, // increment changes
-                avgFrametimeMs, p95FrametimeMs, tickTimeAvg, tickTimeP95, spikeCount,
+                avgFrametimeMs, p95FrametimeMs, p99FrametimeMs, frametimeStddevMs, tickTimeAvg, tickTimeP95,
+                spikeCount,
                 lastDecisionReason, lastDecisionTimestamp,
                 sessionStartTime, stateVersion,
                 currentScenario, scenarioConfidence);
     }
 
-    public RuntimeState withAppliedSuggestion(long timestamp, PendingAction pending) {
+    public RuntimeState withAppliedSuggestion(long timestamp, PendingAction pending, ActionHistoryEntry actionEntry,
+            int maxHistoryEntries) {
+        List<ActionHistoryEntry> updatedHistory = mergeHistory(actionHistory, actionEntry, maxHistoryEntries);
         return new RuntimeState(
                 enabled, safeMode, autoTuning, debugLogs,
                 governorDisabled,
@@ -133,8 +133,10 @@ public record RuntimeState(
                 pendingAction.isPresent() ? pendingActionsCount + 1 : 1,
                 executionHistorySize + 1,
                 lastSnapshotHistorySize,
+                updatedHistory,
                 sessionChangesCount + 1,
-                avgFrametimeMs, p95FrametimeMs, tickTimeAvg, tickTimeP95, spikeCount,
+                avgFrametimeMs, p95FrametimeMs, p99FrametimeMs, frametimeStddevMs, tickTimeAvg, tickTimeP95,
+                spikeCount,
                 lastDecisionReason, lastDecisionTimestamp,
                 sessionStartTime, stateVersion,
                 currentScenario, scenarioConfidence);
@@ -155,8 +157,10 @@ public record RuntimeState(
                 0,
                 executionHistorySize,
                 lastSnapshotHistorySize,
+                actionHistory,
                 sessionChangesCount,
-                avgFrametimeMs, p95FrametimeMs, tickTimeAvg, tickTimeP95, spikeCount,
+                avgFrametimeMs, p95FrametimeMs, p99FrametimeMs, frametimeStddevMs, tickTimeAvg, tickTimeP95,
+                spikeCount,
                 lastDecisionReason, lastDecisionTimestamp,
                 sessionStartTime, stateVersion,
                 currentScenario, scenarioConfidence);
@@ -177,8 +181,10 @@ public record RuntimeState(
                 pendingActionsCount,
                 executionHistorySize,
                 lastSnapshotHistorySize,
+                actionHistory,
                 sessionChangesCount,
-                avgFrametimeMs, p95FrametimeMs, tickTimeAvg, tickTimeP95, spikeCount,
+                avgFrametimeMs, p95FrametimeMs, p99FrametimeMs, frametimeStddevMs, tickTimeAvg, tickTimeP95,
+                spikeCount,
                 lastDecisionReason, lastDecisionTimestamp,
                 sessionStartTime, stateVersion,
                 currentScenario, scenarioConfidence);
@@ -199,8 +205,10 @@ public record RuntimeState(
                 pendingActionsCount,
                 executionHistorySize,
                 lastSnapshotHistorySize,
+                actionHistory,
                 sessionChangesCount,
-                avgFrametimeMs, p95FrametimeMs, tickTimeAvg, tickTimeP95, spikeCount,
+                avgFrametimeMs, p95FrametimeMs, p99FrametimeMs, frametimeStddevMs, tickTimeAvg, tickTimeP95,
+                spikeCount,
                 lastDecisionReason, lastDecisionTimestamp,
                 sessionStartTime, stateVersion,
                 currentScenario, scenarioConfidence);
@@ -223,8 +231,10 @@ public record RuntimeState(
                 governorCooldownActive, governorLastActionTimestamp,
                 running, validity, startTime,
                 pendingAction, suggestedAction, pendingActionsCount, executionHistorySize, lastSnapshotHistorySize,
+                actionHistory,
                 sessionChangesCount,
-                avgFrametimeMs, p95FrametimeMs, tickTimeAvg, tickTimeP95, spikeCount,
+                avgFrametimeMs, p95FrametimeMs, p99FrametimeMs, frametimeStddevMs, tickTimeAvg, tickTimeP95,
+                spikeCount,
                 lastDecisionReason, lastDecisionTimestamp,
                 sessionStartTime, stateVersion,
                 currentScenario, scenarioConfidence);
@@ -233,14 +243,16 @@ public record RuntimeState(
     /**
      * Update telemetry metrics (immutable).
      */
-    public RuntimeState withTelemetry(double avg, double p95, int spikes, double tickAvg, double tickP95) {
+    public RuntimeState withTelemetry(double avg, double p95, double p99, double stddev, int spikes, double tickAvg,
+            double tickP95) {
         return new RuntimeState(
                 enabled, safeMode, autoTuning, debugLogs,
                 governorDisabled, governorCooldownActive, governorLastActionTimestamp,
                 benchmarkRunning, benchmarkValidity, benchmarkStartTimestamp,
                 pendingAction, suggestedAction, pendingActionsCount, executionHistorySize, lastSnapshotHistorySize,
+                actionHistory,
                 sessionChangesCount,
-                avg, p95, tickAvg, tickP95, spikes,
+                avg, p95, p99, stddev, tickAvg, tickP95, spikes,
                 lastDecisionReason, lastDecisionTimestamp,
                 sessionStartTime, stateVersion,
                 currentScenario, scenarioConfidence);
@@ -257,8 +269,10 @@ public record RuntimeState(
                 governorLastActionTimestamp,
                 benchmarkRunning, benchmarkValidity, benchmarkStartTimestamp,
                 pendingAction, suggestedAction, pendingActionsCount, executionHistorySize, lastSnapshotHistorySize,
+                actionHistory,
                 sessionChangesCount,
-                avgFrametimeMs, p95FrametimeMs, tickTimeAvg, tickTimeP95, spikeCount,
+                avgFrametimeMs, p95FrametimeMs, p99FrametimeMs, frametimeStddevMs, tickTimeAvg, tickTimeP95,
+                spikeCount,
                 lastDecisionReason, lastDecisionTimestamp,
                 sessionStartTime, stateVersion,
                 currentScenario, scenarioConfidence);
@@ -273,8 +287,10 @@ public record RuntimeState(
                 governorDisabled, governorCooldownActive, governorLastActionTimestamp,
                 benchmarkRunning, benchmarkValidity, benchmarkStartTimestamp,
                 pendingAction, suggestedAction, pendingActionsCount, executionHistorySize, lastSnapshotHistorySize,
+                actionHistory,
                 sessionChangesCount,
-                avgFrametimeMs, p95FrametimeMs, tickTimeAvg, tickTimeP95, spikeCount,
+                avgFrametimeMs, p95FrametimeMs, p99FrametimeMs, frametimeStddevMs, tickTimeAvg, tickTimeP95,
+                spikeCount,
                 lastDecisionReason, lastDecisionTimestamp,
                 sessionStartTime, stateVersion,
                 scenario, confidence);
@@ -300,8 +316,10 @@ public record RuntimeState(
                 pendingAction,
                 suggestedAction,
                 pendingActionsCount, executionHistorySize, lastSnapshotHistorySize,
+                actionHistory,
                 sessionChangesCount,
-                avgFrametimeMs, p95FrametimeMs, tickTimeAvg, tickTimeP95, spikeCount,
+                avgFrametimeMs, p95FrametimeMs, p99FrametimeMs, frametimeStddevMs, tickTimeAvg, tickTimeP95,
+                spikeCount,
                 lastDecisionReason, lastDecisionTimestamp,
                 sessionStartTime, stateVersion,
                 currentScenario, scenarioConfidence);
@@ -318,8 +336,10 @@ public record RuntimeState(
                 pendingAction,
                 suggestedAction,
                 pendingActionsCount, executionHistorySize, lastSnapshotHistorySize,
+                actionHistory,
                 sessionChangesCount,
-                avgFrametimeMs, p95FrametimeMs, tickTimeAvg, tickTimeP95, spikeCount,
+                avgFrametimeMs, p95FrametimeMs, p99FrametimeMs, frametimeStddevMs, tickTimeAvg, tickTimeP95,
+                spikeCount,
                 reason != null ? reason : "",
                 timestamp,
                 sessionStartTime, stateVersion,
@@ -334,8 +354,10 @@ public record RuntimeState(
                 pendingAction,
                 Optional.of(suggestion),
                 pendingActionsCount, executionHistorySize, lastSnapshotHistorySize,
+                actionHistory,
                 sessionChangesCount,
-                avgFrametimeMs, p95FrametimeMs, tickTimeAvg, tickTimeP95, spikeCount,
+                avgFrametimeMs, p95FrametimeMs, p99FrametimeMs, frametimeStddevMs, tickTimeAvg, tickTimeP95,
+                spikeCount,
                 lastDecisionReason, lastDecisionTimestamp,
                 sessionStartTime, stateVersion,
                 currentScenario, scenarioConfidence);
@@ -349,8 +371,10 @@ public record RuntimeState(
                 pendingAction,
                 Optional.empty(),
                 pendingActionsCount, executionHistorySize, lastSnapshotHistorySize,
+                actionHistory,
                 sessionChangesCount,
-                avgFrametimeMs, p95FrametimeMs, tickTimeAvg, tickTimeP95, spikeCount,
+                avgFrametimeMs, p95FrametimeMs, p99FrametimeMs, frametimeStddevMs, tickTimeAvg, tickTimeP95,
+                spikeCount,
                 lastDecisionReason, lastDecisionTimestamp,
                 sessionStartTime, stateVersion,
                 currentScenario, scenarioConfidence);
@@ -376,9 +400,12 @@ public record RuntimeState(
                 0, // pendingActionsCount
                 0, // executionHistorySize
                 0, // lastSnapshotHistorySize
+                List.of(), // actionHistory
                 0, // sessionChangesCount
                 -1.0, // avgFrametimeMs
                 -1.0, // p95FrametimeMs
+                -1.0, // p99FrametimeMs
+                -1.0, // frametimeStddevMs
                 -1.0, // tickTimeAvg
                 -1.0, // tickTimeP95
                 0, // spikeCount
@@ -387,5 +414,46 @@ public record RuntimeState(
                 CURRENT_VERSION,
                 dev.nozh.core.context.Scenario.STANDARD,
                 0.5);
+    }
+
+    public RuntimeState withActionOutcome(long timestampMillis, ActionHistoryEntry updatedEntry) {
+        if (updatedEntry == null) {
+            return this;
+        }
+        List<ActionHistoryEntry> updatedHistory = new ArrayList<>(actionHistory);
+        for (int i = 0; i < updatedHistory.size(); i++) {
+            ActionHistoryEntry entry = updatedHistory.get(i);
+            if (entry.timestampMillis() == timestampMillis) {
+                updatedHistory.set(i, updatedEntry);
+                break;
+            }
+        }
+        return new RuntimeState(
+                enabled, safeMode, autoTuning, debugLogs,
+                governorDisabled, governorCooldownActive, governorLastActionTimestamp,
+                benchmarkRunning, benchmarkValidity, benchmarkStartTimestamp,
+                pendingAction, suggestedAction, pendingActionsCount, executionHistorySize, lastSnapshotHistorySize,
+                updatedHistory,
+                sessionChangesCount,
+                avgFrametimeMs, p95FrametimeMs, p99FrametimeMs, frametimeStddevMs, tickTimeAvg, tickTimeP95,
+                spikeCount,
+                lastDecisionReason, lastDecisionTimestamp,
+                sessionStartTime, stateVersion,
+                currentScenario, scenarioConfidence);
+    }
+
+    private List<ActionHistoryEntry> mergeHistory(
+            List<ActionHistoryEntry> existing,
+            ActionHistoryEntry entry,
+            int maxEntries) {
+        if (entry == null) {
+            return existing;
+        }
+        List<ActionHistoryEntry> updated = new ArrayList<>(existing != null ? existing : List.of());
+        updated.add(entry);
+        while (updated.size() > maxEntries && maxEntries > 0) {
+            updated.remove(0);
+        }
+        return updated;
     }
 }
