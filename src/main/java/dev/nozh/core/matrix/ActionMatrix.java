@@ -148,7 +148,7 @@ public final class ActionMatrix {
             }
 
             // INTEGRATION: Session Learning
-            if (sessionLearning.shouldAvoid(id)) {
+            if (sessionLearning.shouldAvoid(id, scenario)) {
                 // If this action didn't help previously, skip it
                 continue;
             }

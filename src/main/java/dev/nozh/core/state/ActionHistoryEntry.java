@@ -1,6 +1,8 @@
 package dev.nozh.core.state;
 
-import dev.nozh.core.bus.CommandLifecycle;
+import dev.nozh.api.PerfSnapshot;
+import dev.nozh.core.context.Scenario;
+import dev.nozh.core.governor.ActionOutcome;
 
 /**
  * Immutable action history entry for HUD and diagnostics.
@@ -8,6 +10,11 @@ import dev.nozh.core.bus.CommandLifecycle;
 public record ActionHistoryEntry(
         long timestampMillis,
         String actionSummary,
-        CommandLifecycle outcome
+        Scenario scenario,
+        double scenarioConfidence,
+        PerfSnapshot beforeSnapshot,
+        PerfSnapshot afterSnapshot,
+        ActionOutcome outcome,
+        boolean rollbackApplied
 ) {
 }

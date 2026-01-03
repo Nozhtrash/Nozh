@@ -26,6 +26,9 @@ public class FabricScenarioDetector implements ScenarioDetector {
     private int stationaryTicks = 0;
     private long lastEntitySampleTick = -1L;
     private int cachedEntityCount = 0;
+    private long lastChunkSampleTick = -1L;
+    private int lastChunkLoadCount = 0;
+    private int recentChunkLoads = 0;
 
     // AFK threshold: 30 seconds
     private static final int AFK_THRESHOLD_TICKS = 20 * 30;
@@ -36,6 +39,7 @@ public class FabricScenarioDetector implements ScenarioDetector {
     private static final int COMBAT_ENTITY_THRESHOLD = 8;
     private static final double MOVEMENT_FAST_DISTANCE_SQ = 0.06 * 0.06;
     private static final double MOVEMENT_SLOW_DISTANCE_SQ = 0.02 * 0.02;
+    private static final int CHUNK_LOAD_SPIKE_THRESHOLD = 6;
 
     public FabricScenarioDetector() {
         this.client = MinecraftClient.getInstance();
@@ -67,6 +71,7 @@ public class FabricScenarioDetector implements ScenarioDetector {
         long inputAgeMs = InputActivityTracker.getLastInputAgeMs();
 
         int nearbyEntities = sampleNearbyEntities(player);
+        int chunkLoadRate = sampleChunkLoads();
         double tpsDropConfidence = getTpsDropConfidence();
         HitResult.Type targetType = getCrosshairTargetType();
         boolean targetEntity = targetType == HitResult.Type.ENTITY;
@@ -161,6 +166,15 @@ public class FabricScenarioDetector implements ScenarioDetector {
         double standardConfidence = inputRecent ? 0.55 : 0.4;
         standardConfidence = clamp(standardConfidence + movementConfidence - tpsDropConfidence * 0.05);
 
+        double loadingConfidence = 0.0;
+        if (chunkLoadRate >= CHUNK_LOAD_SPIKE_THRESHOLD) {
+            loadingConfidence += 0.55;
+        }
+        if (chunkLoadRate > 0) {
+            loadingConfidence += Math.min(0.3, chunkLoadRate * 0.03);
+        }
+        loadingConfidence = clamp(loadingConfidence + tpsDropConfidence * 0.15);
+
         dev.nozh.core.context.Scenario scenario = dev.nozh.core.context.Scenario.STANDARD;
         double confidence = standardConfidence;
 
@@ -184,6 +198,11 @@ public class FabricScenarioDetector implements ScenarioDetector {
             confidence = afkConfidence;
         }
 
+        if (loadingConfidence > confidence) {
+            scenario = dev.nozh.core.context.Scenario.LOADING;
+            confidence = loadingConfidence;
+        }
+
         return new ScenarioSnapshot(scenario, confidence);
     }
 
@@ -200,6 +219,21 @@ public class FabricScenarioDetector implements ScenarioDetector {
                 entity -> entity.isAlive());
         cachedEntityCount = entities.size();
         return cachedEntityCount;
+    }
+
+    private int sampleChunkLoads() {
+        long worldTick = client.world.getTime();
+        int currentLoadCount = dev.nozh.core.monitoring.NozhChunkMonitor.getLoadCount();
+        if (lastChunkSampleTick < 0 || worldTick != lastChunkSampleTick) {
+            int delta = currentLoadCount - lastChunkLoadCount;
+            if (delta < 0) {
+                delta = currentLoadCount;
+            }
+            recentChunkLoads = delta;
+            lastChunkSampleTick = worldTick;
+            lastChunkLoadCount = currentLoadCount;
+        }
+        return recentChunkLoads;
     }
 
     private boolean isPickaxe(Item item) {
