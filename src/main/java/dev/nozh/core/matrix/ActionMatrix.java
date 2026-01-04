@@ -32,6 +32,7 @@ public final class ActionMatrix {
 
     private static final double CONFIDENCE_WEIGHT = 0.65;
     private static final double EXPECTED_GAIN_WEIGHT = 0.35;
+    private static final double LEARNED_CONFIDENCE_WEIGHT = 0.3;
 
     private final ProviderRegistry registry;
     private final ActionSuccessTracker successTracker;
@@ -126,9 +127,11 @@ public final class ActionMatrix {
                     lastFailure,
                     envChanged,
                     now);
+            double learnedConfidence = sessionLearning.getSuccessRate(id, scenario);
+            double blendedConfidence = blendConfidence(confidence, learnedConfidence);
 
             // Filter by confidence threshold
-            if (confidence < policy.minConfidence()) {
+            if (blendedConfidence < policy.minConfidence()) {
                 continue;
             }
 
@@ -168,8 +171,8 @@ public final class ActionMatrix {
                     metadata.rollbackGuarantee(),
                     metadata.gameplayImpact(),
                     metadata.visualImpact(),
-                    confidence,
-                    generateReason(id, confidence, metadata));
+                    blendedConfidence,
+                    generateReason(id, blendedConfidence, metadata));
 
             // Filter by allowed tiers
             if (!policy.allowedTiers().contains(candidate.tier())) {
@@ -239,8 +242,10 @@ public final class ActionMatrix {
                     lastFailure,
                     envChanged,
                     now);
+            double learnedConfidence = sessionLearning.getSuccessRate(id, scenario);
+            double blendedConfidence = blendConfidence(confidence, learnedConfidence);
 
-            if (confidence < policy.minConfidence()) {
+            if (blendedConfidence < policy.minConfidence()) {
                 continue;
             }
 
@@ -253,7 +258,7 @@ public final class ActionMatrix {
                     metadata.rollbackGuarantee(),
                     metadata.gameplayImpact(),
                     metadata.visualImpact(),
-                    confidence,
+                    blendedConfidence,
                     String.format("%s → restore baseline (%s profile)", id.name(), profile.name())));
         }
 
@@ -465,6 +470,11 @@ public final class ActionMatrix {
     private double scoreCandidate(ActionCandidate candidate, double maxExpectedGain) {
         double normalizedGain = maxExpectedGain > 0 ? candidate.expectedGainMs() / maxExpectedGain : 0.0;
         return (candidate.confidenceScore() * CONFIDENCE_WEIGHT) + (normalizedGain * EXPECTED_GAIN_WEIGHT);
+    }
+
+    private double blendConfidence(double baseConfidence, double learnedConfidence) {
+        return (baseConfidence * (1.0 - LEARNED_CONFIDENCE_WEIGHT))
+                + (learnedConfidence * LEARNED_CONFIDENCE_WEIGHT);
     }
 
     private boolean isQualityIncrease(CapabilityId id, CapabilityValue current, CapabilityValue baseline) {
