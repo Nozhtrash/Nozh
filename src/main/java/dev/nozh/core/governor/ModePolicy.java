@@ -67,4 +67,14 @@ public record ModePolicy(
             case AUTO_AGGRESSIVE -> autoAggressive();
         };
     }
+
+    /**
+     * Ensure manual mode preference is respected when auto-tuning is disabled.
+     */
+    public static GovernorMode enforceManualPreference(GovernorMode mode, boolean autoTuningEnabled) {
+        if (!autoTuningEnabled && mode != GovernorMode.OFF) {
+            return GovernorMode.MANUAL_ASSIST;
+        }
+        return mode;
+    }
 }

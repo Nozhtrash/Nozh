@@ -158,6 +158,9 @@ public final class SessionLearning {
     public boolean shouldAvoid(CapabilityId id, dev.nozh.core.context.Scenario scenario) {
         ActionStats stats = history.get(buildKey(id, scenario));
         if (stats == null || stats.totalAttempts < 3) {
+            if (scenario != null) {
+                return shouldAvoid(id);
+            }
             return false;
         }
         double successRate = (double) stats.successCount / stats.totalAttempts;

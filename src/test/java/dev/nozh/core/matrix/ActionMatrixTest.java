@@ -56,7 +56,7 @@ class ActionMatrixTest {
         assertEquals(3, byId.size());
         assertEquals("MINIMAL", candidateValue(byId.get(CapabilityId.PARTICLES)));
         assertEquals("OFF", candidateValue(byId.get(CapabilityId.CLOUDS)));
-        assertEquals("OFF", candidateValue(byId.get(CapabilityId.ENTITY_SHADOWS)));
+        assertEquals("false", candidateValue(byId.get(CapabilityId.ENTITY_SHADOWS)));
     }
 
     @Test
@@ -80,7 +80,7 @@ class ActionMatrixTest {
         Map<CapabilityId, ActionCandidate> byId = byId(candidates);
         assertEquals(3, byId.size());
         assertEquals("8", candidateValue(byId.get(CapabilityId.RENDER_DISTANCE)));
-        assertEquals("OFF", candidateValue(byId.get(CapabilityId.ENTITY_SHADOWS)));
+        assertEquals("false", candidateValue(byId.get(CapabilityId.ENTITY_SHADOWS)));
         assertEquals("DECREASED", candidateValue(byId.get(CapabilityId.PARTICLES)));
     }
 

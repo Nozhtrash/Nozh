@@ -267,6 +267,7 @@ public class NozhModMenuIntegration implements ModMenuApi {
                     Text.translatable("nozh.config.preset.low.tooltip"),
                     button -> {
                         ConfigPresets.applyLowEnd();
+                        syncStateFromConfig();
                         this.clearAndInit();
                     });
             addDrawableChild(lowButton);
@@ -278,6 +279,7 @@ public class NozhModMenuIntegration implements ModMenuApi {
                     Text.translatable("nozh.config.preset.mid.tooltip"),
                     button -> {
                         ConfigPresets.applyMidRange();
+                        syncStateFromConfig();
                         this.clearAndInit();
                     });
             addDrawableChild(midButton);
@@ -289,6 +291,7 @@ public class NozhModMenuIntegration implements ModMenuApi {
                     Text.translatable("nozh.config.preset.high.tooltip"),
                     button -> {
                         ConfigPresets.applyHighEnd();
+                        syncStateFromConfig();
                         this.clearAndInit();
                     });
             addDrawableChild(highButton);
@@ -331,6 +334,10 @@ public class NozhModMenuIntegration implements ModMenuApi {
 
         private void saveConfigAndSync() {
             ConfigManager.saveAndNotify();
+            StateStore.getInstance().update(state -> state.withConfig(ConfigManager.getConfig()));
+        }
+
+        private void syncStateFromConfig() {
             StateStore.getInstance().update(state -> state.withConfig(ConfigManager.getConfig()));
         }
 
@@ -408,6 +415,7 @@ public class NozhModMenuIntegration implements ModMenuApi {
                     Text.translatable("nozh.config.confirm.yes"),
                     button -> {
                         ConfigManager.resetToDefaults();
+                        StateStore.getInstance().update(state -> state.withConfig(ConfigManager.getConfig()));
                         this.client.setScreen(parent);
                     }).dimensions(centerX - 105, centerY + 20, 100, 20).build());
 
