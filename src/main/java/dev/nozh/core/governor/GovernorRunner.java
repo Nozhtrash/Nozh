@@ -20,6 +20,7 @@ import dev.nozh.core.state.StateStore;
 import dev.nozh.core.state.PendingAction;
 import dev.nozh.core.state.ActionHistoryEntry;
 import dev.nozh.core.bus.CapabilityValue;
+import dev.nozh.core.capability.ApplyResult;
 import dev.nozh.api.PerfSnapshot;
 import dev.nozh.core.governor.ActionOutcome;
 
@@ -241,6 +242,7 @@ public final class GovernorRunner {
         // Dispatch via ActionBus
         if (decision.targetValue() != null) {
             PerfSnapshot baselineSnapshot = perfSnapshotSupplier.get();
+            int observationWindowSeconds = resolveObservationWindowSeconds(baselineSnapshot);
             Optional<dev.nozh.core.bus.CapabilityValue> previousValue = providerRegistry.get(decision.capabilityId())
                     .flatMap(provider -> provider.getCurrentValueSafe());
             Command cmd = new Command.ApplyCapability(
@@ -266,6 +268,9 @@ public final class GovernorRunner {
                     state.scenarioConfidence(),
                     baselineSnapshot,
                     PerfSnapshot.empty(),
+                    0.0,
+                    0,
+                    observationWindowSeconds,
                     ActionOutcome.NEUTRAL,
                     false);
 
@@ -431,25 +436,22 @@ public final class GovernorRunner {
         }
 
         ActionOutcome outcome = governor.evaluateOutcome(pending.baselineSnapshot(), currentSnapshot);
+        int observationWindowSeconds = resolveObservationWindowSeconds(currentSnapshot);
+        double p95Delta = currentSnapshot.p95FrametimeMs() - pending.baselineSnapshot().p95FrametimeMs();
+        int spikeDelta = currentSnapshot.spikeCount() - pending.baselineSnapshot().spikeCount();
+        if (spikeDelta > 0) {
+            outcome = ActionOutcome.NEGATIVE;
+        }
 
         boolean rollbackApplied = false;
-        if (outcome == ActionOutcome.NEGATIVE) {
+        if (outcome != ActionOutcome.POSITIVE) {
             if (config.rollbackEnabled) {
                 Long lastRollback = rollbackCooldowns.get(pending.capability());
                 if (lastRollback != null && nowMillis() - lastRollback < config.rollbackCooldownMillis) {
                     logger.info("Rollback skipped due to cooldown for " + pending.capability());
                 } else {
-                    pending.command()
-                            .inverse(pending.previousValue())
-                            .ifPresentOrElse(rollback -> actionBus.dispatch(rollback, r -> {
-                                if (r.succeeded()) {
-                                    logger.info("Rollback succeeded (Action was harmful)");
-                                } else {
-                                    logger.warn("Rollback failed");
-                                }
-                            }), () -> logger.warn("No inverse action available, rollback skipped."));
+                    rollbackApplied = attemptProviderRollback(pending);
                     rollbackCooldowns.put(pending.capability(), nowMillis());
-                    rollbackApplied = true;
                 }
             } else {
                 logger.info("Rollback disabled in config, keeping ineffective action.");
@@ -462,15 +464,16 @@ public final class GovernorRunner {
             double gainP95 = Math.max(0, pending.baselineP95Ms() - currentSnapshot.p95FrametimeMs());
             sessionLearning.recordSuccess(pending.capability(), pending.scenario(), Math.max(gainAvg, gainP95));
             successTracker.recordSuccess(pending.capability());
-        } else {
-            sessionLearning.recordFailure(pending.capability(), pending.scenario());
         }
 
         logger.debug(String.format(
-                "Governor action evaluation action=%s impact=%s decision=%s",
+                "Governor action evaluation action=%s impact=%s decision=%s p95Delta=%.2fms spikesDelta=%d window=%ds",
                 pending.capability(),
                 outcome,
-                rollbackApplied ? "rollback" : "keep"));
+                rollbackApplied ? "rollback" : "keep",
+                p95Delta,
+                spikeDelta,
+                observationWindowSeconds));
 
         String actionSummary = resolveActionSummary(state, pending);
         ActionHistoryEntry updatedEntry = new ActionHistoryEntry(
@@ -480,6 +483,9 @@ public final class GovernorRunner {
                 pending.scenarioConfidence(),
                 pending.baselineSnapshot(),
                 currentSnapshot,
+                p95Delta,
+                spikeDelta,
+                observationWindowSeconds,
                 outcome,
                 rollbackApplied);
         try {
@@ -516,6 +522,40 @@ public final class GovernorRunner {
 
     private boolean isValidPerfValue(double value) {
         return Double.isFinite(value) && value > 0;
+    }
+
+    private boolean attemptProviderRollback(PendingAction pending) {
+        if (pending.previousValue().isEmpty()) {
+            logger.warn("No previous value available for rollback: " + pending.capability());
+            return false;
+        }
+        return providerRegistry.get(pending.capability())
+                .map(provider -> {
+                    ApplyResult result = provider.apply(pending.previousValue().get());
+                    if (result instanceof ApplyResult.Success) {
+                        logger.info("Rollback succeeded (Action was ineffective)");
+                        return true;
+                    }
+                    if (result instanceof ApplyResult.Rejected rejected) {
+                        logger.warn("Rollback rejected for " + pending.capability() + ": " + rejected.reason());
+                    } else if (result instanceof ApplyResult.Failed failed) {
+                        logger.warn("Rollback failed for " + pending.capability() + ": " + failed.reason());
+                    } else {
+                        logger.warn("Rollback returned unknown result for " + pending.capability());
+                    }
+                    return false;
+                })
+                .orElseGet(() -> {
+                    logger.warn("Rollback provider unavailable for " + pending.capability());
+                    return false;
+                });
+    }
+
+    private int resolveObservationWindowSeconds(PerfSnapshot snapshot) {
+        if (snapshot == null || snapshot.windowSeconds() <= 0) {
+            return 0;
+        }
+        return snapshot.windowSeconds();
     }
 
     private String formatActionSummary(ActionCandidate decision) {
