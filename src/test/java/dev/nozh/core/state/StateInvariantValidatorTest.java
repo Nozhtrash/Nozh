@@ -446,8 +446,8 @@ class StateInvariantValidatorTest {
                                 base.benchmarkValidity(),
                                 base.benchmarkStartTimestamp(),
 
-                                java.util.List.<PendingAction>of(),
                                 Optional.<PendingAction>empty(),
+                                java.util.List.<PendingAction>of(),
                                 0,
 
                                 15,
