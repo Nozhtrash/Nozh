@@ -311,7 +311,7 @@ public final class ActionMatrix {
                     return new CapabilityValue.EnumValue("MINIMAL");
                 }
                 if (cpuBound) {
-                    return new CapabilityValue.EnumValue(aggressive ? "MINIMAL" : "DECREASED");
+                    return new CapabilityValue.EnumValue("MINIMAL");
                 }
                 if (gpuBound || balanced) {
                     return new CapabilityValue.EnumValue(aggressive ? "MINIMAL" : "DECREASED");

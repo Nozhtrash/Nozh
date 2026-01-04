@@ -34,10 +34,23 @@ public final class NozhConstants {
     }
 
     // Config paths
-    public static final Path CONFIG_DIR = FabricLoader.getInstance().getConfigDir().resolve(MOD_ID);
-    public static final Path CONFIG_FILE = CONFIG_DIR.resolve("nozh.json");
-    public static final Path STATE_FILE = CONFIG_DIR.resolve("state.json");
-    public static final Path STATE_TMP_FILE = CONFIG_DIR.resolve("state.tmp");
+    public static final Path CONFIG_DIR;
+    public static final Path CONFIG_FILE;
+    public static final Path STATE_FILE;
+    public static final Path STATE_TMP_FILE;
+
+    static {
+        Path configDir;
+        try {
+            configDir = FabricLoader.getInstance().getConfigDir().resolve(MOD_ID);
+        } catch (Throwable ignored) {
+            configDir = Path.of("config").resolve(MOD_ID);
+        }
+        CONFIG_DIR = configDir;
+        CONFIG_FILE = CONFIG_DIR.resolve("nozh.json");
+        STATE_FILE = CONFIG_DIR.resolve("state.json");
+        STATE_TMP_FILE = CONFIG_DIR.resolve("state.tmp");
+    }
 
     // Crash loop guard thresholds
     public static final int MAX_BOOT_ATTEMPTS_BEFORE_SAFE_MODE = 3;
