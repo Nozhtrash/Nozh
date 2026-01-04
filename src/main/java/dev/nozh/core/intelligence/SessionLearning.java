@@ -4,6 +4,9 @@ import dev.nozh.core.bus.CapabilityId;
 import dev.nozh.NozhConstants;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 
 import java.io.File;
 import java.io.FileReader;
@@ -33,6 +36,7 @@ public final class SessionLearning {
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
     private static final long SAVE_INTERVAL_MILLIS = 60000;
 
+    private static final String DEFAULT_SESSION_KEY = "DEFAULT";
     private final Map<String, ActionStats> history = new HashMap<>();
     private final File statsFile;
     private final Path statsPath;
@@ -40,12 +44,33 @@ public final class SessionLearning {
     private int lastSavedHash = 0;
     private long lastSaveMillis = 0;
     private boolean dirty = false;
+    private String sessionKey = DEFAULT_SESSION_KEY;
 
     public SessionLearning(File configDir) {
         this.statsFile = new File(configDir, STATS_FILE);
         this.statsPath = statsFile.toPath();
         this.tmpPath = new File(configDir, STATS_TMP_FILE).toPath();
         load();
+    }
+
+    public void resetForSession(String newSessionKey) {
+        String normalizedKey = normalizeSessionKey(newSessionKey);
+        if (normalizedKey.equals(sessionKey)) {
+            return;
+        }
+        sessionKey = normalizedKey;
+        history.clear();
+        lastSavedHash = 0;
+        lastSaveMillis = 0;
+        dirty = true;
+        safeLog("Session learning reset for new session ({})", sessionKey);
+    }
+
+    private String normalizeSessionKey(String newSessionKey) {
+        if (newSessionKey == null || newSessionKey.isBlank()) {
+            return DEFAULT_SESSION_KEY;
+        }
+        return newSessionKey.trim();
     }
 
     /**
@@ -201,7 +226,7 @@ public final class SessionLearning {
                 parent.mkdirs();
             }
 
-            String json = GSON.toJson(history);
+            String json = GSON.toJson(new SessionData(sessionKey, history));
             int currentHash = json.hashCode();
             if (!force && currentHash == lastSavedHash) {
                 dirty = false;
@@ -237,7 +262,7 @@ public final class SessionLearning {
             }
 
             try {
-                String json = GSON.toJson(history);
+                String json = GSON.toJson(new SessionData(sessionKey, history));
                 Files.writeString(statsPath, json, StandardCharsets.UTF_8,
                         StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.WRITE);
             } catch (IOException ignored) {
@@ -256,16 +281,37 @@ public final class SessionLearning {
         }
 
         try (FileReader reader = new FileReader(statsFile)) {
-            java.lang.reflect.Type type = new com.google.gson.reflect.TypeToken<Map<String, ActionStats>>() {
-            }.getType();
-            Map<String, ActionStats> loaded = GSON.fromJson(reader, type);
-
-            if (loaded != null) {
-                history.putAll(loaded);
-                lastSavedHash = GSON.toJson(history).hashCode();
-                lastSaveMillis = System.currentTimeMillis();
-                safeLog("Session learning loaded ({} entries)", history.size());
+            JsonElement element = JsonParser.parseReader(reader);
+            if (element != null && element.isJsonObject()) {
+                JsonObject object = element.getAsJsonObject();
+                if (object.has("history")) {
+                    SessionData data = GSON.fromJson(object, SessionData.class);
+                    if (data != null) {
+                        sessionKey = normalizeSessionKey(data.sessionKey);
+                        if (data.history != null) {
+                            history.putAll(data.history);
+                        }
+                    }
+                } else {
+                    java.lang.reflect.Type type = new com.google.gson.reflect.TypeToken<Map<String, ActionStats>>() {
+                    }.getType();
+                    Map<String, ActionStats> loaded = GSON.fromJson(object, type);
+                    if (loaded != null) {
+                        history.putAll(loaded);
+                    }
+                }
+            } else {
+                java.lang.reflect.Type type = new com.google.gson.reflect.TypeToken<Map<String, ActionStats>>() {
+                }.getType();
+                Map<String, ActionStats> loaded = GSON.fromJson(element, type);
+                if (loaded != null) {
+                    history.putAll(loaded);
+                }
             }
+
+            lastSavedHash = GSON.toJson(new SessionData(sessionKey, history)).hashCode();
+            lastSaveMillis = System.currentTimeMillis();
+            safeLog("Session learning loaded ({} entries)", history.size());
         } catch (Exception e) {
             safeWarn("Failed to load session stats: {}", e.getMessage());
         }
@@ -302,5 +348,15 @@ public final class SessionLearning {
         public long lastFailureTime = 0;
         public double totalFpsGain = 0.0;
         public double avgFpsGain = 0.0;
+    }
+
+    private static final class SessionData {
+        public String sessionKey;
+        public Map<String, ActionStats> history;
+
+        private SessionData(String sessionKey, Map<String, ActionStats> history) {
+            this.sessionKey = sessionKey;
+            this.history = history;
+        }
     }
 }

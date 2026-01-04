@@ -58,6 +58,7 @@ public class NozhModClient implements ClientModInitializer {
     private static KeyBinding toggleHudKey;
     private static KeyBinding applySuggestionKey;
     private static boolean safeModeNotified = false;
+    private static String lastSessionKey = null;
 
     private static int tickCounter = 0;
     private static final int TELEMETRY_UPDATE_INTERVAL = 20; // Every second (20 ticks)
@@ -224,6 +225,14 @@ public class NozhModClient implements ClientModInitializer {
             if (governorRunner != null) {
                 governorRunner.captureBaselineSettings();
             }
+            if (sessionLearning != null) {
+                String sessionKey = resolveSessionKey(client, handler);
+                if (lastSessionKey == null || !lastSessionKey.equals(sessionKey)) {
+                    sessionLearning.resetForSession(sessionKey);
+                    sessionLearning.save();
+                    lastSessionKey = sessionKey;
+                }
+            }
         });
 
         // === COMMANDS & SHUTDOWN ===
@@ -354,5 +363,22 @@ public class NozhModClient implements ClientModInitializer {
         if (client.inGameHud != null) {
             client.inGameHud.getChatHud().addMessage(title.copy().append(Text.literal(" ")).append(message));
         }
+    }
+
+    private static String resolveSessionKey(MinecraftClient client,
+            net.minecraft.client.network.ClientPlayNetworkHandler handler) {
+        if (client != null && client.isIntegratedServerRunning() && client.getServer() != null) {
+            try {
+                String levelName = client.getServer().getSaveProperties().getLevelName();
+                if (levelName != null && !levelName.isBlank()) {
+                    return "local:" + levelName;
+                }
+            } catch (Exception ignored) {
+            }
+        }
+        if (handler != null && handler.getConnection() != null && handler.getConnection().getAddress() != null) {
+            return "remote:" + handler.getConnection().getAddress().toString();
+        }
+        return "unknown";
     }
 }

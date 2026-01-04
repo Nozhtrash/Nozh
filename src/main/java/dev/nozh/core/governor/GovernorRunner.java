@@ -29,6 +29,7 @@ import dev.nozh.core.monitoring.SystemMonitor;
 
 import java.util.Optional;
 import java.util.function.Supplier;
+import java.util.function.ToDoubleFunction;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -427,24 +428,34 @@ public final class GovernorRunner {
             return;
         }
         PerfSnapshot currentSnapshot = perfSnapshotSupplier.get();
-        if (currentSnapshot == null
-                || pending.baselineSnapshot() == null
-                || !currentSnapshot.sufficientData()
-                || !pending.baselineSnapshot().sufficientData()) {
-            logger.debug("Skipping outcome evaluation (insufficient perf snapshot data)");
-            return;
+        if (currentSnapshot == null) {
+            currentSnapshot = PerfSnapshot.empty();
+        }
+        PerfSnapshot baselineSnapshot = pending.baselineSnapshot();
+        if (baselineSnapshot == null) {
+            baselineSnapshot = PerfSnapshot.empty();
+        }
+        boolean sufficientData = currentSnapshot != null
+                && baselineSnapshot != null
+                && currentSnapshot.sufficientData()
+                && baselineSnapshot.sufficientData();
+
+        ActionOutcome outcome = sufficientData
+                ? governor.evaluateOutcome(baselineSnapshot, currentSnapshot)
+                : evaluateOutcomeFallback(baselineSnapshot, currentSnapshot);
+        if (!sufficientData) {
+            logger.debug("Outcome evaluation fallback used (insufficient perf snapshot data)");
         }
 
-        ActionOutcome outcome = governor.evaluateOutcome(pending.baselineSnapshot(), currentSnapshot);
-        int observationWindowSeconds = resolveObservationWindowSeconds(currentSnapshot);
-        double p95Delta = currentSnapshot.p95FrametimeMs() - pending.baselineSnapshot().p95FrametimeMs();
-        int spikeDelta = currentSnapshot.spikeCount() - pending.baselineSnapshot().spikeCount();
+        int observationWindowSeconds = resolveObservationWindowSeconds(currentSnapshot != null ? currentSnapshot : baselineSnapshot);
+        double p95Delta = resolveDelta(currentSnapshot, baselineSnapshot, PerfSnapshot::p95FrametimeMs);
+        int spikeDelta = resolveSpikeDelta(currentSnapshot, baselineSnapshot);
         if (spikeDelta > 0) {
             outcome = ActionOutcome.NEGATIVE;
         }
 
         boolean rollbackApplied = false;
-        if (outcome != ActionOutcome.POSITIVE) {
+        if (outcome != ActionOutcome.POSITIVE && sufficientData) {
             if (config.rollbackEnabled) {
                 Long lastRollback = rollbackCooldowns.get(pending.capability());
                 if (lastRollback != null && nowMillis() - lastRollback < config.rollbackCooldownMillis) {
@@ -460,8 +471,8 @@ public final class GovernorRunner {
             sessionLearning.recordFailure(pending.capability(), pending.scenario());
             successTracker.recordFailure(pending.capability());
         } else if (outcome == ActionOutcome.POSITIVE) {
-            double gainAvg = Math.max(0, pending.baselineAvgMs() - currentSnapshot.avgFrametimeMs());
-            double gainP95 = Math.max(0, pending.baselineP95Ms() - currentSnapshot.p95FrametimeMs());
+            double gainAvg = resolveGain(pending.baselineAvgMs(), currentSnapshot != null ? currentSnapshot.avgFrametimeMs() : Double.NaN);
+            double gainP95 = resolveGain(pending.baselineP95Ms(), currentSnapshot != null ? currentSnapshot.p95FrametimeMs() : Double.NaN);
             sessionLearning.recordSuccess(pending.capability(), pending.scenario(), Math.max(gainAvg, gainP95));
             successTracker.recordSuccess(pending.capability());
         }
@@ -511,6 +522,25 @@ public final class GovernorRunner {
                 .orElse(pending.baselineP95Ms());
     }
 
+    private ActionOutcome evaluateOutcomeFallback(PerfSnapshot baselineSnapshot, PerfSnapshot currentSnapshot) {
+        if (baselineSnapshot == null || currentSnapshot == null) {
+            return ActionOutcome.NEUTRAL;
+        }
+        double avgDelta = resolveDelta(currentSnapshot, baselineSnapshot, PerfSnapshot::avgFrametimeMs);
+        double p95Delta = resolveDelta(currentSnapshot, baselineSnapshot, PerfSnapshot::p95FrametimeMs);
+        boolean avgValid = isValidPerfValue(currentSnapshot.avgFrametimeMs())
+                && isValidPerfValue(baselineSnapshot.avgFrametimeMs());
+        boolean p95Valid = isValidPerfValue(currentSnapshot.p95FrametimeMs())
+                && isValidPerfValue(baselineSnapshot.p95FrametimeMs());
+        if (!avgValid && !p95Valid) {
+            return ActionOutcome.NEUTRAL;
+        }
+        if ((avgValid && avgDelta < 0) || (p95Valid && p95Delta < 0)) {
+            return ActionOutcome.POSITIVE;
+        }
+        return ActionOutcome.NEGATIVE;
+    }
+
     private String resolveActionSummary(RuntimeState state, PendingAction pending) {
         for (ActionHistoryEntry entry : state.actionHistory()) {
             if (entry.timestampMillis() == pending.timestampMillis()) {
@@ -522,6 +552,35 @@ public final class GovernorRunner {
 
     private boolean isValidPerfValue(double value) {
         return Double.isFinite(value) && value > 0;
+    }
+
+    private double resolveDelta(
+            PerfSnapshot currentSnapshot,
+            PerfSnapshot baselineSnapshot,
+            ToDoubleFunction<PerfSnapshot> extractor) {
+        if (currentSnapshot == null || baselineSnapshot == null) {
+            return 0.0;
+        }
+        double currentValue = extractor.applyAsDouble(currentSnapshot);
+        double baselineValue = extractor.applyAsDouble(baselineSnapshot);
+        if (!isValidPerfValue(currentValue) || !isValidPerfValue(baselineValue)) {
+            return 0.0;
+        }
+        return currentValue - baselineValue;
+    }
+
+    private int resolveSpikeDelta(PerfSnapshot currentSnapshot, PerfSnapshot baselineSnapshot) {
+        if (currentSnapshot == null || baselineSnapshot == null) {
+            return 0;
+        }
+        return currentSnapshot.spikeCount() - baselineSnapshot.spikeCount();
+    }
+
+    private double resolveGain(double baselineMs, double currentMs) {
+        if (!isValidPerfValue(baselineMs) || !isValidPerfValue(currentMs)) {
+            return 0.0;
+        }
+        return Math.max(0.0, baselineMs - currentMs);
     }
 
     private boolean attemptProviderRollback(PendingAction pending) {
