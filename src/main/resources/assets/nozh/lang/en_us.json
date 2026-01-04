@@ -81,6 +81,7 @@
   "nozh.hud.suggestion": "Suggestion: %s",
   "nozh.hud.suggestion.none": "No suggestion",
   "nozh.hud.suggestion.apply_hint": "%s (press K)",
+  "nozh.hud.suggestion.apply_hint_many": "%s (press K) +%s more",
   "nozh.hud.suggestion.revert": "Consider reverting to %s",
   "nozh.hud.suggestion.pending": "Monitor performance",
   "nozh.safemode.entered.title": "Safe Mode",

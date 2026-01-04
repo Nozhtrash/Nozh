@@ -41,7 +41,7 @@ public record RuntimeState(
         String benchmarkValidity,
         long benchmarkStartTimestamp,
         Optional<PendingAction> pendingAction,
-        Optional<PendingAction> suggestedAction,
+        List<PendingAction> suggestedActions,
         int pendingActionsCount,
         int executionHistorySize,
         int lastSnapshotHistorySize,
@@ -62,7 +62,7 @@ public record RuntimeState(
         double scenarioConfidence,
         Map<CapabilityId, CapabilityValue> baselineSettings,
         Map<CapabilityId, CapabilityValue> currentSettings) {
-    private static final int CURRENT_VERSION = 5; // Bump version
+    private static final int CURRENT_VERSION = 6; // Bump version
 
     /**
      * Create default initial state.
@@ -80,7 +80,7 @@ public record RuntimeState(
                 "NONE", // benchmarkValidity
                 0L, // benchmarkStartTimestamp
                 Optional.empty(), // pendingAction
-                Optional.empty(), // suggestedAction
+                List.of(), // suggestedActions
                 0, // pendingActionsCount
                 0, // executionHistorySize
                 0, // lastSnapshotHistorySize
@@ -114,7 +114,7 @@ public record RuntimeState(
                 timestamp, // governorLastActionTimestamp
                 benchmarkRunning, benchmarkValidity, benchmarkStartTimestamp,
                 Optional.of(pending),
-                suggestedAction,
+                suggestedActions,
                 pendingAction.isPresent() ? pendingActionsCount + 1 : 1,
                 nextHistorySize,
                 lastSnapshotHistorySize,
@@ -131,6 +131,12 @@ public record RuntimeState(
     public RuntimeState withAppliedSuggestion(long timestamp, PendingAction pending, ActionHistoryEntry actionEntry,
             int maxHistoryEntries) {
         List<ActionHistoryEntry> updatedHistory = mergeHistory(actionHistory, actionEntry, maxHistoryEntries);
+        List<PendingAction> updatedSuggestions = new ArrayList<>(suggestedActions != null ? suggestedActions : List.of());
+        if (pending != null && updatedSuggestions.contains(pending)) {
+            updatedSuggestions.remove(pending);
+        } else if (!updatedSuggestions.isEmpty()) {
+            updatedSuggestions.remove(0);
+        }
         return new RuntimeState(
                 enabled, safeMode, autoTuning, debugLogs,
                 governorDisabled,
@@ -138,7 +144,7 @@ public record RuntimeState(
                 timestamp,
                 benchmarkRunning, benchmarkValidity, benchmarkStartTimestamp,
                 Optional.of(pending),
-                Optional.empty(),
+                updatedSuggestions,
                 pendingAction.isPresent() ? pendingActionsCount + 1 : 1,
                 executionHistorySize + 1,
                 lastSnapshotHistorySize,
@@ -163,7 +169,7 @@ public record RuntimeState(
                 governorLastActionTimestamp,
                 benchmarkRunning, benchmarkValidity, benchmarkStartTimestamp,
                 Optional.empty(),
-                suggestedAction,
+                suggestedActions,
                 0,
                 executionHistorySize,
                 lastSnapshotHistorySize,
@@ -181,6 +187,10 @@ public record RuntimeState(
      * Update suggested action (manual assist).
      */
     public RuntimeState withSuggestedAction(PendingAction pending) {
+        List<PendingAction> updatedSuggestions = new ArrayList<>(suggestedActions != null ? suggestedActions : List.of());
+        if (pending != null) {
+            updatedSuggestions.add(pending);
+        }
         return new RuntimeState(
                 enabled, safeMode, autoTuning, debugLogs,
                 governorDisabled,
@@ -188,7 +198,7 @@ public record RuntimeState(
                 governorLastActionTimestamp,
                 benchmarkRunning, benchmarkValidity, benchmarkStartTimestamp,
                 pendingAction,
-                Optional.of(pending),
+                updatedSuggestions,
                 pendingActionsCount,
                 executionHistorySize,
                 lastSnapshotHistorySize,
@@ -213,7 +223,7 @@ public record RuntimeState(
                 governorLastActionTimestamp,
                 benchmarkRunning, benchmarkValidity, benchmarkStartTimestamp,
                 pendingAction,
-                Optional.empty(),
+                List.of(),
                 pendingActionsCount,
                 executionHistorySize,
                 lastSnapshotHistorySize,
@@ -243,7 +253,7 @@ public record RuntimeState(
                 running ? true : governorDisabled, // disable governor during benchmark
                 governorCooldownActive, governorLastActionTimestamp,
                 running, validity, startTime,
-                pendingAction, suggestedAction, pendingActionsCount, executionHistorySize, lastSnapshotHistorySize,
+                pendingAction, suggestedActions, pendingActionsCount, executionHistorySize, lastSnapshotHistorySize,
                 actionHistory,
                 sessionChangesCount,
                 avgFrametimeMs, p95FrametimeMs, p99FrametimeMs, frametimeStddevMs, tickTimeAvg, tickTimeP95,
@@ -263,7 +273,7 @@ public record RuntimeState(
                 enabled, safeMode, autoTuning, debugLogs,
                 governorDisabled, governorCooldownActive, governorLastActionTimestamp,
                 benchmarkRunning, benchmarkValidity, benchmarkStartTimestamp,
-                pendingAction, suggestedAction, pendingActionsCount, executionHistorySize, lastSnapshotHistorySize,
+                pendingAction, suggestedActions, pendingActionsCount, executionHistorySize, lastSnapshotHistorySize,
                 actionHistory,
                 sessionChangesCount,
                 avg, p95, p99, stddev, tickAvg, tickP95, spikes,
@@ -283,7 +293,7 @@ public record RuntimeState(
                 false, // governorCooldownActive = false
                 governorLastActionTimestamp,
                 benchmarkRunning, benchmarkValidity, benchmarkStartTimestamp,
-                pendingAction, suggestedAction, pendingActionsCount, executionHistorySize, lastSnapshotHistorySize,
+                pendingAction, suggestedActions, pendingActionsCount, executionHistorySize, lastSnapshotHistorySize,
                 actionHistory,
                 sessionChangesCount,
                 avgFrametimeMs, p95FrametimeMs, p99FrametimeMs, frametimeStddevMs, tickTimeAvg, tickTimeP95,
@@ -302,7 +312,7 @@ public record RuntimeState(
                 enabled, safeMode, autoTuning, debugLogs,
                 governorDisabled, governorCooldownActive, governorLastActionTimestamp,
                 benchmarkRunning, benchmarkValidity, benchmarkStartTimestamp,
-                pendingAction, suggestedAction, pendingActionsCount, executionHistorySize, lastSnapshotHistorySize,
+                pendingAction, suggestedActions, pendingActionsCount, executionHistorySize, lastSnapshotHistorySize,
                 actionHistory,
                 sessionChangesCount,
                 avgFrametimeMs, p95FrametimeMs, p99FrametimeMs, frametimeStddevMs, tickTimeAvg, tickTimeP95,
@@ -331,7 +341,7 @@ public record RuntimeState(
                 governorDisabled, governorCooldownActive, governorLastActionTimestamp,
                 benchmarkRunning, benchmarkValidity, benchmarkStartTimestamp,
                 pendingAction,
-                suggestedAction,
+                suggestedActions,
                 pendingActionsCount, executionHistorySize, lastSnapshotHistorySize,
                 actionHistory,
                 sessionChangesCount,
@@ -352,7 +362,7 @@ public record RuntimeState(
                 governorDisabled, governorCooldownActive, governorLastActionTimestamp,
                 benchmarkRunning, benchmarkValidity, benchmarkStartTimestamp,
                 pendingAction,
-                suggestedAction,
+                suggestedActions,
                 pendingActionsCount, executionHistorySize, lastSnapshotHistorySize,
                 actionHistory,
                 sessionChangesCount,
@@ -366,12 +376,16 @@ public record RuntimeState(
     }
 
     public RuntimeState withPendingSuggestion(PendingAction suggestion) {
+        List<PendingAction> updatedSuggestions = new ArrayList<>(suggestedActions != null ? suggestedActions : List.of());
+        if (suggestion != null) {
+            updatedSuggestions.add(suggestion);
+        }
         return new RuntimeState(
                 enabled, safeMode, autoTuning, debugLogs,
                 governorDisabled, governorCooldownActive, governorLastActionTimestamp,
                 benchmarkRunning, benchmarkValidity, benchmarkStartTimestamp,
                 pendingAction,
-                Optional.of(suggestion),
+                updatedSuggestions,
                 pendingActionsCount, executionHistorySize, lastSnapshotHistorySize,
                 actionHistory,
                 sessionChangesCount,
@@ -389,7 +403,7 @@ public record RuntimeState(
                 governorDisabled, governorCooldownActive, governorLastActionTimestamp,
                 benchmarkRunning, benchmarkValidity, benchmarkStartTimestamp,
                 pendingAction,
-                Optional.empty(),
+                List.of(),
                 pendingActionsCount, executionHistorySize, lastSnapshotHistorySize,
                 actionHistory,
                 sessionChangesCount,
@@ -417,7 +431,7 @@ public record RuntimeState(
                 "NONE", // benchmarkValidity
                 0L, // benchmarkStartTimestamp
                 Optional.empty(), // pendingAction
-                Optional.empty(), // suggestedAction
+                List.of(), // suggestedActions
                 0, // pendingActionsCount
                 0, // executionHistorySize
                 0, // lastSnapshotHistorySize
@@ -444,7 +458,7 @@ public record RuntimeState(
                 enabled, safeMode, autoTuning, debugLogs,
                 governorDisabled, governorCooldownActive, governorLastActionTimestamp,
                 benchmarkRunning, benchmarkValidity, benchmarkStartTimestamp,
-                pendingAction, suggestedAction, pendingActionsCount, executionHistorySize, lastSnapshotHistorySize,
+                pendingAction, suggestedActions, pendingActionsCount, executionHistorySize, lastSnapshotHistorySize,
                 actionHistory,
                 sessionChangesCount,
                 avgFrametimeMs, p95FrametimeMs, p99FrametimeMs, frametimeStddevMs, tickTimeAvg, tickTimeP95,
@@ -461,7 +475,7 @@ public record RuntimeState(
                 enabled, safeMode, autoTuning, debugLogs,
                 governorDisabled, governorCooldownActive, governorLastActionTimestamp,
                 benchmarkRunning, benchmarkValidity, benchmarkStartTimestamp,
-                pendingAction, suggestedAction, pendingActionsCount, executionHistorySize, lastSnapshotHistorySize,
+                pendingAction, suggestedActions, pendingActionsCount, executionHistorySize, lastSnapshotHistorySize,
                 actionHistory,
                 sessionChangesCount,
                 avgFrametimeMs, p95FrametimeMs, p99FrametimeMs, frametimeStddevMs, tickTimeAvg, tickTimeP95,
@@ -489,7 +503,7 @@ public record RuntimeState(
                 enabled, safeMode, autoTuning, debugLogs,
                 governorDisabled, governorCooldownActive, governorLastActionTimestamp,
                 benchmarkRunning, benchmarkValidity, benchmarkStartTimestamp,
-                pendingAction, suggestedAction, pendingActionsCount, executionHistorySize, lastSnapshotHistorySize,
+                pendingAction, suggestedActions, pendingActionsCount, executionHistorySize, lastSnapshotHistorySize,
                 updatedHistory,
                 sessionChangesCount,
                 avgFrametimeMs, p95FrametimeMs, p99FrametimeMs, frametimeStddevMs, tickTimeAvg, tickTimeP95,
