@@ -36,6 +36,8 @@ import java.util.Map;
  */
 public final class GovernorRunner {
 
+    private static final int MAX_SUGGESTED_QUEUE = 5;
+
     private final SimulationGovernor governor;
     private final ActionBus actionBus;
     private final NozhLogger logger;
@@ -131,8 +133,9 @@ public final class GovernorRunner {
             return;
         }
 
-        if (state.suggestedAction().isPresent()) {
-            logger.debug("Pending suggestion awaiting confirmation");
+        int suggestionQueueSize = state.suggestedActions() != null ? state.suggestedActions().size() : 0;
+        if (suggestionQueueSize >= MAX_SUGGESTED_QUEUE) {
+            logger.debug("Suggestion queue full, awaiting confirmations");
             return;
         }
 
@@ -153,10 +156,6 @@ public final class GovernorRunner {
 
         GovernorMode mode = determineMode(state);
         mode = ModePolicy.enforceManualPreference(mode, state.autoTuning() && config.allowAutoTuning);
-        if (mode == GovernorMode.MANUAL_ASSIST && state.suggestedAction().isPresent()) {
-            logger.debug("Manual assist active: suggestion pending, awaiting user confirmation");
-            return;
-        }
         ModePolicy policy = ModePolicy.forMode(mode);
 
         // 3. Detect performance bound from telemetry
@@ -203,6 +202,15 @@ public final class GovernorRunner {
 
         // Manual Assist: stage suggestion only
         if (policy.requiresUserConfirmation() && decision.targetValue() != null) {
+            if (state.suggestedActions() != null) {
+                for (PendingAction existing : state.suggestedActions()) {
+                    if (existing.capability() == decision.capabilityId()
+                            && existing.newValue().equals(decision.targetValue())) {
+                        logger.debug("Suggestion already queued, skipping duplicate");
+                        return;
+                    }
+                }
+            }
             PerfSnapshot baselineSnapshot = perfSnapshotSupplier.get();
             Optional<dev.nozh.core.bus.CapabilityValue> previousValue = providerRegistry.get(decision.capabilityId())
                     .flatMap(provider -> provider.getCurrentValueSafe());

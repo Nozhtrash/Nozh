@@ -4,6 +4,7 @@ import dev.nozh.NozhConstants;
 import dev.nozh.core.compat.CompatService;
 import dev.nozh.core.config.ConfigManager;
 import dev.nozh.core.config.NozhConfig;
+import dev.nozh.core.state.PendingAction;
 import dev.nozh.core.state.RuntimeState;
 import dev.nozh.core.state.StateStore;
 import dev.nozh.core.safety.CrashLoopGuard;
@@ -234,8 +235,13 @@ public final class NozhCommands {
         ctx.getSource().sendFeedback(Text.translatable("nozh.status.uptime", uptimeSec));
         ctx.getSource().sendFeedback(Text.translatable("nozh.status.target", config.targetFps));
 
-        runtimeState.suggestedAction().ifPresent(pending -> ctx.getSource().sendFeedback(Text.literal(
-                "Suggestion pending: " + pending.capability().name() + "=" + pending.newValue() + " (/nozh apply)")));
+        if (runtimeState.suggestedActions() != null && !runtimeState.suggestedActions().isEmpty()) {
+            PendingAction pending = runtimeState.suggestedActions().get(0);
+            int remaining = runtimeState.suggestedActions().size();
+            ctx.getSource().sendFeedback(Text.literal(
+                    "Suggestions pending (" + remaining + "): " + pending.capability().name() + "="
+                            + pending.newValue() + " (/nozh apply)"));
+        }
         runtimeState.pendingAction().ifPresent(pending -> ctx.getSource().sendFeedback(Text.literal(
                 "Action pending evaluation: " + pending.capability().name() + "=" + pending.newValue())));
     }
@@ -324,7 +330,7 @@ public final class NozhCommands {
 
     private static void runClearSuggestion(FabricClientCommandSource source) {
         RuntimeState state = StateStore.getInstance().snapshotSafe();
-        if (state.suggestedAction().isEmpty()) {
+        if (state.suggestedActions() == null || state.suggestedActions().isEmpty()) {
             source.sendFeedback(Text.translatable("nozh.suggestion.clear.none"));
             return;
         }

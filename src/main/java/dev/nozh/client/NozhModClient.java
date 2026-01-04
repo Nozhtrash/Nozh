@@ -301,14 +301,14 @@ public class NozhModClient implements ClientModInitializer {
         }
 
         RuntimeState state = StateStore.getInstance().snapshotSafe();
-        if (state.suggestedAction().isEmpty()) {
+        if (state.suggestedActions() == null || state.suggestedActions().isEmpty()) {
             notifyClient(client,
                     Text.translatable("nozh.suggestion.apply.none"),
                     Text.translatable("nozh.suggestion.apply.none_detail"));
             return;
         }
 
-        PendingAction pending = state.suggestedAction().get();
+        PendingAction pending = state.suggestedActions().get(0);
         var command = pending.command();
         long now = System.currentTimeMillis();
         int maxHistoryEntries = ConfigManager.getConfig() != null ? ConfigManager.getConfig().historyMaxEntries : 50;

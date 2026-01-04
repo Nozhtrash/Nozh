@@ -120,11 +120,15 @@ public class NozhHudRenderer implements HudRenderCallback {
     }
 
     private String resolveSuggestion(RuntimeState state) {
-        if (state == null || state.suggestedAction().isEmpty()) {
+        if (state == null || state.suggestedActions() == null || state.suggestedActions().isEmpty()) {
             return Text.translatable("nozh.hud.suggestion.none").getString();
         }
-        var pending = state.suggestedAction().get();
+        var pending = state.suggestedActions().get(0);
         String summary = formatAction(pending.capability().name(), pending.newValue().toString());
+        int remaining = state.suggestedActions().size() - 1;
+        if (remaining > 0) {
+            return Text.translatable("nozh.hud.suggestion.apply_hint_many", summary, remaining).getString();
+        }
         return Text.translatable("nozh.hud.suggestion.apply_hint", summary).getString();
     }
 

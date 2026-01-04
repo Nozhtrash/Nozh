@@ -81,6 +81,7 @@
   "nozh.hud.suggestion": "Sugerencia: %s",
   "nozh.hud.suggestion.none": "Sin sugerencias",
   "nozh.hud.suggestion.apply_hint": "%s (pulsa K)",
+  "nozh.hud.suggestion.apply_hint_many": "%s (pulsa K) +%s más",
   "nozh.hud.suggestion.revert": "Considera volver a %s",
   "nozh.hud.suggestion.pending": "Monitorea el rendimiento",
   "nozh.safemode.entered.title": "Modo Seguro",
