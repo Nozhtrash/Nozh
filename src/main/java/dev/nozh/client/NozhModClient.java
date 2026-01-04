@@ -319,6 +319,9 @@ public class NozhModClient implements ClientModInitializer {
                 pending.scenarioConfidence(),
                 pending.baselineSnapshot(),
                 dev.nozh.api.PerfSnapshot.empty(),
+                0.0,
+                0,
+                0,
                 ActionOutcome.NEUTRAL,
                 false);
 

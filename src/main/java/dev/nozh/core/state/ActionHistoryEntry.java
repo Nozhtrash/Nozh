@@ -14,6 +14,9 @@ public record ActionHistoryEntry(
         double scenarioConfidence,
         PerfSnapshot beforeSnapshot,
         PerfSnapshot afterSnapshot,
+        double p95DeltaMs,
+        int spikeDelta,
+        int observationWindowSeconds,
         ActionOutcome outcome,
         boolean rollbackApplied
 ) {
