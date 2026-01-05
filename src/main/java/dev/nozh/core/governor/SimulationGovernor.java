@@ -111,7 +111,9 @@ public final class SimulationGovernor {
                                 policy,
                                 currentBound,
                                 state.currentScenario(),
-                                profile);
+                                profile,
+                                state.p95FrametimeMs(),
+                                state.spikeCount());
 
                 if (candidates.isEmpty()) {
                         return Optional.empty();
