@@ -1,5 +1,6 @@
 package dev.nozh.core.state;
 
+import dev.nozh.core.config.NozhConfig;
 import org.junit.jupiter.api.Test;
 
 import java.util.concurrent.ConcurrentLinkedQueue;
@@ -9,6 +10,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class StateStoreTest {
@@ -43,7 +45,8 @@ class StateStoreTest {
             try {
                 startLatch.await();
                 for (int i = 0; i < 100; i++) {
-                    store.update(state -> state.withDecision("thread-" + Thread.currentThread().getId(), System.nanoTime()));
+                    store.update(state -> state.withDecision("thread-" + Thread.currentThread().getId(),
+                            System.nanoTime()));
                 }
             } catch (Throwable t) {
                 errors.add(t);
@@ -77,6 +80,23 @@ class StateStoreTest {
 
         try {
             assertTrue(errors.isEmpty());
+        } finally {
+            store.reset();
+        }
+    }
+
+    @Test
+    void updateRejectsInvalidState() {
+        StateStore store = StateStore.getInstance();
+        store.reset();
+
+        NozhConfig config = new NozhConfig();
+        config.safeModeForce = true;
+        config.allowAutoTuning = true;
+
+        try {
+            assertThrows(StateInvariantViolationException.class,
+                    () -> store.update(state -> RuntimeState.fromConfig(config)));
         } finally {
             store.reset();
         }
