@@ -412,6 +412,7 @@ public record RuntimeState(
                 timestamp,
                 sessionStartTime, stateVersion,
                 currentScenario, scenarioConfidence,
+                lastScenarioChangeTimestamp, scenarioChangeCount, rapidScenarioChangeCount, combatAfkFlipCount,
                 baselineSettings, currentSettings);
     }
 
