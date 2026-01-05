@@ -68,6 +68,21 @@ public class PerfManager {
         return snapshot;
     }
 
+    public void setObservationWindowSeconds(int newWindowSeconds) {
+        if (newWindowSeconds <= 0 || newWindowSeconds == windowSeconds) {
+            return;
+        }
+
+        NozhConfig config = ConfigManager.getConfig();
+        int targetFps = Math.max(30, config.targetFps);
+        int capacity = calculateCapacity(targetFps, newWindowSeconds);
+        windowSeconds = newWindowSeconds;
+        stats = new RollingWindowStats(capacity, newWindowSeconds);
+        sampler = new FrameTimeSampler(stats);
+        lastWindowAdjustMillis = System.currentTimeMillis();
+        NozhConstants.LOGGER.debug("PerfManager observation window set to {}s (capacity={})", newWindowSeconds, capacity);
+    }
+
     public Path exportTelemetry(Path outputDir, TelemetryExportFormat format) throws Exception {
         Files.createDirectories(outputDir);
         PerfSnapshot snapshot = stats.snapshot();

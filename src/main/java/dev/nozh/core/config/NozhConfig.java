@@ -35,6 +35,7 @@ public class NozhConfig {
     public double improvementEpsilonP95Ms = 1.0;
     public int rollbackEvaluationTicks = 100;
     public int rollbackCooldownMillis = 60000;
+    public int observationWindowSeconds = 5;
 
     // Performance Targets
     public int targetFps = 60;
@@ -128,6 +129,12 @@ public class NozhConfig {
         // rollbackCooldownMillis: 10000-600000
         if (rollbackCooldownMillis < 10000 || rollbackCooldownMillis > 600000) {
             rollbackCooldownMillis = clamp(rollbackCooldownMillis, 10000, 600000);
+            corrected = true;
+        }
+
+        // observationWindowSeconds: 3-10
+        if (observationWindowSeconds < 3 || observationWindowSeconds > 10) {
+            observationWindowSeconds = clamp(observationWindowSeconds, 3, 10);
             corrected = true;
         }
 

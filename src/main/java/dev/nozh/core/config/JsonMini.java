@@ -42,6 +42,7 @@ public final class JsonMini {
                 "  \"improvementEpsilonP95Ms\": " + c.improvementEpsilonP95Ms + ",\n" +
                 "  \"rollbackEvaluationTicks\": " + c.rollbackEvaluationTicks + ",\n" +
                 "  \"rollbackCooldownMillis\": " + c.rollbackCooldownMillis + ",\n" +
+                "  \"observationWindowSeconds\": " + c.observationWindowSeconds + ",\n" +
 
                 "  \"historyMaxEntries\": " + c.historyMaxEntries + ",\n" +
                 "  \"historyCommandLimit\": " + c.historyCommandLimit + ",\n" +
@@ -133,6 +134,7 @@ public final class JsonMini {
             c.improvementEpsilonP95Ms = getDouble(json, "improvementEpsilonP95Ms", c.improvementEpsilonP95Ms);
             c.rollbackEvaluationTicks = getInt(json, "rollbackEvaluationTicks", c.rollbackEvaluationTicks);
             c.rollbackCooldownMillis = getInt(json, "rollbackCooldownMillis", c.rollbackCooldownMillis);
+            c.observationWindowSeconds = getInt(json, "observationWindowSeconds", c.observationWindowSeconds);
 
             // Limits
             c.historyMaxEntries = getInt(json, "historyMaxEntries", c.historyMaxEntries);
