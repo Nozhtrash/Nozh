@@ -39,6 +39,7 @@ public final class SessionLearning {
 
     private static final String DEFAULT_SESSION_KEY = "DEFAULT";
     private final Map<String, ActionStats> history = new HashMap<>();
+    private final PredictionStats predictionStats = new PredictionStats();
     private final File statsFile;
     private final Path statsPath;
     private final Path tmpPath;
@@ -61,6 +62,7 @@ public final class SessionLearning {
         }
         sessionKey = normalizedKey;
         history.clear();
+        predictionStats.reset();
         lastSavedHash = 0;
         lastSaveMillis = 0;
         dirty = true;
@@ -108,6 +110,29 @@ public final class SessionLearning {
             stats.neutralCount++;
         }
         dirty = true;
+    }
+
+    public void recordPredictionOutcome(boolean predictedSpike, boolean actualSpike, double confidence) {
+        predictionStats.totalPredictions++;
+        if (predictedSpike == actualSpike) {
+            predictionStats.correctPredictions++;
+            predictionStats.lastCorrectMillis = System.currentTimeMillis();
+        } else {
+            predictionStats.incorrectPredictions++;
+        }
+        predictionStats.lastPredictionMillis = System.currentTimeMillis();
+        predictionStats.totalConfidence += Math.max(0.0, confidence);
+        predictionStats.avgConfidence = predictionStats.totalPredictions > 0
+                ? predictionStats.totalConfidence / predictionStats.totalPredictions
+                : 0.0;
+        dirty = true;
+    }
+
+    public double getPredictionAccuracy() {
+        if (predictionStats.totalPredictions <= 0) {
+            return 0.0;
+        }
+        return (double) predictionStats.correctPredictions / predictionStats.totalPredictions;
     }
 
     /**
@@ -233,7 +258,7 @@ public final class SessionLearning {
                 parent.mkdirs();
             }
 
-            String json = GSON.toJson(new SessionData(sessionKey, history));
+            String json = GSON.toJson(new SessionData(sessionKey, history, predictionStats));
             int currentHash = json.hashCode();
             if (!force && currentHash == lastSavedHash) {
                 dirty = false;
@@ -269,7 +294,7 @@ public final class SessionLearning {
             }
 
             try {
-                String json = GSON.toJson(new SessionData(sessionKey, history));
+                String json = GSON.toJson(new SessionData(sessionKey, history, predictionStats));
                 Files.writeString(statsPath, json, StandardCharsets.UTF_8,
                         StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.WRITE);
             } catch (IOException ignored) {
@@ -298,6 +323,9 @@ public final class SessionLearning {
                         if (data.history != null) {
                             history.putAll(data.history);
                         }
+                        if (data.predictionStats != null) {
+                            predictionStats.copyFrom(data.predictionStats);
+                        }
                     }
                 } else {
                     java.lang.reflect.Type type = new com.google.gson.reflect.TypeToken<Map<String, ActionStats>>() {
@@ -316,7 +344,7 @@ public final class SessionLearning {
                 }
             }
 
-            lastSavedHash = GSON.toJson(new SessionData(sessionKey, history)).hashCode();
+            lastSavedHash = GSON.toJson(new SessionData(sessionKey, history, predictionStats)).hashCode();
             lastSaveMillis = System.currentTimeMillis();
             safeLog("Session learning loaded ({} entries)", history.size());
         } catch (Exception e) {
@@ -358,13 +386,48 @@ public final class SessionLearning {
         public double avgFpsGain = 0.0;
     }
 
+    public static class PredictionStats {
+        public int totalPredictions = 0;
+        public int correctPredictions = 0;
+        public int incorrectPredictions = 0;
+        public long lastPredictionMillis = 0;
+        public long lastCorrectMillis = 0;
+        public double totalConfidence = 0.0;
+        public double avgConfidence = 0.0;
+
+        private void copyFrom(PredictionStats other) {
+            if (other == null) {
+                return;
+            }
+            this.totalPredictions = other.totalPredictions;
+            this.correctPredictions = other.correctPredictions;
+            this.incorrectPredictions = other.incorrectPredictions;
+            this.lastPredictionMillis = other.lastPredictionMillis;
+            this.lastCorrectMillis = other.lastCorrectMillis;
+            this.totalConfidence = other.totalConfidence;
+            this.avgConfidence = other.avgConfidence;
+        }
+
+        private void reset() {
+            totalPredictions = 0;
+            correctPredictions = 0;
+            incorrectPredictions = 0;
+            lastPredictionMillis = 0;
+            lastCorrectMillis = 0;
+            totalConfidence = 0.0;
+            avgConfidence = 0.0;
+        }
+    }
+
     private static final class SessionData {
         public String sessionKey;
         public Map<String, ActionStats> history;
+        public PredictionStats predictionStats;
 
-        private SessionData(String sessionKey, Map<String, ActionStats> history) {
+        private SessionData(String sessionKey, Map<String, ActionStats> history, PredictionStats predictionStats) {
             this.sessionKey = sessionKey;
             this.history = history;
+            this.predictionStats = predictionStats;
         }
     }
 }

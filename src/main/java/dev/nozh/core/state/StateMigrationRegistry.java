@@ -22,10 +22,11 @@ import java.util.Optional;
  * - Version 6 (adds suggested action queue): Migrator adds suggestion list
  * - Version 7 (adds scenario change metrics): Migrator adds scenario counters
  * - Version 8 (adds outcome traceability): Migrator adds outcome tracking fields
+ * - Version 9 (adds scenario history): Migrator adds scenario history list
  */
 public final class StateMigrationRegistry {
 
-    private static final int CURRENT_VERSION = 8; // Current state version
+    private static final int CURRENT_VERSION = 9; // Current state version
 
     private final Map<Integer, StateMigrator> migrators = new HashMap<>();
 
@@ -79,13 +80,14 @@ public final class StateMigrationRegistry {
                     ActionOutcome.NEUTRAL,
                     true,
                     oldState.sessionStartTime(),
-                    8, // Target version is 8
+                    9, // Target version is 9
                     dev.nozh.core.context.Scenario.STANDARD,
                     0.5,
                     0L,
                     0,
                     0,
                     0,
+                    java.util.List.of(),
                     java.util.Map.of(),
                     java.util.Map.of());
         });
@@ -121,13 +123,14 @@ public final class StateMigrationRegistry {
                 ActionOutcome.NEUTRAL,
                 true,
                 oldState.sessionStartTime(),
-                8,
+                9,
                 oldState.currentScenario(),
                 oldState.scenarioConfidence(),
                 0L,
                 0,
                 0,
                 0,
+                java.util.List.of(),
                 java.util.Map.of(),
                 java.util.Map.of()));
 
@@ -162,13 +165,14 @@ public final class StateMigrationRegistry {
                 ActionOutcome.NEUTRAL,
                 true,
                 oldState.sessionStartTime(),
-                8,
+                9,
                 oldState.currentScenario(),
                 oldState.scenarioConfidence(),
                 0L,
                 0,
                 0,
                 0,
+                java.util.List.of(),
                 java.util.Map.of(),
                 java.util.Map.of()));
 
@@ -203,13 +207,14 @@ public final class StateMigrationRegistry {
                 ActionOutcome.NEUTRAL,
                 true,
                 oldState.sessionStartTime(),
-                8,
+                9,
                 oldState.currentScenario(),
                 oldState.scenarioConfidence(),
                 0L,
                 0,
                 0,
                 0,
+                java.util.List.of(),
                 oldState.baselineSettings(),
                 oldState.currentSettings()));
 
@@ -244,13 +249,14 @@ public final class StateMigrationRegistry {
                 ActionOutcome.NEUTRAL,
                 true,
                 oldState.sessionStartTime(),
-                8,
+                9,
                 oldState.currentScenario(),
                 oldState.scenarioConfidence(),
                 0L,
                 0,
                 0,
                 0,
+                java.util.List.of(),
                 oldState.baselineSettings(),
                 oldState.currentSettings()));
 
@@ -285,13 +291,14 @@ public final class StateMigrationRegistry {
                 ActionOutcome.NEUTRAL,
                 true,
                 oldState.sessionStartTime(),
-                8,
+                9,
                 oldState.currentScenario(),
                 oldState.scenarioConfidence(),
                 oldState.lastScenarioChangeTimestamp(),
                 oldState.scenarioChangeCount(),
                 oldState.rapidScenarioChangeCount(),
                 oldState.combatAfkFlipCount(),
+                oldState.scenarioHistory(),
                 oldState.baselineSettings(),
                 oldState.currentSettings()));
 

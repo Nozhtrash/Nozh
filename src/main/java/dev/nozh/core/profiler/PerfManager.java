@@ -29,6 +29,7 @@ public class PerfManager {
     private RollingWindowStats stats;
     private int windowSeconds;
     private final PerfWindowController windowController;
+    private final SpikeTrendPredictor spikePredictor;
     private long lastWindowAdjustMillis = 0L;
 
     public PerfManager() {
@@ -36,6 +37,7 @@ public class PerfManager {
         NozhConfig config = ConfigManager.getConfig();
         this.windowSeconds = 5; // Default window
         this.windowController = new PerfWindowController(3, 10);
+        this.spikePredictor = new SpikeTrendPredictor();
 
         int targetFps = Math.max(30, config.targetFps);
         int capacity = calculateCapacity(targetFps, windowSeconds);
@@ -64,6 +66,7 @@ public class PerfManager {
 
     public PerfSnapshot getSnapshot() {
         PerfSnapshot snapshot = stats.snapshot();
+        spikePredictor.update(snapshot);
         adjustWindowIfNeeded(snapshot);
         return snapshot;
     }
@@ -97,6 +100,11 @@ public class PerfManager {
 
     public void reset() {
         sampler.reset();
+        spikePredictor.reset();
+    }
+
+    public SpikePrediction getSpikePrediction() {
+        return spikePredictor.getLastPrediction();
     }
 
     private void adjustWindowIfNeeded(PerfSnapshot snapshot) {

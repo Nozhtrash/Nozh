@@ -38,8 +38,8 @@ import java.util.Map;
 public final class GovernorRunner {
 
     private static final int MAX_SUGGESTED_QUEUE = 5;
-    private static final long RAPID_SCENARIO_CHANGE_WINDOW_MS = 5_000L;
     private static final int REVERSE_IMPROVEMENT_STREAK = 3;
+    private static final long SPIKE_PREDICTION_MIN_WINDOW_MS = 5_000L;
 
     private final SimulationGovernor governor;
     private final ActionBus actionBus;
@@ -65,6 +65,9 @@ public final class GovernorRunner {
     private int reverseP95Streak = 0;
     private int reverseSpikeStreak = 0;
     private int lastObservationWindowSeconds = -1;
+    private dev.nozh.core.profiler.SpikePrediction pendingSpikePrediction;
+    private long lastSpikePredictionMillis = 0L;
+    private int lastSpikePredictionCount = -1;
 
     public GovernorRunner(
             ProviderRegistry registry,
@@ -105,19 +108,10 @@ public final class GovernorRunner {
         long nowMillis = nowMillis();
         try {
             stateStore.update(state -> {
-                boolean changed = scenarioSnapshot.scenario() != state.currentScenario();
-                boolean rapidChange = changed
-                        && state.lastScenarioChangeTimestamp() > 0
-                        && nowMillis - state.lastScenarioChangeTimestamp() <= RAPID_SCENARIO_CHANGE_WINDOW_MS;
-                boolean combatAfkFlip = changed
-                        && isCombatAfkFlip(state.currentScenario(), scenarioSnapshot.scenario());
                 return state.withScenarioUpdate(
                         scenarioSnapshot.scenario(),
                         scenarioSnapshot.confidence(),
-                        nowMillis,
-                        changed,
-                        rapidChange,
-                        combatAfkFlip);
+                        nowMillis);
             });
         } catch (Exception e) {
             // Ignore update failure
@@ -138,6 +132,7 @@ public final class GovernorRunner {
         syncObservationWindow(config);
         refreshCurrentSettings();
         RuntimeState state = stateStore.snapshotSafe();
+        evaluatePredictionAccuracy(state, config, now);
         syncBaselineIfNeeded(state);
         boolean reverseReady = updateReverseImprovement(state, config);
 
@@ -168,6 +163,8 @@ public final class GovernorRunner {
         if (state.avgFrametimeMs() > 0) {
             predictiveAnalyzer.addSample(state.avgFrametimeMs());
         }
+
+        updateSpikePrediction(state, config, now);
 
         if (chunkLoadMonitor.isHeavyChunkLoad()) {
             logger.debug("Skipping governor decision - heavy chunk load");
@@ -421,18 +418,19 @@ public final class GovernorRunner {
         if (state.safeMode() || !state.autoTuning()) {
             return GovernorMode.MANUAL_ASSIST;
         }
-        if (state.currentScenario() == dev.nozh.core.context.Scenario.COMBAT) {
-            return GovernorMode.AUTO_AGGRESSIVE;
+        GovernorMode baseMode = state.currentScenario() == dev.nozh.core.context.Scenario.COMBAT
+                ? GovernorMode.AUTO_AGGRESSIVE
+                : GovernorMode.AUTO_CONSERVATIVE;
+        dev.nozh.core.context.ScenarioConfidence confidence = state.scenarioConfidenceInfo();
+        if (confidence.band() == dev.nozh.core.context.ScenarioConfidence.Band.LOW
+                || confidence.stability() < 0.45) {
+            return baseMode == GovernorMode.AUTO_AGGRESSIVE ? GovernorMode.AUTO_CONSERVATIVE : GovernorMode.MANUAL_ASSIST;
         }
-        return GovernorMode.AUTO_CONSERVATIVE;
-    }
-
-    private boolean isCombatAfkFlip(dev.nozh.core.context.Scenario previous,
-            dev.nozh.core.context.Scenario current) {
-        return (previous == dev.nozh.core.context.Scenario.COMBAT
-                && current == dev.nozh.core.context.Scenario.AFK)
-                || (previous == dev.nozh.core.context.Scenario.AFK
-                        && current == dev.nozh.core.context.Scenario.COMBAT);
+        if (confidence.band() == dev.nozh.core.context.ScenarioConfidence.Band.MEDIUM
+                && baseMode == GovernorMode.AUTO_AGGRESSIVE) {
+            return GovernorMode.AUTO_CONSERVATIVE;
+        }
+        return baseMode;
     }
 
     private void evaluatePendingAction(RuntimeState state, PendingAction pending, NozhConfig config) {
@@ -872,5 +870,52 @@ public final class GovernorRunner {
 
     private long nowMillis() {
         return System.currentTimeMillis();
+    }
+
+    private void evaluatePredictionAccuracy(RuntimeState state, NozhConfig config, long nowMillis) {
+        if (pendingSpikePrediction == null || state == null) {
+            return;
+        }
+        long windowMs = resolvePredictionWindowMillis(config);
+        if (nowMillis - lastSpikePredictionMillis < windowMs) {
+            return;
+        }
+        if (lastSpikePredictionCount < 0) {
+            pendingSpikePrediction = null;
+            return;
+        }
+        boolean actualSpike = state.spikeCount() > lastSpikePredictionCount;
+        sessionLearning.recordPredictionOutcome(pendingSpikePrediction.spikeLikely(), actualSpike,
+                pendingSpikePrediction.confidence());
+        pendingSpikePrediction = null;
+    }
+
+    private void updateSpikePrediction(RuntimeState state, NozhConfig config, long nowMillis) {
+        if (perfManager == null || state == null || pendingSpikePrediction != null) {
+            return;
+        }
+        dev.nozh.core.profiler.SpikePrediction prediction = perfManager.getSpikePrediction();
+        if (prediction == null) {
+            return;
+        }
+        if ("INSUFFICIENT_DATA".equals(prediction.reason())) {
+            return;
+        }
+        lastSpikePredictionMillis = nowMillis;
+        lastSpikePredictionCount = state.spikeCount();
+        pendingSpikePrediction = prediction;
+        if (prediction.confidence() >= 0.5) {
+            logger.debug("Spike prediction: likely={} confidence={} reason={}",
+                    prediction.spikeLikely(),
+                    String.format("%.2f", prediction.confidence()),
+                    prediction.reason());
+        }
+    }
+
+    private long resolvePredictionWindowMillis(NozhConfig config) {
+        if (config != null && config.observationWindowSeconds > 0) {
+            return Math.max(SPIKE_PREDICTION_MIN_WINDOW_MS, config.observationWindowSeconds * 1000L);
+        }
+        return SPIKE_PREDICTION_MIN_WINDOW_MS;
     }
 }
