@@ -69,15 +69,24 @@ public class NozhHudRenderer implements HudRenderCallback {
             maxWidth = Math.max(maxWidth, textRenderer.getWidth(line));
         }
 
-        int x = resolveAnchorX(config, maxWidth, client.getWindow().getScaledWidth());
-        int y = resolveAnchorY(config, lineHeight, lines.size(), client.getWindow().getScaledHeight());
+        float scale = (float) config.hudScale;
+        int scaledMaxWidth = Math.round(maxWidth * scale);
+        int scaledLineHeight = Math.round(lineHeight * scale);
+        int x = resolveAnchorX(config, scaledMaxWidth, client.getWindow().getScaledWidth());
+        int y = resolveAnchorY(config, scaledLineHeight, lines.size(), client.getWindow().getScaledHeight());
 
+        context.getMatrices().push();
+        context.getMatrices().scale(scale, scale, 1.0f);
+
+        int drawX = Math.round(x / scale);
+        int drawY = Math.round(y / scale);
         for (int i = 0; i < lines.size(); i++) {
             Text line = lines.get(i);
             int color = i == 0 ? 0xFFFFFF : 0xE0E0E0;
-            context.drawTextWithShadow(textRenderer, line, x, y, color);
-            y += lineHeight;
+            context.drawTextWithShadow(textRenderer, line, drawX, drawY, color);
+            drawY += lineHeight;
         }
+        context.getMatrices().pop();
     }
 
     private TelemetrySnapshot buildTelemetry() {
@@ -101,8 +110,10 @@ public class NozhHudRenderer implements HudRenderCallback {
         lines.add(Text.translatable("nozh.hud.title"));
         lines.add(Text.translatable("nozh.hud.mode", viewModel.governorMode().name()));
         lines.add(Text.translatable("nozh.hud.scenario", viewModel.currentScenario().name()));
-        lines.add(Text.translatable("nozh.hud.metrics.p95", formatMs(viewModel.p95FrametimeMs())));
-        lines.add(Text.translatable("nozh.hud.metrics.spikes", viewModel.spikeCount()));
+        lines.add(Text.translatable(
+                "nozh.hud.metrics.fps_p95",
+                formatFps(viewModel.avgFrametimeMs()),
+                formatMs(viewModel.p95FrametimeMs())));
 
         lines.add(Text.translatable("nozh.hud.last_action", resolveLastAction()));
         lines.add(Text.translatable("nozh.hud.suggestion", resolveSuggestion(state)));
@@ -145,6 +156,14 @@ public class NozhHudRenderer implements HudRenderCallback {
             return "--";
         }
         return String.format("%.1f", value);
+    }
+
+    private String formatFps(double avgMs) {
+        if (Double.isNaN(avgMs) || avgMs <= 0) {
+            return "--";
+        }
+        double fps = 1000.0 / avgMs;
+        return String.format("%.0f", fps);
     }
 
     private int resolveAnchorX(NozhConfig config, int maxWidth, int screenWidth) {
