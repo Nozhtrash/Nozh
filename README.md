@@ -15,19 +15,58 @@
 
 ---
 
-## 🌎 Introduction / Introducción
+## 📌 Qué es NOZH
 
-### 🇬🇧 English
+**NOZH** es una capa de orquestación inteligente para Minecraft. En lugar de aplicar reglas estáticas, usa un **Sistema Gobernador** que observa el estado del juego y ajusta parámetros en tiempo real para priorizar rendimiento o calidad visual según el contexto.
 
-**NOZH** is an intelligent orchestration layer for your Minecraft instance. Unlike traditional optimization mods that use static rules (e.g., "always disable fog"), NOZH uses a dynamic **Governor System** that monitors your game's internal state 20 times per second.
+## ✅ Estado actual
 
-It detects **Scenario Contexts** (Are you AFK? In Combat? Mining? Building?) and adjusts the engine parameters in real-time to maximize FPS when you need it most, and maximize visual quality when you can afford it.
+### Qué hace hoy
 
-### 🇪🇸 Español
+- Detecta **escenarios de juego** (AFK, combate, minería, construcción) y adapta decisiones de rendimiento.
+- Coordina con mods existentes mediante el **Director** (gestor de conflictos y prioridades).
+- Registra aprendizaje por sesión para no repetir ajustes ineficientes en tu hardware.
+- Instrumenta el motor con **hooks** para medir costos reales de chunk loading y renderizado.
+- Controla entidades específicas cuando hay picos de carga (culleado quirúrgico).
 
-**NOZH** es una capa de orquestación inteligente para tu Minecraft. A diferencia de los mods tradicionales que usan reglas estáticas (ej. "siempre desactivar niebla"), NOZH usa un **Sistema Gobernador** dinámico que monitorea el estado interno de tu juego 20 veces por segundo.
+### Fase actual
 
-Detecta **Escenarios** (¿Estás AFK? ¿En Combate? ¿Minando? ¿Construyendo?) y ajusta los parámetros del motor en tiempo real para maximizar los FPS cuando más los necesitas, y la calidad visual cuando te lo puedes permitir.
+En **desarrollo activo** y enfocado en consolidar estabilidad, compatibilidad y precisión de las decisiones. Las capacidades descritas como “hoy” corresponden a lo ya implementado o en integración inmediata dentro del repositorio.
+
+## 🗺️ Roadmap futuro (exploratorio)
+
+### Qué busca a futuro
+
+- Ampliar la cobertura de escenarios detectados y ajustes posibles.
+- Refinar el aprendizaje adaptativo para más perfiles de hardware.
+- Mejorar la interacción con ecosistemas de mods nuevos y existentes.
+
+> Nota: este roadmap es **exploratorio** y puede cambiar. No se asumen promesas ni fechas.
+
+## 💡 Por qué valdrá la pena
+
+Porque busca optimizar **contextualmente**, no con reglas fijas. Eso permite mantener una experiencia más fluida sin sacrificar calidad cuando no es necesario.
+
+## 👥 Para quién es
+
+- Jugadores con modpacks exigentes que quieren estabilidad.
+- Usuarios que combinan varios mods de optimización y necesitan coordinación.
+- Quienes priorizan consistencia de rendimiento sobre ajustes manuales constantes.
+
+## ✨ Diferenciales
+
+- **Orquestación inteligente** en vez de optimizaciones aisladas.
+- **Compatibilidad proactiva** con otros mods mediante el Director.
+- **Aprendizaje persistente** por hardware y sesión.
+- **Control quirúrgico** de entidades con impacto en FPS.
+
+## 🧪 Casos de uso reales y expectativas de mejora de rendimiento
+
+- **Lobbies con muchas entidades decorativas**: reducción de picos de render al ocultar elementos no críticos.
+- **Zonas con alta carga de chunks**: menor stutter al detectar cuellos de CPU y ajustar distancia o prioridad.
+- **Combate con partículas y efectos**: mejor consistencia de frame pacing al limitar elementos de alto costo.
+
+Las mejoras esperadas son **relativas y contextuales** (consistencia, estabilidad y percepción de fluidez), y dependen del hardware, modpack y configuración.
 
 ---
 
