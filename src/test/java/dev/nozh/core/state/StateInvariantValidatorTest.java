@@ -179,6 +179,7 @@ class StateInvariantValidatorTest {
                                 base.scenarioChangeCount(),
                                 base.rapidScenarioChangeCount(),
                                 base.combatAfkFlipCount(),
+                                base.scenarioHistory(),
                                 base.baselineSettings(),
                                 base.currentSettings());
 
@@ -546,6 +547,7 @@ class StateInvariantValidatorTest {
                                 base.scenarioChangeCount(),
                                 base.rapidScenarioChangeCount(),
                                 base.combatAfkFlipCount(),
+                                base.scenarioHistory(),
                                 base.baselineSettings(),
                                 base.currentSettings());
 
