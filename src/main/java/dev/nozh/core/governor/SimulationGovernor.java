@@ -84,6 +84,7 @@ public final class SimulationGovernor {
                         OptimizationProfile profile,
                         int targetFps,
                         double reverseEpsilonMs,
+                        boolean reverseReady,
                         Map<dev.nozh.core.bus.CapabilityId, dev.nozh.core.bus.CapabilityValue> baselineSettings,
                         Map<dev.nozh.core.bus.CapabilityId, dev.nozh.core.bus.CapabilityValue> currentSettings) {
                 // OFF mode → no decisions
@@ -95,7 +96,9 @@ public final class SimulationGovernor {
                 ModePolicy policy = ModePolicy.forMode(mode);
 
                 // Generate candidates
-                if (shouldReverseOptimize(state, targetFps, reverseEpsilonMs, baselineSettings, currentSettings)) {
+                if (reverseReady
+                                && shouldReverseOptimize(state, targetFps, reverseEpsilonMs, baselineSettings,
+                                                currentSettings)) {
                         List<ActionCandidate> reverseCandidates = actionMatrix.generateReverseCandidates(
                                         policy,
                                         state.currentScenario(),
