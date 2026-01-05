@@ -140,12 +140,12 @@ public final class CompatAwareMinecraftOptionsAdapter implements MinecraftOption
 
     @Override
     public Optional<CapabilityValue> getDistortionEffectScale() {
-        return getValue(CapabilityId.DISTORTION_EFFECT, fallback::getDistortionEffectScale);
+        return getValue(CapabilityId.DISTORTION_EFFECT_SCALE, fallback::getDistortionEffectScale);
     }
 
     @Override
     public boolean setDistortionEffectScale(CapabilityValue value) {
-        return setValue(CapabilityId.DISTORTION_EFFECT, value, () -> fallback.setDistortionEffectScale(value));
+        return setValue(CapabilityId.DISTORTION_EFFECT_SCALE, value, () -> fallback.setDistortionEffectScale(value));
     }
 
     @Override
