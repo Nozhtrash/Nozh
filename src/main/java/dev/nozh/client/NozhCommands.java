@@ -325,7 +325,7 @@ public final class NozhCommands {
             source.sendFeedback(Text.translatable("nozh.suggestion.apply.unavailable"));
             return;
         }
-        NozhModClient.applySuggestedAction(client);
+        NozhModClient.requestSuggestedAction(client, NozhModClient.ApplyTrigger.COMMAND);
     }
 
     private static void runClearSuggestion(FabricClientCommandSource source) {

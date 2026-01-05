@@ -15,6 +15,7 @@ public class NozhConfig {
     public boolean debugLogs = false;
     public String language = "auto"; // "auto", "en_us", "es_cl"
     public boolean showHud = true;
+    public boolean showHudSuggestions = true;
     public String hudAnchor = "TOP_LEFT"; // TOP_LEFT, TOP_RIGHT, BOTTOM_LEFT, BOTTOM_RIGHT
     public int hudOffsetX = 0;
     public int hudOffsetY = 0;

@@ -216,6 +216,19 @@ public class NozhModMenuIntegration implements ModMenuApi {
             tooltipButtons.add(hudButton);
             y += 25;
 
+            TooltipButton hudSuggestionsButton = new TooltipButton(
+                    centerX - 150, y, 300, 20,
+                    Text.translatable("nozh.config.hud.suggestions", config.showHudSuggestions ? "ON" : "OFF"),
+                    Text.translatable("nozh.config.hud.suggestions.tooltip"),
+                    button -> {
+                        config.showHudSuggestions = !config.showHudSuggestions;
+                        saveConfigAndSync();
+                        this.clearAndInit();
+                    });
+            addDrawableChild(hudSuggestionsButton);
+            tooltipButtons.add(hudSuggestionsButton);
+            y += 25;
+
             TooltipButton hudAnchorButton = new TooltipButton(
                     centerX - 150, y, 300, 20,
                     Text.translatable("nozh.config.hud.anchor",
