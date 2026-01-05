@@ -905,10 +905,11 @@ public final class GovernorRunner {
         lastSpikePredictionCount = state.spikeCount();
         pendingSpikePrediction = prediction;
         if (prediction.confidence() >= 0.5) {
-            logger.debug("Spike prediction: likely={} confidence={} reason={}",
+            logger.debug(String.format(
+                    "Spike prediction: likely=%s confidence=%.2f reason=%s",
                     prediction.spikeLikely(),
-                    String.format("%.2f", prediction.confidence()),
-                    prediction.reason());
+                    prediction.confidence(),
+                    prediction.reason()));
         }
     }
 
