@@ -256,6 +256,19 @@ public class NozhModMenuIntegration implements ModMenuApi {
             tooltipButtons.add(hudOffsetYButton);
             y += 35;
 
+            TooltipButton hudScaleButton = new TooltipButton(
+                    centerX - 150, y, 300, 20,
+                    Text.translatable("nozh.config.hud.scale", formatHudScale(config.hudScale)),
+                    Text.translatable("nozh.config.hud.scale.tooltip"),
+                    button -> {
+                        config.hudScale = cycleHudScale(config.hudScale);
+                        saveConfigAndSync();
+                        this.clearAndInit();
+                    });
+            addDrawableChild(hudScaleButton);
+            tooltipButtons.add(hudScaleButton);
+            y += 35;
+
             // Preset Buttons
             int presetWidth = 95;
             int gap = 5;
@@ -370,6 +383,20 @@ public class NozhModMenuIntegration implements ModMenuApi {
                 }
             }
             return 0;
+        }
+
+        private double cycleHudScale(double current) {
+            double[] options = { 0.75, 1.0, 1.25, 1.5 };
+            for (int i = 0; i < options.length; i++) {
+                if (Double.compare(options[i], current) == 0) {
+                    return options[(i + 1) % options.length];
+                }
+            }
+            return 1.0;
+        }
+
+        private String formatHudScale(double scale) {
+            return String.format("%.0f%%", scale * 100.0);
         }
     }
 

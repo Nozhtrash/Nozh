@@ -18,6 +18,7 @@ public class NozhConfig {
     public String hudAnchor = "TOP_LEFT"; // TOP_LEFT, TOP_RIGHT, BOTTOM_LEFT, BOTTOM_RIGHT
     public int hudOffsetX = 0;
     public int hudOffsetY = 0;
+    public double hudScale = 1.0;
 
     // Version tracking for migrations
     public int configVersion = 0; // 0=v0.1.0, 1=legacy, 2=v0.2.0-alpha
@@ -180,6 +181,12 @@ public class NozhConfig {
         int clampedHudOffsetY = clamp(hudOffsetY, -200, 200);
         if (clampedHudOffsetY != hudOffsetY) {
             hudOffsetY = clampedHudOffsetY;
+            corrected = true;
+        }
+
+        double clampedHudScale = clamp(hudScale, 0.5, 2.0);
+        if (Double.compare(clampedHudScale, hudScale) != 0) {
+            hudScale = clampedHudScale;
             corrected = true;
         }
 
