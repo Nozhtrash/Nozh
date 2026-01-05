@@ -34,25 +34,26 @@ public final class ActionMatrix {
     private static final double EXPECTED_GAIN_WEIGHT = 0.35;
     private static final double LEARNED_CONFIDENCE_WEIGHT = 0.3;
     private static final double LEARNED_RANKING_WEIGHT = 0.2;
+    private static final double LEARNED_SUCCESS_WEIGHT = 0.1;
+    private static final double LEARNED_GAIN_WEIGHT = 0.1;
     private static final double SCENARIO_PRIORITY_WEIGHT = 0.15;
     private static final double PERFORMANCE_PRESSURE_WEIGHT = 0.25;
     private static final double BASELINE_FRAME_MS = 16.67;
     private static final double MAX_SPIKE_PRESSURE = 5.0;
-
-    private static final Map<Scenario, ScenarioRuleSet> SCENARIO_RULES = buildScenarioRules();
 
     private final ProviderRegistry registry;
     private final ActionSuccessTracker successTracker;
     private final ConfidenceCalculator confidenceCalculator;
     private final dev.nozh.core.compatibility.CompatibilityMatrix compatibilityMatrix;
     private final dev.nozh.core.intelligence.SessionLearning sessionLearning;
+    private final ActionMatrixRules scenarioRules;
 
     public ActionMatrix(
             ProviderRegistry registry,
             ActionSuccessTracker successTracker,
             ConfidenceCalculator confidenceCalculator,
             dev.nozh.core.intelligence.SessionLearning sessionLearning) {
-        this(registry, successTracker, confidenceCalculator, sessionLearning, null);
+        this(registry, successTracker, confidenceCalculator, sessionLearning, null, ActionMatrixRules.defaultRules());
     }
 
     public ActionMatrix(
@@ -61,11 +62,23 @@ public final class ActionMatrix {
             ConfidenceCalculator confidenceCalculator,
             dev.nozh.core.intelligence.SessionLearning sessionLearning,
             dev.nozh.core.compatibility.CompatibilityMatrix compatibilityMatrix) {
+        this(registry, successTracker, confidenceCalculator, sessionLearning, compatibilityMatrix,
+                ActionMatrixRules.defaultRules());
+    }
+
+    public ActionMatrix(
+            ProviderRegistry registry,
+            ActionSuccessTracker successTracker,
+            ConfidenceCalculator confidenceCalculator,
+            dev.nozh.core.intelligence.SessionLearning sessionLearning,
+            dev.nozh.core.compatibility.CompatibilityMatrix compatibilityMatrix,
+            ActionMatrixRules scenarioRules) {
         this.registry = registry;
         this.successTracker = successTracker;
         this.confidenceCalculator = confidenceCalculator;
         this.sessionLearning = sessionLearning;
         this.compatibilityMatrix = compatibilityMatrix != null ? compatibilityMatrix : createCompatibilityMatrixSafe();
+        this.scenarioRules = scenarioRules != null ? scenarioRules : ActionMatrixRules.defaultRules();
     }
 
     private static dev.nozh.core.compatibility.CompatibilityMatrix createCompatibilityMatrixSafe() {
@@ -147,6 +160,10 @@ public final class ActionMatrix {
                 continue;
             }
 
+            if (shouldSkipForScenario(metadata, scenario, profile)) {
+                continue;
+            }
+
             // Generate target value based on bound + provider type
             CapabilityValue targetValue = generateTargetValue(id, currentBound, scenario, profile);
 
@@ -205,11 +222,16 @@ public final class ActionMatrix {
                 .max()
                 .orElse(0.0);
 
+        double maxLearnedGain = candidates.stream()
+                .mapToDouble(candidate -> sessionLearning.getAvgFpsGain(candidate.capabilityId(), scenario))
+                .max()
+                .orElse(0.0);
+
         ActionSelectionContext selectionContext = new ActionSelectionContext(scenario, profile, p95FrametimeMs,
                 spikeCount);
         candidates.sort(Comparator
                 .comparingDouble((ActionCandidate candidate) -> scoreCandidate(candidate, maxExpectedGain, maxRanking,
-                        selectionContext))
+                        maxLearnedGain, selectionContext))
                 .reversed());
 
         if (candidates.isEmpty() && !yieldCandidates.isEmpty()) {
@@ -328,7 +350,7 @@ public final class ActionMatrix {
         boolean menu = scenario == Scenario.MENU;
         boolean loading = scenario == Scenario.LOADING;
 
-        CapabilityValue scenarioTarget = resolveScenarioTarget(id, scenario, aggressive);
+        CapabilityValue scenarioTarget = scenarioRules.resolveTarget(id, scenario, profile);
         if (scenarioTarget != null) {
             return scenarioTarget;
         }
@@ -485,40 +507,33 @@ public final class ActionMatrix {
     }
 
     private double scoreCandidate(ActionCandidate candidate, double maxExpectedGain, double maxRanking,
-            ActionSelectionContext context) {
+            double maxLearnedGain, ActionSelectionContext context) {
         double normalizedGain = maxExpectedGain > 0 ? candidate.expectedGainMs() / maxExpectedGain : 0.0;
         double ranking = sessionLearning.getRanking(candidate.capabilityId(), context.scenario());
         double normalizedRanking = maxRanking > 0 ? ranking / maxRanking : 0.0;
-        double scenarioBoost = scenarioRuleWeight(candidate.capabilityId(), context.scenario(), context.profile());
+        double learnedSuccess = sessionLearning.getSuccessRate(candidate.capabilityId(), context.scenario());
+        double learnedGain = sessionLearning.getAvgFpsGain(candidate.capabilityId(), context.scenario());
+        double normalizedLearnedGain = maxLearnedGain > 0 ? learnedGain / maxLearnedGain : 0.0;
+        double scenarioBoost = scenarioRules.ruleWeight(candidate.capabilityId(), context.scenario(),
+                context.profile());
         double pressure = calculatePerformancePressure(context.p95FrametimeMs(), context.spikeCount());
+        double profilePressureWeight = context.profile() != null && context.profile().isAggressive()
+                ? PERFORMANCE_PRESSURE_WEIGHT * 1.2
+                : PERFORMANCE_PRESSURE_WEIGHT;
 
         double baseScore = (candidate.confidenceScore() * CONFIDENCE_WEIGHT)
                 + (normalizedGain * EXPECTED_GAIN_WEIGHT)
                 + (normalizedRanking * LEARNED_RANKING_WEIGHT)
+                + (learnedSuccess * LEARNED_SUCCESS_WEIGHT)
+                + (normalizedLearnedGain * LEARNED_GAIN_WEIGHT)
                 + (scenarioBoost * SCENARIO_PRIORITY_WEIGHT);
 
-        return baseScore + (pressure * PERFORMANCE_PRESSURE_WEIGHT * (normalizedGain + scenarioBoost) / 2.0);
+        return baseScore + (pressure * profilePressureWeight * (normalizedGain + scenarioBoost) / 2.0);
     }
 
     private double blendConfidence(double baseConfidence, double learnedConfidence) {
         return (baseConfidence * (1.0 - LEARNED_CONFIDENCE_WEIGHT))
                 + (learnedConfidence * LEARNED_CONFIDENCE_WEIGHT);
-    }
-
-    private CapabilityValue resolveScenarioTarget(CapabilityId id, Scenario scenario, boolean aggressive) {
-        ScenarioRuleSet ruleSet = SCENARIO_RULES.get(scenario);
-        if (ruleSet == null) {
-            return null;
-        }
-        return ruleSet.resolve(id, aggressive);
-    }
-
-    private double scenarioRuleWeight(CapabilityId id, Scenario scenario, OptimizationProfile profile) {
-        ScenarioRuleSet ruleSet = SCENARIO_RULES.get(scenario);
-        if (ruleSet == null) {
-            return 0.0;
-        }
-        return ruleSet.hasRule(id, profile != null && profile.isAggressive()) ? 1.0 : 0.0;
     }
 
     private double calculatePerformancePressure(double p95FrametimeMs, int spikeCount) {
@@ -528,99 +543,6 @@ public final class ActionMatrix {
         }
         double spikePressure = spikeCount > 0 ? Math.min(1.0, spikeCount / MAX_SPIKE_PRESSURE) : 0.0;
         return Math.min(1.0, Math.max(p95Pressure, spikePressure));
-    }
-
-    private static Map<Scenario, ScenarioRuleSet> buildScenarioRules() {
-        Map<Scenario, ScenarioRuleSet> rules = new java.util.EnumMap<>(Scenario.class);
-        rules.put(Scenario.COMBAT, combatRules());
-        rules.put(Scenario.AFK, afkRules());
-        rules.put(Scenario.MINING, miningRules());
-        return java.util.Collections.unmodifiableMap(rules);
-    }
-
-    private static ScenarioRuleSet combatRules() {
-        Map<CapabilityId, CapabilityValue> aggressive = new java.util.EnumMap<>(CapabilityId.class);
-        Map<CapabilityId, CapabilityValue> balanced = new java.util.EnumMap<>(CapabilityId.class);
-
-        aggressive.put(CapabilityId.PARTICLES, new CapabilityValue.EnumValue("MINIMAL"));
-        balanced.put(CapabilityId.PARTICLES, new CapabilityValue.EnumValue("MINIMAL"));
-        aggressive.put(CapabilityId.CLOUDS, new CapabilityValue.EnumValue("OFF"));
-        balanced.put(CapabilityId.CLOUDS, new CapabilityValue.EnumValue("OFF"));
-        aggressive.put(CapabilityId.ENTITY_SHADOWS, new CapabilityValue.BoolValue(false));
-        balanced.put(CapabilityId.ENTITY_SHADOWS, new CapabilityValue.BoolValue(false));
-        aggressive.put(CapabilityId.RENDER_DISTANCE, new CapabilityValue.IntValue(6));
-        balanced.put(CapabilityId.RENDER_DISTANCE, new CapabilityValue.IntValue(8));
-        aggressive.put(CapabilityId.SIMULATION_DISTANCE, new CapabilityValue.IntValue(4));
-        balanced.put(CapabilityId.SIMULATION_DISTANCE, new CapabilityValue.IntValue(6));
-        aggressive.put(CapabilityId.ENTITY_DISTANCE, new CapabilityValue.IntValue(60));
-        balanced.put(CapabilityId.ENTITY_DISTANCE, new CapabilityValue.IntValue(70));
-        aggressive.put(CapabilityId.BIOME_BLEND, new CapabilityValue.IntValue(1));
-        balanced.put(CapabilityId.BIOME_BLEND, new CapabilityValue.IntValue(2));
-        aggressive.put(CapabilityId.MIPMAP_LEVEL, new CapabilityValue.IntValue(1));
-        balanced.put(CapabilityId.MIPMAP_LEVEL, new CapabilityValue.IntValue(2));
-        aggressive.put(CapabilityId.VSYNC, new CapabilityValue.BoolValue(false));
-        balanced.put(CapabilityId.VSYNC, new CapabilityValue.BoolValue(false));
-        aggressive.put(CapabilityId.FOG, new CapabilityValue.IntValue(6));
-        balanced.put(CapabilityId.FOG, new CapabilityValue.IntValue(8));
-        aggressive.put(CapabilityId.GRAPHICS_MODE, new CapabilityValue.EnumValue("FAST"));
-        balanced.put(CapabilityId.GRAPHICS_MODE, new CapabilityValue.EnumValue("FAST"));
-        aggressive.put(CapabilityId.SMOOTH_LIGHTING, new CapabilityValue.EnumValue("OFF"));
-        balanced.put(CapabilityId.SMOOTH_LIGHTING, new CapabilityValue.EnumValue("OFF"));
-        aggressive.put(CapabilityId.ARMOR_STANDS, new CapabilityValue.BoolValue(false));
-        balanced.put(CapabilityId.ARMOR_STANDS, new CapabilityValue.BoolValue(false));
-        aggressive.put(CapabilityId.ITEM_FRAMES, new CapabilityValue.BoolValue(false));
-        balanced.put(CapabilityId.ITEM_FRAMES, new CapabilityValue.BoolValue(false));
-        aggressive.put(CapabilityId.BLOCK_ENTITIES, new CapabilityValue.BoolValue(false));
-        balanced.put(CapabilityId.BLOCK_ENTITIES, new CapabilityValue.BoolValue(false));
-        aggressive.put(CapabilityId.ANIMATIONS, new CapabilityValue.BoolValue(false));
-        balanced.put(CapabilityId.ANIMATIONS, new CapabilityValue.BoolValue(false));
-        aggressive.put(CapabilityId.DYNAMIC_LIGHTING, new CapabilityValue.BoolValue(false));
-        balanced.put(CapabilityId.DYNAMIC_LIGHTING, new CapabilityValue.BoolValue(false));
-
-        return new ScenarioRuleSet(aggressive, balanced);
-    }
-
-    private static ScenarioRuleSet afkRules() {
-        Map<CapabilityId, CapabilityValue> aggressive = new java.util.EnumMap<>(CapabilityId.class);
-        Map<CapabilityId, CapabilityValue> balanced = new java.util.EnumMap<>(CapabilityId.class);
-
-        aggressive.put(CapabilityId.ENTITY_DISTANCE, new CapabilityValue.IntValue(60));
-        balanced.put(CapabilityId.ENTITY_DISTANCE, new CapabilityValue.IntValue(70));
-        aggressive.put(CapabilityId.ARMOR_STANDS, new CapabilityValue.BoolValue(false));
-        balanced.put(CapabilityId.ARMOR_STANDS, new CapabilityValue.BoolValue(false));
-        aggressive.put(CapabilityId.ITEM_FRAMES, new CapabilityValue.BoolValue(false));
-        balanced.put(CapabilityId.ITEM_FRAMES, new CapabilityValue.BoolValue(false));
-        aggressive.put(CapabilityId.BLOCK_ENTITIES, new CapabilityValue.BoolValue(false));
-        balanced.put(CapabilityId.BLOCK_ENTITIES, new CapabilityValue.BoolValue(false));
-        aggressive.put(CapabilityId.ANIMATIONS, new CapabilityValue.BoolValue(false));
-        balanced.put(CapabilityId.ANIMATIONS, new CapabilityValue.BoolValue(false));
-        aggressive.put(CapabilityId.FPS_CAP, new CapabilityValue.IntValue(60));
-        balanced.put(CapabilityId.FPS_CAP, new CapabilityValue.IntValue(60));
-
-        return new ScenarioRuleSet(aggressive, balanced);
-    }
-
-    private static ScenarioRuleSet miningRules() {
-        Map<CapabilityId, CapabilityValue> aggressive = new java.util.EnumMap<>(CapabilityId.class);
-        Map<CapabilityId, CapabilityValue> balanced = new java.util.EnumMap<>(CapabilityId.class);
-
-        aggressive.put(CapabilityId.RENDER_DISTANCE, new CapabilityValue.IntValue(4));
-        balanced.put(CapabilityId.RENDER_DISTANCE, new CapabilityValue.IntValue(6));
-        aggressive.put(CapabilityId.SIMULATION_DISTANCE, new CapabilityValue.IntValue(4));
-        balanced.put(CapabilityId.SIMULATION_DISTANCE, new CapabilityValue.IntValue(6));
-
-        return new ScenarioRuleSet(aggressive, balanced);
-    }
-
-    private record ScenarioRuleSet(Map<CapabilityId, CapabilityValue> aggressive,
-            Map<CapabilityId, CapabilityValue> balanced) {
-        private CapabilityValue resolve(CapabilityId id, boolean isAggressive) {
-            return isAggressive ? aggressive.get(id) : balanced.get(id);
-        }
-
-        private boolean hasRule(CapabilityId id, boolean isAggressive) {
-            return isAggressive ? aggressive.containsKey(id) : balanced.containsKey(id);
-        }
     }
 
     private record ActionSelectionContext(
@@ -682,5 +604,21 @@ public final class ActionMatrix {
             return false;
         }
         return baselineFloat.value() > currentFloat.value();
+    }
+
+    private boolean shouldSkipForScenario(ProviderMetadata metadata, Scenario scenario, OptimizationProfile profile) {
+        if (scenario == null) {
+            return false;
+        }
+        if (scenario == Scenario.COMBAT && metadata.sideEffects().affectsInputLag()) {
+            return true;
+        }
+        if (scenario == Scenario.MENU && metadata.gameplayImpact() != ImpactLevel.NONE) {
+            return true;
+        }
+        if (scenario == Scenario.BUILDING && metadata.gameplayImpact() == ImpactLevel.HIGH) {
+            return profile == null || !profile.isAggressive();
+        }
+        return false;
     }
 }
