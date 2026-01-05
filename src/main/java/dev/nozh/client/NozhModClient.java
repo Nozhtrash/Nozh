@@ -17,10 +17,12 @@ import dev.nozh.core.state.RuntimeState;
 import dev.nozh.core.state.ActionHistoryEntry;
 import dev.nozh.core.state.StateStore;
 import dev.nozh.fabric.FabricNozhLogger;
+import dev.nozh.fabric.capability.CompatAwareMinecraftOptionsAdapter;
 import dev.nozh.fabric.capability.MinecraftOptionsAdapter;
 import dev.nozh.fabric.capability.ProductionMinecraftOptionsAdapter;
 import dev.nozh.fabric.capability.ProviderBootstrap;
 import dev.nozh.fabric.capability.StandardCapabilityExecutor;
+import dev.nozh.fabric.compat.CompatRegistry;
 import dev.nozh.client.hud.NozhHudRenderer;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.api.EnvType;
@@ -86,7 +88,9 @@ public class NozhModClient implements ClientModInitializer {
         configSyncService = ConfigSyncService.start(stateStore);
 
         // 3. Create MinecraftOptionsAdapter
-        MinecraftOptionsAdapter optionsAdapter = new ProductionMinecraftOptionsAdapter();
+        MinecraftOptionsAdapter optionsAdapter = new CompatAwareMinecraftOptionsAdapter(
+                new ProductionMinecraftOptionsAdapter(),
+                new CompatRegistry());
 
         // 4. Create ProviderHealthTracker and ProviderRegistry
         dev.nozh.core.capability.ProviderHealthTracker healthTracker = new dev.nozh.core.capability.ProviderHealthTracker();

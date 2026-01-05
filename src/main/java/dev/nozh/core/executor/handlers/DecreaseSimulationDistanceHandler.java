@@ -2,8 +2,10 @@ package dev.nozh.core.executor.handlers;
 
 import dev.nozh.core.bus.CapabilityValue;
 import dev.nozh.core.executor.ActionHandler;
+import dev.nozh.fabric.capability.CompatAwareMinecraftOptionsAdapter;
 import dev.nozh.fabric.capability.MinecraftOptionsAdapter;
 import dev.nozh.fabric.capability.ProductionMinecraftOptionsAdapter;
+import dev.nozh.fabric.compat.CompatRegistry;
 import net.minecraft.client.MinecraftClient;
 
 import java.util.Optional;
@@ -21,7 +23,9 @@ public class DecreaseSimulationDistanceHandler implements ActionHandler {
 
     @Override
     public boolean execute(MinecraftClient client) {
-        MinecraftOptionsAdapter options = new ProductionMinecraftOptionsAdapter();
+        MinecraftOptionsAdapter options = new CompatAwareMinecraftOptionsAdapter(
+                new ProductionMinecraftOptionsAdapter(),
+                new CompatRegistry());
         Optional<CapabilityValue> currentOpt = options.getSimulationDistance();
         if (currentOpt.isEmpty() || !(currentOpt.get() instanceof CapabilityValue.IntValue currentValue)) {
             return false;
@@ -57,7 +61,9 @@ public class DecreaseSimulationDistanceHandler implements ActionHandler {
 
     @Override
     public boolean apply(MinecraftClient client, String value) {
-        MinecraftOptionsAdapter options = new ProductionMinecraftOptionsAdapter();
+        MinecraftOptionsAdapter options = new CompatAwareMinecraftOptionsAdapter(
+                new ProductionMinecraftOptionsAdapter(),
+                new CompatRegistry());
         try {
             int target = Integer.parseInt(value);
             Optional<CapabilityValue> currentOpt = options.getSimulationDistance();
