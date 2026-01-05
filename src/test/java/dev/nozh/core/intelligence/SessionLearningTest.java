@@ -1,6 +1,7 @@
 package dev.nozh.core.intelligence;
 
 import dev.nozh.core.bus.CapabilityId;
+import dev.nozh.core.context.Scenario;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -59,5 +60,23 @@ class SessionLearningTest {
 
         assertTrue(learning.getRanking(CapabilityId.RENDER_DISTANCE)
                 > learning.getRanking(CapabilityId.CLOUDS));
+    }
+
+    @Test
+    void resetForSessionClearsScenarioHistory() {
+        SessionLearning learning = new SessionLearning(tempDir.toFile());
+
+        learning.recordSuccess(CapabilityId.PARTICLES, Scenario.COMBAT, 1.0);
+        learning.recordFailure(CapabilityId.CLOUDS);
+        learning.recordFailure(CapabilityId.CLOUDS);
+        learning.recordFailure(CapabilityId.CLOUDS);
+
+        assertTrue(learning.shouldAvoid(CapabilityId.CLOUDS, Scenario.COMBAT));
+        assertTrue(learning.getSuccessRate(CapabilityId.PARTICLES, Scenario.COMBAT) > 0.5);
+
+        learning.resetForSession("new-session");
+
+        assertEquals(0.5, learning.getSuccessRate(CapabilityId.PARTICLES, Scenario.COMBAT), 1e-6);
+        assertFalse(learning.shouldAvoid(CapabilityId.CLOUDS, Scenario.COMBAT));
     }
 }

@@ -160,6 +160,37 @@ class ActionMatrixTest {
         assertEquals("OFF", candidateValue(byId.get(CapabilityId.CLOUDS)));
     }
 
+    @Test
+    void ranksCandidatesBySessionLearningAndPreservesRollbackGuarantee() {
+        ProviderMetadata cloudsMetadata = metadata(ImpactLevel.LOW, ImpactLevel.LOW, SafetyLevel.SAFE, 2.0,
+                RollbackGuarantee.BEST_EFFORT);
+        ProviderMetadata particlesMetadata = metadata(ImpactLevel.LOW, ImpactLevel.LOW, SafetyLevel.SAFE, 2.0,
+                RollbackGuarantee.STRONG);
+        ProviderRegistry registry = registryWith(
+                provider(CapabilityId.CLOUDS, cloudsMetadata),
+                provider(CapabilityId.PARTICLES, particlesMetadata));
+
+        ActionSuccessTracker tracker = successTrackerWith(CapabilityId.CLOUDS, CapabilityId.PARTICLES);
+        SessionLearning learning = new SessionLearning(tempDir.toFile());
+        learning.recordSuccess(CapabilityId.CLOUDS, Scenario.STANDARD, 2.0);
+        learning.recordSuccess(CapabilityId.CLOUDS, Scenario.STANDARD, 2.5);
+        learning.recordSuccess(CapabilityId.PARTICLES, Scenario.STANDARD, 0.1);
+
+        ActionMatrix matrix = new ActionMatrix(
+                registry,
+                tracker,
+                new ConfidenceCalculator(),
+                learning);
+
+        List<ActionCandidate> candidates = matrix.generateCandidates(ModePolicy.manualAssist(), "BALANCED",
+                Scenario.STANDARD, OptimizationProfile.BALANCED, -1.0, 0);
+
+        assertEquals(2, candidates.size());
+        assertEquals(CapabilityId.CLOUDS, candidates.get(0).capabilityId());
+        assertEquals(RollbackGuarantee.BEST_EFFORT, candidates.get(0).rollbackGuarantee());
+        assertEquals(RollbackGuarantee.STRONG, candidates.get(1).rollbackGuarantee());
+    }
+
     private ProviderRegistry registryWith(CapabilityProvider... providers) {
         ProviderRegistry registry = new ProviderRegistry(new ProviderHealthTracker());
         for (CapabilityProvider provider : providers) {
@@ -205,10 +236,19 @@ class ActionMatrixTest {
             ImpactLevel visualImpact,
             SafetyLevel safetyLevel,
             double expectedGain) {
+        return metadata(gameplayImpact, visualImpact, safetyLevel, expectedGain, RollbackGuarantee.STRONG);
+    }
+
+    private ProviderMetadata metadata(
+            ImpactLevel gameplayImpact,
+            ImpactLevel visualImpact,
+            SafetyLevel safetyLevel,
+            double expectedGain,
+            RollbackGuarantee rollbackGuarantee) {
         return new TestProviderMetadata(
                 SideEffects.none(),
                 safetyLevel,
-                RollbackGuarantee.STRONG,
+                rollbackGuarantee,
                 gameplayImpact,
                 visualImpact,
                 expectedGain,

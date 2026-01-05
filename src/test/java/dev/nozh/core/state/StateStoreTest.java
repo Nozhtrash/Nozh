@@ -2,6 +2,12 @@ package dev.nozh.core.state;
 
 import org.junit.jupiter.api.Test;
 
+import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -18,6 +24,59 @@ class StateStoreTest {
 
             store.markPersisted();
             assertFalse(store.isDirty());
+        } finally {
+            store.reset();
+        }
+    }
+
+    @Test
+    void supportsConcurrentSnapshotsAndUpdates() throws InterruptedException {
+        StateStore store = StateStore.getInstance();
+        store.reset();
+
+        ExecutorService executor = Executors.newFixedThreadPool(4);
+        CountDownLatch startLatch = new CountDownLatch(1);
+        CountDownLatch doneLatch = new CountDownLatch(4);
+        ConcurrentLinkedQueue<Throwable> errors = new ConcurrentLinkedQueue<>();
+
+        Runnable updater = () -> {
+            try {
+                startLatch.await();
+                for (int i = 0; i < 100; i++) {
+                    store.update(state -> state.withDecision("thread-" + Thread.currentThread().getId(), System.nanoTime()));
+                }
+            } catch (Throwable t) {
+                errors.add(t);
+            } finally {
+                doneLatch.countDown();
+            }
+        };
+
+        Runnable reader = () -> {
+            try {
+                startLatch.await();
+                for (int i = 0; i < 100; i++) {
+                    store.snapshot();
+                    store.snapshotSafe();
+                }
+            } catch (Throwable t) {
+                errors.add(t);
+            } finally {
+                doneLatch.countDown();
+            }
+        };
+
+        executor.execute(updater);
+        executor.execute(updater);
+        executor.execute(reader);
+        executor.execute(reader);
+
+        startLatch.countDown();
+        doneLatch.await(5, TimeUnit.SECONDS);
+        executor.shutdownNow();
+
+        try {
+            assertTrue(errors.isEmpty());
         } finally {
             store.reset();
         }
