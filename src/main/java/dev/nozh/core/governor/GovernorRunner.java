@@ -40,6 +40,7 @@ public final class GovernorRunner {
 
     private static final int MAX_SUGGESTED_QUEUE = 5;
     private static final long RAPID_SCENARIO_CHANGE_WINDOW_MS = 5_000L;
+    private static final int REVERSE_IMPROVEMENT_STREAK = 3;
 
     private final SimulationGovernor governor;
     private final ActionBus actionBus;
@@ -59,6 +60,10 @@ public final class GovernorRunner {
 
     private int tickCounter = 0;
     private long totalTicks = 0;
+    private double lastReverseP95Ms = -1.0;
+    private int lastReverseSpikes = -1;
+    private int reverseP95Streak = 0;
+    private int reverseSpikeStreak = 0;
 
     public GovernorRunner(
             ProviderRegistry registry,
@@ -130,6 +135,7 @@ public final class GovernorRunner {
         refreshCurrentSettings();
         RuntimeState state = stateStore.snapshotSafe();
         syncBaselineIfNeeded(state);
+        boolean reverseReady = updateReverseImprovement(state, config);
 
         // === Pending evaluation ===
         if (state.pendingAction().isPresent()) {
@@ -195,6 +201,7 @@ public final class GovernorRunner {
                 OptimizationProfile.fromConfig(config.optimizationProfile),
                 config.targetFps,
                 config.reverseEpsilonMs,
+                reverseReady,
                 state.baselineSettings(),
                 state.currentSettings());
 
@@ -641,10 +648,57 @@ public final class GovernorRunner {
 
     private String formatActionSummary(ActionCandidate decision) {
         String value = formatCapabilityValue(decision.targetValue());
+        if (isReverseAction(decision)) {
+            return "restore " + decision.capabilityId().toString() + (value.isEmpty() ? "" : "=" + value);
+        }
         if (value.isEmpty()) {
             return decision.capabilityId().toString();
         }
         return decision.capabilityId().toString() + "=" + value;
+    }
+
+    private boolean isReverseAction(ActionCandidate decision) {
+        return decision != null
+                && decision.reason() != null
+                && decision.reason().contains("restore baseline");
+    }
+
+    private boolean updateReverseImprovement(RuntimeState state, NozhConfig config) {
+        if (state == null || config == null) {
+            reverseP95Streak = 0;
+            reverseSpikeStreak = 0;
+            return false;
+        }
+        double p95 = state.p95FrametimeMs();
+        int spikes = state.spikeCount();
+        boolean p95Valid = p95 > 0;
+        boolean spikesValid = spikes >= 0;
+
+        if (!p95Valid || !spikesValid) {
+            reverseP95Streak = 0;
+            reverseSpikeStreak = 0;
+            if (p95Valid) {
+                lastReverseP95Ms = p95;
+            }
+            if (spikesValid) {
+                lastReverseSpikes = spikes;
+            }
+            return false;
+        }
+
+        boolean p95Improved = lastReverseP95Ms > 0
+                && p95 <= (lastReverseP95Ms - config.improvementEpsilonP95Ms);
+        boolean spikesImproved = lastReverseSpikes >= 0
+                && (spikes < lastReverseSpikes || (spikes == 0 && lastReverseSpikes == 0));
+
+        reverseP95Streak = p95Improved ? reverseP95Streak + 1 : 0;
+        reverseSpikeStreak = spikesImproved ? reverseSpikeStreak + 1 : 0;
+
+        lastReverseP95Ms = p95;
+        lastReverseSpikes = spikes;
+
+        return reverseP95Streak >= REVERSE_IMPROVEMENT_STREAK
+                && reverseSpikeStreak >= REVERSE_IMPROVEMENT_STREAK;
     }
 
     private String formatCapabilityValue(CapabilityValue value) {
