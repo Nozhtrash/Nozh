@@ -113,6 +113,10 @@ public class NozhModClient implements ClientModInitializer {
         sessionLearning = new dev.nozh.core.intelligence.SessionLearning(
                 net.fabricmc.loader.api.FabricLoader.getInstance().getConfigDir().toFile());
 
+        // Initialize PerfManager (collects FPS data)
+        perfManager = new dev.nozh.core.profiler.PerfManager();
+        tickTimeSampler = new dev.nozh.core.monitoring.TickTimeSampler();
+
         // 8. Create ActionProcessor bridge
         StandardActionProcessor actionProcessor = new StandardActionProcessor(
                 capabilityExecutor,
@@ -132,16 +136,13 @@ public class NozhModClient implements ClientModInitializer {
                 stateStore,
                 logger,
                 sessionLearning,
+                perfManager,
                 scenarioDetector,
                 () -> perfManager != null ? perfManager.getSnapshot() : dev.nozh.api.PerfSnapshot.empty());
 
         logger.info("Governor system initialized");
 
         // === TELEMETRY SETUP ===
-
-        // Initialize PerfManager (collects FPS data)
-        perfManager = new dev.nozh.core.profiler.PerfManager();
-        tickTimeSampler = new dev.nozh.core.monitoring.TickTimeSampler();
 
         toggleHudKey = KeyBindingHelper.registerKeyBinding(new KeyBinding(
                 "key.nozh.toggle_hud",

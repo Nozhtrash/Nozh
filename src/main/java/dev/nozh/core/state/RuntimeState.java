@@ -18,6 +18,7 @@ import java.util.Map;
 import java.util.Optional;
 
 import dev.nozh.core.state.ActionHistoryEntry;
+import dev.nozh.core.governor.ActionOutcome;
 
 /**
  * Runtime state (Contract 1).
@@ -56,6 +57,9 @@ public record RuntimeState(
         int spikeCount,
         String lastDecisionReason,
         long lastDecisionTimestamp,
+        double lastImpactMs,
+        ActionOutcome lastOutcome,
+        boolean lastDecisionAccepted,
         long sessionStartTime,
         int stateVersion,
         dev.nozh.core.context.Scenario currentScenario,
@@ -66,7 +70,7 @@ public record RuntimeState(
         int combatAfkFlipCount,
         Map<CapabilityId, CapabilityValue> baselineSettings,
         Map<CapabilityId, CapabilityValue> currentSettings) {
-    private static final int CURRENT_VERSION = 7; // Bump version
+    private static final int CURRENT_VERSION = 8; // Bump version
 
     /**
      * Create default initial state.
@@ -98,6 +102,9 @@ public record RuntimeState(
                 -1.0, // tickTimeP95
                 0, // spikeCount
                 "", 0L, // lastDecisionReason, lastDecisionTimestamp
+                0.0, // lastImpactMs
+                ActionOutcome.NEUTRAL, // lastOutcome
+                true, // lastDecisionAccepted
                 System.currentTimeMillis(), CURRENT_VERSION,
                 dev.nozh.core.context.Scenario.STANDARD, 0.5,
                 0L,
@@ -131,6 +138,7 @@ public record RuntimeState(
                 avgFrametimeMs, p95FrametimeMs, p99FrametimeMs, frametimeStddevMs, tickTimeAvg, tickTimeP95,
                 spikeCount,
                 lastDecisionReason, lastDecisionTimestamp,
+                lastImpactMs, lastOutcome, lastDecisionAccepted,
                 sessionStartTime, stateVersion,
                 currentScenario, scenarioConfidence,
                 lastScenarioChangeTimestamp, scenarioChangeCount, rapidScenarioChangeCount, combatAfkFlipCount,
@@ -162,6 +170,7 @@ public record RuntimeState(
                 avgFrametimeMs, p95FrametimeMs, p99FrametimeMs, frametimeStddevMs, tickTimeAvg, tickTimeP95,
                 spikeCount,
                 lastDecisionReason, lastDecisionTimestamp,
+                lastImpactMs, lastOutcome, lastDecisionAccepted,
                 sessionStartTime, stateVersion,
                 currentScenario, scenarioConfidence,
                 lastScenarioChangeTimestamp, scenarioChangeCount, rapidScenarioChangeCount, combatAfkFlipCount,
@@ -188,6 +197,7 @@ public record RuntimeState(
                 avgFrametimeMs, p95FrametimeMs, p99FrametimeMs, frametimeStddevMs, tickTimeAvg, tickTimeP95,
                 spikeCount,
                 lastDecisionReason, lastDecisionTimestamp,
+                lastImpactMs, lastOutcome, lastDecisionAccepted,
                 sessionStartTime, stateVersion,
                 currentScenario, scenarioConfidence,
                 lastScenarioChangeTimestamp, scenarioChangeCount, rapidScenarioChangeCount, combatAfkFlipCount,
@@ -218,6 +228,7 @@ public record RuntimeState(
                 avgFrametimeMs, p95FrametimeMs, p99FrametimeMs, frametimeStddevMs, tickTimeAvg, tickTimeP95,
                 spikeCount,
                 lastDecisionReason, lastDecisionTimestamp,
+                lastImpactMs, lastOutcome, lastDecisionAccepted,
                 sessionStartTime, stateVersion,
                 currentScenario, scenarioConfidence,
                 lastScenarioChangeTimestamp, scenarioChangeCount, rapidScenarioChangeCount, combatAfkFlipCount,
@@ -244,6 +255,7 @@ public record RuntimeState(
                 avgFrametimeMs, p95FrametimeMs, p99FrametimeMs, frametimeStddevMs, tickTimeAvg, tickTimeP95,
                 spikeCount,
                 lastDecisionReason, lastDecisionTimestamp,
+                lastImpactMs, lastOutcome, lastDecisionAccepted,
                 sessionStartTime, stateVersion,
                 currentScenario, scenarioConfidence,
                 lastScenarioChangeTimestamp, scenarioChangeCount, rapidScenarioChangeCount, combatAfkFlipCount,
@@ -272,6 +284,7 @@ public record RuntimeState(
                 avgFrametimeMs, p95FrametimeMs, p99FrametimeMs, frametimeStddevMs, tickTimeAvg, tickTimeP95,
                 spikeCount,
                 lastDecisionReason, lastDecisionTimestamp,
+                lastImpactMs, lastOutcome, lastDecisionAccepted,
                 sessionStartTime, stateVersion,
                 currentScenario, scenarioConfidence,
                 lastScenarioChangeTimestamp, scenarioChangeCount, rapidScenarioChangeCount, combatAfkFlipCount,
@@ -292,6 +305,7 @@ public record RuntimeState(
                 sessionChangesCount,
                 avg, p95, p99, stddev, tickAvg, tickP95, spikes,
                 lastDecisionReason, lastDecisionTimestamp,
+                lastImpactMs, lastOutcome, lastDecisionAccepted,
                 sessionStartTime, stateVersion,
                 currentScenario, scenarioConfidence,
                 lastScenarioChangeTimestamp, scenarioChangeCount, rapidScenarioChangeCount, combatAfkFlipCount,
@@ -314,6 +328,7 @@ public record RuntimeState(
                 avgFrametimeMs, p95FrametimeMs, p99FrametimeMs, frametimeStddevMs, tickTimeAvg, tickTimeP95,
                 spikeCount,
                 lastDecisionReason, lastDecisionTimestamp,
+                lastImpactMs, lastOutcome, lastDecisionAccepted,
                 sessionStartTime, stateVersion,
                 currentScenario, scenarioConfidence,
                 lastScenarioChangeTimestamp, scenarioChangeCount, rapidScenarioChangeCount, combatAfkFlipCount,
@@ -334,6 +349,7 @@ public record RuntimeState(
                 avgFrametimeMs, p95FrametimeMs, p99FrametimeMs, frametimeStddevMs, tickTimeAvg, tickTimeP95,
                 spikeCount,
                 lastDecisionReason, lastDecisionTimestamp,
+                lastImpactMs, lastOutcome, lastDecisionAccepted,
                 sessionStartTime, stateVersion,
                 scenario, confidence,
                 lastScenarioChangeTimestamp, scenarioChangeCount, rapidScenarioChangeCount, combatAfkFlipCount,
@@ -356,6 +372,7 @@ public record RuntimeState(
                 avgFrametimeMs, p95FrametimeMs, p99FrametimeMs, frametimeStddevMs, tickTimeAvg, tickTimeP95,
                 spikeCount,
                 lastDecisionReason, lastDecisionTimestamp,
+                lastImpactMs, lastOutcome, lastDecisionAccepted,
                 sessionStartTime, stateVersion,
                 scenario, confidence,
                 changeTimestamp, changeCount, rapidCount, flipCount,
@@ -387,6 +404,7 @@ public record RuntimeState(
                 avgFrametimeMs, p95FrametimeMs, p99FrametimeMs, frametimeStddevMs, tickTimeAvg, tickTimeP95,
                 spikeCount,
                 lastDecisionReason, lastDecisionTimestamp,
+                lastImpactMs, lastOutcome, lastDecisionAccepted,
                 sessionStartTime, stateVersion,
                 currentScenario, scenarioConfidence,
                 lastScenarioChangeTimestamp, scenarioChangeCount, rapidScenarioChangeCount, combatAfkFlipCount,
@@ -410,6 +428,7 @@ public record RuntimeState(
                 spikeCount,
                 reason != null ? reason : "",
                 timestamp,
+                lastImpactMs, lastOutcome, lastDecisionAccepted,
                 sessionStartTime, stateVersion,
                 currentScenario, scenarioConfidence,
                 lastScenarioChangeTimestamp, scenarioChangeCount, rapidScenarioChangeCount, combatAfkFlipCount,
@@ -433,6 +452,7 @@ public record RuntimeState(
                 avgFrametimeMs, p95FrametimeMs, p99FrametimeMs, frametimeStddevMs, tickTimeAvg, tickTimeP95,
                 spikeCount,
                 lastDecisionReason, lastDecisionTimestamp,
+                lastImpactMs, lastOutcome, lastDecisionAccepted,
                 sessionStartTime, stateVersion,
                 currentScenario, scenarioConfidence,
                 lastScenarioChangeTimestamp, scenarioChangeCount, rapidScenarioChangeCount, combatAfkFlipCount,
@@ -452,6 +472,7 @@ public record RuntimeState(
                 avgFrametimeMs, p95FrametimeMs, p99FrametimeMs, frametimeStddevMs, tickTimeAvg, tickTimeP95,
                 spikeCount,
                 lastDecisionReason, lastDecisionTimestamp,
+                lastImpactMs, lastOutcome, lastDecisionAccepted,
                 sessionStartTime, stateVersion,
                 currentScenario, scenarioConfidence,
                 lastScenarioChangeTimestamp, scenarioChangeCount, rapidScenarioChangeCount, combatAfkFlipCount,
@@ -488,6 +509,9 @@ public record RuntimeState(
                 -1.0, // tickTimeP95
                 0, // spikeCount
                 "", 0L, // lastDecisionReason, lastDecisionTimestamp
+                0.0, // lastImpactMs
+                ActionOutcome.NEUTRAL, // lastOutcome
+                true, // lastDecisionAccepted
                 System.currentTimeMillis(),
                 CURRENT_VERSION,
                 dev.nozh.core.context.Scenario.STANDARD,
@@ -511,6 +535,7 @@ public record RuntimeState(
                 avgFrametimeMs, p95FrametimeMs, p99FrametimeMs, frametimeStddevMs, tickTimeAvg, tickTimeP95,
                 spikeCount,
                 lastDecisionReason, lastDecisionTimestamp,
+                lastImpactMs, lastOutcome, lastDecisionAccepted,
                 sessionStartTime, stateVersion,
                 currentScenario, scenarioConfidence,
                 lastScenarioChangeTimestamp, scenarioChangeCount, rapidScenarioChangeCount, combatAfkFlipCount,
@@ -529,6 +554,7 @@ public record RuntimeState(
                 avgFrametimeMs, p95FrametimeMs, p99FrametimeMs, frametimeStddevMs, tickTimeAvg, tickTimeP95,
                 spikeCount,
                 lastDecisionReason, lastDecisionTimestamp,
+                lastImpactMs, lastOutcome, lastDecisionAccepted,
                 sessionStartTime, stateVersion,
                 currentScenario, scenarioConfidence,
                 lastScenarioChangeTimestamp, scenarioChangeCount, rapidScenarioChangeCount, combatAfkFlipCount,
@@ -558,6 +584,9 @@ public record RuntimeState(
                 avgFrametimeMs, p95FrametimeMs, p99FrametimeMs, frametimeStddevMs, tickTimeAvg, tickTimeP95,
                 spikeCount,
                 lastDecisionReason, lastDecisionTimestamp,
+                updatedEntry.p95DeltaMs(),
+                updatedEntry.outcome(),
+                !updatedEntry.rollbackApplied(),
                 sessionStartTime, stateVersion,
                 currentScenario, scenarioConfidence,
                 lastScenarioChangeTimestamp, scenarioChangeCount, rapidScenarioChangeCount, combatAfkFlipCount,

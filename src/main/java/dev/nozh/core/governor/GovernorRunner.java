@@ -14,13 +14,12 @@ import dev.nozh.core.matrix.ActionSuccessTracker;
 import dev.nozh.core.matrix.ConfidenceCalculator;
 import dev.nozh.core.governor.OptimizationProfile;
 import dev.nozh.core.compatibility.CompatibilityMatrix;
-import dev.nozh.core.compatibility.ModConflictDetector;
+import dev.nozh.core.profiler.PerfManager;
 import dev.nozh.core.state.RuntimeState;
 import dev.nozh.core.state.StateStore;
 import dev.nozh.core.state.PendingAction;
 import dev.nozh.core.state.ActionHistoryEntry;
 import dev.nozh.core.bus.CapabilityValue;
-import dev.nozh.core.capability.ApplyResult;
 import dev.nozh.api.PerfSnapshot;
 import dev.nozh.core.governor.ActionOutcome;
 
@@ -49,6 +48,7 @@ public final class GovernorRunner {
     private final ProviderRegistry providerRegistry;
     private final SessionLearning sessionLearning;
     private final ActionSuccessTracker successTracker;
+    private final PerfManager perfManager;
     private final Supplier<PerfSnapshot> perfSnapshotSupplier;
     private final Map<dev.nozh.core.bus.CapabilityId, Long> rollbackCooldowns = new HashMap<>();
 
@@ -64,6 +64,7 @@ public final class GovernorRunner {
     private int lastReverseSpikes = -1;
     private int reverseP95Streak = 0;
     private int reverseSpikeStreak = 0;
+    private int lastObservationWindowSeconds = -1;
 
     public GovernorRunner(
             ProviderRegistry registry,
@@ -72,6 +73,7 @@ public final class GovernorRunner {
             StateStore stateStore,
             NozhLogger logger,
             SessionLearning sessionLearning,
+            PerfManager perfManager,
             ScenarioDetector scenarioDetector,
             Supplier<PerfSnapshot> perfSnapshotSupplier) {
         ActionMatrix matrix = new ActionMatrix(
@@ -88,6 +90,7 @@ public final class GovernorRunner {
         this.providerRegistry = registry;
         this.sessionLearning = sessionLearning;
         this.successTracker = successTracker;
+        this.perfManager = perfManager;
         this.scenarioDetector = scenarioDetector;
         this.perfSnapshotSupplier = perfSnapshotSupplier != null ? perfSnapshotSupplier : PerfSnapshot::empty;
 
@@ -132,6 +135,7 @@ public final class GovernorRunner {
         long now = System.currentTimeMillis();
         NozhConfig config = ConfigManager.getConfig();
 
+        syncObservationWindow(config);
         refreshCurrentSettings();
         RuntimeState state = stateStore.snapshotSafe();
         syncBaselineIfNeeded(state);
@@ -141,8 +145,7 @@ public final class GovernorRunner {
         if (state.pendingAction().isPresent()) {
             PendingAction pending = state.pendingAction().get();
             long elapsed = now - pending.timestampMillis();
-            long evaluationWindow = config.benchmarkModeEnabled ? config.benchmarkMicroIntervalMillis
-                    : config.rollbackWindowMillis;
+            long evaluationWindow = resolveEvaluationWindowMillis(config);
 
             if (elapsed < evaluationWindow) {
                 logger.debug(String.format(
@@ -234,7 +237,7 @@ public final class GovernorRunner {
                     }
                 }
             }
-            PerfSnapshot baselineSnapshot = perfSnapshotSupplier.get();
+            PerfSnapshot baselineSnapshot = captureSnapshot();
             Optional<dev.nozh.core.bus.CapabilityValue> previousValue = providerRegistry.get(decision.capabilityId())
                     .flatMap(provider -> provider.getCurrentValueSafe());
             Command cmd = new Command.ApplyCapability(
@@ -263,8 +266,8 @@ public final class GovernorRunner {
 
         // Dispatch via ActionBus
         if (decision.targetValue() != null) {
-            PerfSnapshot baselineSnapshot = perfSnapshotSupplier.get();
-            int observationWindowSeconds = resolveObservationWindowSeconds(baselineSnapshot);
+            PerfSnapshot baselineSnapshot = captureSnapshot();
+            int observationWindowSeconds = resolveObservationWindowSeconds(config, baselineSnapshot);
             Optional<dev.nozh.core.bus.CapabilityValue> previousValue = providerRegistry.get(decision.capabilityId())
                     .flatMap(provider -> provider.getCurrentValueSafe());
             Command cmd = new Command.ApplyCapability(
@@ -446,7 +449,7 @@ public final class GovernorRunner {
                             logger.warn("Safe fallback rollback failed");
                         }
                     }), () -> logger.warn("Safe fallback rollback unavailable"));
-            sessionLearning.recordFailure(pending.capability());
+            sessionLearning.recordOutcome(pending.capability(), pending.scenario(), ActionOutcome.NEGATIVE, 0.0);
             successTracker.recordFailure(pending.capability());
             try {
                 stateStore.update(RuntimeState::withPendingActionCleared);
@@ -456,10 +459,7 @@ public final class GovernorRunner {
             successTracker.clearDecisionSnapshot(pending.capability());
             return;
         }
-        PerfSnapshot currentSnapshot = perfSnapshotSupplier.get();
-        if (currentSnapshot == null) {
-            currentSnapshot = PerfSnapshot.empty();
-        }
+        PerfSnapshot currentSnapshot = captureSnapshot();
         PerfSnapshot baselineSnapshot = pending.baselineSnapshot();
         if (baselineSnapshot == null) {
             baselineSnapshot = PerfSnapshot.empty();
@@ -476,13 +476,15 @@ public final class GovernorRunner {
             logger.debug("Outcome evaluation fallback used (insufficient perf snapshot data)");
         }
 
-        int observationWindowSeconds = resolveObservationWindowSeconds(currentSnapshot != null ? currentSnapshot : baselineSnapshot);
+        int observationWindowSeconds = resolveObservationWindowSeconds(config,
+                currentSnapshot != null ? currentSnapshot : baselineSnapshot);
         double p95Delta = resolveDelta(currentSnapshot, baselineSnapshot, PerfSnapshot::p95FrametimeMs);
         int spikeDelta = resolveSpikeDelta(currentSnapshot, baselineSnapshot);
         if (spikeDelta > 0) {
             outcome = ActionOutcome.NEGATIVE;
         }
 
+        boolean rollbackRequested = false;
         boolean rollbackApplied = false;
         if (outcome != ActionOutcome.POSITIVE && sufficientData) {
             if (config.rollbackEnabled) {
@@ -490,27 +492,29 @@ public final class GovernorRunner {
                 if (lastRollback != null && nowMillis() - lastRollback < config.rollbackCooldownMillis) {
                     logger.info("Rollback skipped due to cooldown for " + pending.capability());
                 } else {
-                    rollbackApplied = attemptProviderRollback(pending);
-                    rollbackCooldowns.put(pending.capability(), nowMillis());
+                    rollbackRequested = true;
                 }
             } else {
                 logger.info("Rollback disabled in config, keeping ineffective action.");
             }
 
-            sessionLearning.recordFailure(pending.capability(), pending.scenario());
+            sessionLearning.recordOutcome(pending.capability(), pending.scenario(), ActionOutcome.NEGATIVE, 0.0);
             successTracker.recordFailure(pending.capability());
         } else if (outcome == ActionOutcome.POSITIVE) {
             double gainAvg = resolveGain(pending.baselineAvgMs(), currentSnapshot != null ? currentSnapshot.avgFrametimeMs() : Double.NaN);
             double gainP95 = resolveGain(pending.baselineP95Ms(), currentSnapshot != null ? currentSnapshot.p95FrametimeMs() : Double.NaN);
-            sessionLearning.recordSuccess(pending.capability(), pending.scenario(), Math.max(gainAvg, gainP95));
+            sessionLearning.recordOutcome(pending.capability(), pending.scenario(), ActionOutcome.POSITIVE,
+                    Math.max(gainAvg, gainP95));
             successTracker.recordSuccess(pending.capability());
+        } else {
+            sessionLearning.recordOutcome(pending.capability(), pending.scenario(), ActionOutcome.NEUTRAL, 0.0);
         }
 
         logger.debug(String.format(
                 "Governor action evaluation action=%s impact=%s decision=%s p95Delta=%.2fms spikesDelta=%d window=%ds",
                 pending.capability(),
                 outcome,
-                rollbackApplied ? "rollback" : "keep",
+                rollbackRequested ? "rollback" : "keep",
                 p95Delta,
                 spikeDelta,
                 observationWindowSeconds));
@@ -538,6 +542,12 @@ public final class GovernorRunner {
             stateStore.update(RuntimeState::withPendingActionCleared);
         } catch (Exception e) {
             logger.warn("Failed to clear pending action");
+        }
+        if (rollbackRequested) {
+            rollbackApplied = attemptMetricRollback(state, pending);
+            if (rollbackApplied) {
+                rollbackCooldowns.put(pending.capability(), nowMillis());
+            }
         }
         successTracker.clearDecisionSnapshot(pending.capability());
     }
@@ -612,34 +622,174 @@ public final class GovernorRunner {
         return Math.max(0.0, baselineMs - currentMs);
     }
 
-    private boolean attemptProviderRollback(PendingAction pending) {
-        if (pending.previousValue().isEmpty()) {
-            logger.warn("No previous value available for rollback: " + pending.capability());
-            return false;
+    private void syncObservationWindow(NozhConfig config) {
+        if (config == null || config.observationWindowSeconds <= 0) {
+            return;
         }
-        return providerRegistry.get(pending.capability())
-                .map(provider -> {
-                    ApplyResult result = provider.apply(pending.previousValue().get());
-                    if (result instanceof ApplyResult.Success) {
-                        logger.info("Rollback succeeded (Action was ineffective)");
-                        return true;
-                    }
-                    if (result instanceof ApplyResult.Rejected rejected) {
-                        logger.warn("Rollback rejected for " + pending.capability() + ": " + rejected.reason());
-                    } else if (result instanceof ApplyResult.Failed failed) {
-                        logger.warn("Rollback failed for " + pending.capability() + ": " + failed.reason());
-                    } else {
-                        logger.warn("Rollback returned unknown result for " + pending.capability());
-                    }
-                    return false;
-                })
-                .orElseGet(() -> {
-                    logger.warn("Rollback provider unavailable for " + pending.capability());
-                    return false;
-                });
+        if (config.observationWindowSeconds == lastObservationWindowSeconds) {
+            return;
+        }
+        if (perfManager != null) {
+            perfManager.setObservationWindowSeconds(config.observationWindowSeconds);
+        }
+        lastObservationWindowSeconds = config.observationWindowSeconds;
     }
 
-    private int resolveObservationWindowSeconds(PerfSnapshot snapshot) {
+    private PerfSnapshot captureSnapshot() {
+        PerfSnapshot snapshot = perfManager != null ? perfManager.getSnapshot() : perfSnapshotSupplier.get();
+        return snapshot != null ? snapshot : PerfSnapshot.empty();
+    }
+
+    private long resolveEvaluationWindowMillis(NozhConfig config) {
+        if (config == null) {
+            return 0L;
+        }
+        if (config.benchmarkModeEnabled) {
+            return Math.max(1000L, config.benchmarkMicroIntervalMillis);
+        }
+        if (config.observationWindowSeconds > 0) {
+            return config.observationWindowSeconds * 1000L;
+        }
+        return config.rollbackWindowMillis;
+    }
+
+    private boolean attemptMetricRollback(RuntimeState state, PendingAction pending) {
+        Optional<CapabilityValue> rollbackValue = resolveRollbackValue(state, pending);
+        if (rollbackValue.isEmpty()) {
+            logger.warn("No rollback value available for " + pending.capability());
+            return false;
+        }
+
+        Optional<Command> rollbackCommand = pending.command().inverse(rollbackValue);
+        if (rollbackCommand.isEmpty()) {
+            logger.warn("Rollback command unavailable for " + pending.capability());
+            return false;
+        }
+
+        actionBus.dispatch(rollbackCommand.get(), report -> {
+            boolean rollbackSucceeded = report.succeeded();
+            if (rollbackSucceeded) {
+                logger.info("Rollback succeeded (Action was ineffective)");
+            } else {
+                logger.warn("Rollback failed for " + pending.capability() + ": " + report.error().orElse("unknown"));
+            }
+            updateRollbackOutcome(pending.timestampMillis(), rollbackSucceeded);
+        });
+        return true;
+    }
+
+    private Optional<CapabilityValue> resolveRollbackValue(RuntimeState state, PendingAction pending) {
+        Optional<CapabilityValue> candidate = pending.previousValue();
+        CapabilityValue baseline = state != null && state.baselineSettings() != null
+                ? state.baselineSettings().get(pending.capability())
+                : null;
+
+        if (candidate.isPresent()) {
+            CapabilityValue value = candidate.get();
+            if (baseline != null && exceedsBaseline(pending.capability(), value, baseline)) {
+                return Optional.of(baseline);
+            }
+            return Optional.of(value);
+        }
+
+        if (baseline != null) {
+            return Optional.of(baseline);
+        }
+
+        return Optional.empty();
+    }
+
+    private void updateRollbackOutcome(long timestampMillis, boolean rollbackApplied) {
+        try {
+            stateStore.update(currentState -> {
+                ActionHistoryEntry entry = null;
+                for (ActionHistoryEntry historyEntry : currentState.actionHistory()) {
+                    if (historyEntry.timestampMillis() == timestampMillis) {
+                        entry = historyEntry;
+                        break;
+                    }
+                }
+                if (entry == null) {
+                    return currentState;
+                }
+                ActionHistoryEntry updatedEntry = new ActionHistoryEntry(
+                        entry.timestampMillis(),
+                        entry.actionSummary(),
+                        entry.scenario(),
+                        entry.scenarioConfidence(),
+                        entry.beforeSnapshot(),
+                        entry.afterSnapshot(),
+                        entry.p95DeltaMs(),
+                        entry.spikeDelta(),
+                        entry.observationWindowSeconds(),
+                        entry.outcome(),
+                        rollbackApplied);
+                return currentState.withActionOutcome(timestampMillis, updatedEntry);
+            });
+        } catch (Exception e) {
+            logger.warn("Failed to update rollback outcome state");
+        }
+    }
+
+    private boolean exceedsBaseline(dev.nozh.core.bus.CapabilityId capabilityId, CapabilityValue candidate,
+            CapabilityValue baseline) {
+        if (candidate == null || baseline == null) {
+            return false;
+        }
+        return switch (capabilityId) {
+            case PARTICLES -> compareEnum(candidate, baseline, java.util.List.of("MINIMAL", "DECREASED", "ALL"));
+            case CLOUDS -> compareEnum(candidate, baseline, java.util.List.of("OFF", "FAST", "FANCY"));
+            case GRAPHICS_MODE -> compareEnum(candidate, baseline, java.util.List.of("FAST", "FANCY", "FABULOUS"));
+            case ENTITY_SHADOWS, ARMOR_STANDS, ITEM_FRAMES, BLOCK_ENTITIES, ANIMATIONS, VSYNC, DYNAMIC_LIGHTING ->
+                    compareBool(candidate, baseline);
+            case RENDER_DISTANCE, SIMULATION_DISTANCE, ENTITY_DISTANCE, BIOME_BLEND, MIPMAP_LEVEL, FOG ->
+                    compareInt(candidate, baseline);
+            case RESOLUTION_SCALE, DISTORTION_EFFECT_SCALE -> compareFloat(candidate, baseline);
+            default -> false;
+        };
+    }
+
+    private boolean compareEnum(CapabilityValue candidate, CapabilityValue baseline, java.util.List<String> ordering) {
+        if (!(candidate instanceof CapabilityValue.EnumValue candidateEnum)
+                || !(baseline instanceof CapabilityValue.EnumValue baselineEnum)) {
+            return false;
+        }
+        int candidateIndex = ordering.indexOf(candidateEnum.name());
+        int baselineIndex = ordering.indexOf(baselineEnum.name());
+        if (candidateIndex < 0 || baselineIndex < 0) {
+            return false;
+        }
+        return candidateIndex > baselineIndex;
+    }
+
+    private boolean compareBool(CapabilityValue candidate, CapabilityValue baseline) {
+        if (!(candidate instanceof CapabilityValue.BoolValue candidateBool)
+                || !(baseline instanceof CapabilityValue.BoolValue baselineBool)) {
+            return false;
+        }
+        return candidateBool.value() && !baselineBool.value();
+    }
+
+    private boolean compareInt(CapabilityValue candidate, CapabilityValue baseline) {
+        if (!(candidate instanceof CapabilityValue.IntValue candidateInt)
+                || !(baseline instanceof CapabilityValue.IntValue baselineInt)) {
+            return false;
+        }
+        return candidateInt.value() > baselineInt.value();
+    }
+
+    private boolean compareFloat(CapabilityValue candidate, CapabilityValue baseline) {
+        if (!(candidate instanceof CapabilityValue.FloatValue candidateFloat)
+                || !(baseline instanceof CapabilityValue.FloatValue baselineFloat)) {
+            return false;
+        }
+        return candidateFloat.value() > baselineFloat.value();
+    }
+
+    private int resolveObservationWindowSeconds(NozhConfig config, PerfSnapshot snapshot) {
+        if (config != null && config.observationWindowSeconds > 0) {
+            return config.observationWindowSeconds;
+        }
         if (snapshot == null || snapshot.windowSeconds() <= 0) {
             return 0;
         }

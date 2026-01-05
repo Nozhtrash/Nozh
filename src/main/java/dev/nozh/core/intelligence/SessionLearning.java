@@ -2,6 +2,7 @@ package dev.nozh.core.intelligence;
 
 import dev.nozh.core.bus.CapabilityId;
 import dev.nozh.NozhConstants;
+import dev.nozh.core.governor.ActionOutcome;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonElement;
@@ -78,15 +79,7 @@ public final class SessionLearning {
      * ZERO ALLOCATION - primitive operations only.
      */
     public void recordSuccess(CapabilityId id, dev.nozh.core.context.Scenario scenario, double fpsGainMs) {
-        String key = buildKey(id, scenario);
-        ActionStats stats = history.computeIfAbsent(key, k -> new ActionStats());
-
-        stats.totalAttempts++;
-        stats.successCount++;
-        stats.lastSuccessTime = System.currentTimeMillis();
-        stats.totalFpsGain += fpsGainMs;
-        stats.avgFpsGain = stats.totalFpsGain / stats.successCount;
-        dirty = true;
+        recordOutcome(id, scenario, ActionOutcome.POSITIVE, fpsGainMs);
     }
 
     /**
@@ -94,12 +87,26 @@ public final class SessionLearning {
      * ZERO ALLOCATION - primitive operations only.
      */
     public void recordFailure(CapabilityId id, dev.nozh.core.context.Scenario scenario) {
+        recordOutcome(id, scenario, ActionOutcome.NEGATIVE, 0.0);
+    }
+
+    public void recordOutcome(CapabilityId id, dev.nozh.core.context.Scenario scenario, ActionOutcome outcome,
+            double fpsGainMs) {
         String key = buildKey(id, scenario);
         ActionStats stats = history.computeIfAbsent(key, k -> new ActionStats());
 
         stats.totalAttempts++;
-        stats.failureCount++;
-        stats.lastFailureTime = System.currentTimeMillis();
+        if (outcome == ActionOutcome.POSITIVE) {
+            stats.successCount++;
+            stats.lastSuccessTime = System.currentTimeMillis();
+            stats.totalFpsGain += Math.max(0.0, fpsGainMs);
+            stats.avgFpsGain = stats.totalFpsGain / stats.successCount;
+        } else if (outcome == ActionOutcome.NEGATIVE) {
+            stats.failureCount++;
+            stats.lastFailureTime = System.currentTimeMillis();
+        } else {
+            stats.neutralCount++;
+        }
         dirty = true;
     }
 
@@ -344,6 +351,7 @@ public final class SessionLearning {
         public int totalAttempts = 0;
         public int successCount = 0;
         public int failureCount = 0;
+        public int neutralCount = 0;
         public long lastSuccessTime = 0;
         public long lastFailureTime = 0;
         public double totalFpsGain = 0.0;
