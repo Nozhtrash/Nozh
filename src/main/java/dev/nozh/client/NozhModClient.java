@@ -6,6 +6,7 @@ import dev.nozh.core.bus.ActionBus;
 import dev.nozh.core.bus.Command;
 import dev.nozh.core.bus.StandardActionProcessor;
 import dev.nozh.core.config.ConfigManager;
+import dev.nozh.core.config.NozhConfig;
 import dev.nozh.core.config.ConfigSyncService;
 import dev.nozh.core.capability.ProviderRegistry;
 import dev.nozh.core.governor.GovernorRunner;
