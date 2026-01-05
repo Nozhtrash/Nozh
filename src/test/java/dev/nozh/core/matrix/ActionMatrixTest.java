@@ -50,7 +50,7 @@ class ActionMatrixTest {
                 new SessionLearning(tempDir.toFile()));
 
         List<ActionCandidate> candidates = matrix.generateCandidates(ModePolicy.manualAssist(), "CPU",
-                Scenario.STANDARD, OptimizationProfile.BALANCED);
+                Scenario.STANDARD, OptimizationProfile.BALANCED, -1.0, 0);
 
         Map<CapabilityId, ActionCandidate> byId = byId(candidates);
         assertEquals(3, byId.size());
@@ -75,7 +75,7 @@ class ActionMatrixTest {
                 new SessionLearning(tempDir.toFile()));
 
         List<ActionCandidate> candidates = matrix.generateCandidates(ModePolicy.manualAssist(), "GPU",
-                Scenario.STANDARD, OptimizationProfile.BALANCED);
+                Scenario.STANDARD, OptimizationProfile.BALANCED, -1.0, 0);
 
         Map<CapabilityId, ActionCandidate> byId = byId(candidates);
         assertEquals(3, byId.size());
@@ -97,7 +97,7 @@ class ActionMatrixTest {
                 new SessionLearning(tempDir.toFile()));
 
         List<ActionCandidate> candidates = matrix.generateCandidates(ModePolicy.manualAssist(), "BALANCED",
-                Scenario.STANDARD, OptimizationProfile.BALANCED);
+                Scenario.STANDARD, OptimizationProfile.BALANCED, -1.0, 0);
 
         Map<CapabilityId, ActionCandidate> byId = byId(candidates);
         assertEquals(2, byId.size());
@@ -131,7 +131,7 @@ class ActionMatrixTest {
                 learning);
 
         List<ActionCandidate> candidates = matrix.generateCandidates(ModePolicy.manualAssist(), "CPU",
-                Scenario.STANDARD, OptimizationProfile.BALANCED);
+                Scenario.STANDARD, OptimizationProfile.BALANCED, -1.0, 0);
 
         Map<CapabilityId, ActionCandidate> byId = byId(candidates);
         assertEquals(1, byId.size());
@@ -153,7 +153,7 @@ class ActionMatrixTest {
                 new SessionLearning(tempDir.toFile()));
 
         List<ActionCandidate> candidates = matrix.generateCandidates(ModePolicy.manualAssist(), "BALANCED",
-                Scenario.COMBAT, OptimizationProfile.BALANCED);
+                Scenario.COMBAT, OptimizationProfile.BALANCED, -1.0, 0);
 
         Map<CapabilityId, ActionCandidate> byId = byId(candidates);
         assertEquals("MINIMAL", candidateValue(byId.get(CapabilityId.PARTICLES)));

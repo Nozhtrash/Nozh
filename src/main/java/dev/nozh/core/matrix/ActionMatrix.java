@@ -33,6 +33,13 @@ public final class ActionMatrix {
     private static final double CONFIDENCE_WEIGHT = 0.65;
     private static final double EXPECTED_GAIN_WEIGHT = 0.35;
     private static final double LEARNED_CONFIDENCE_WEIGHT = 0.3;
+    private static final double LEARNED_RANKING_WEIGHT = 0.2;
+    private static final double SCENARIO_PRIORITY_WEIGHT = 0.15;
+    private static final double PERFORMANCE_PRESSURE_WEIGHT = 0.25;
+    private static final double BASELINE_FRAME_MS = 16.67;
+    private static final double MAX_SPIKE_PRESSURE = 5.0;
+
+    private static final Map<Scenario, ScenarioRuleSet> SCENARIO_RULES = buildScenarioRules();
 
     private final ProviderRegistry registry;
     private final ActionSuccessTracker successTracker;
@@ -76,13 +83,18 @@ public final class ActionMatrix {
      * @param policy       Mode policy to enforce
      * @param currentBound Performance bound (CPU/GPU/BALANCED)
      * @param scenario     Current scenario (combat/building/etc.)
+     * @param profile      Optimization profile (aggressive/balanced)
+     * @param p95FrametimeMs Current p95 frametime (ms)
+     * @param spikeCount   Current spike count
      * @return Sorted candidates (best first), may be empty
      */
     public List<ActionCandidate> generateCandidates(
             ModePolicy policy,
             String currentBound,
             Scenario scenario,
-            OptimizationProfile profile) {
+            OptimizationProfile profile,
+            double p95FrametimeMs,
+            int spikeCount) {
         List<ActionCandidate> candidates = new ArrayList<>();
         List<ActionCandidate> yieldCandidates = new ArrayList<>();
         long now = System.currentTimeMillis();
@@ -188,8 +200,17 @@ public final class ActionMatrix {
                 .max()
                 .orElse(0.0);
 
+        double maxRanking = candidates.stream()
+                .mapToDouble(candidate -> sessionLearning.getRanking(candidate.capabilityId(), scenario))
+                .max()
+                .orElse(0.0);
+
+        ActionSelectionContext selectionContext = new ActionSelectionContext(scenario, profile, p95FrametimeMs,
+                spikeCount);
         candidates.sort(Comparator
-                .comparingDouble((ActionCandidate candidate) -> scoreCandidate(candidate, maxExpectedGain)).reversed());
+                .comparingDouble((ActionCandidate candidate) -> scoreCandidate(candidate, maxExpectedGain, maxRanking,
+                        selectionContext))
+                .reversed());
 
         if (candidates.isEmpty() && !yieldCandidates.isEmpty()) {
             return List.of(yieldCandidates.get(0));
@@ -302,17 +323,19 @@ public final class ActionMatrix {
         boolean gpuBound = "GPU".equals(bound);
         boolean balanced = "BALANCED".equals(bound);
         boolean aggressive = profile != null && profile.isAggressive();
-
         boolean combat = scenario == Scenario.COMBAT;
-        boolean mining = scenario == Scenario.MINING;
         boolean building = scenario == Scenario.BUILDING;
-        boolean afk = scenario == Scenario.AFK;
         boolean menu = scenario == Scenario.MENU;
         boolean loading = scenario == Scenario.LOADING;
 
+        CapabilityValue scenarioTarget = resolveScenarioTarget(id, scenario, aggressive);
+        if (scenarioTarget != null) {
+            return scenarioTarget;
+        }
+
         switch (id) {
             case PARTICLES -> {
-                if (combat || loading) {
+                if (loading) {
                     return new CapabilityValue.EnumValue("MINIMAL");
                 }
                 if (cpuBound) {
@@ -323,7 +346,7 @@ public final class ActionMatrix {
                 }
             }
             case CLOUDS -> {
-                if (combat || loading || cpuBound) {
+                if (loading || cpuBound) {
                     return new CapabilityValue.EnumValue("OFF");
                 }
                 if (gpuBound || balanced) {
@@ -331,15 +354,12 @@ public final class ActionMatrix {
                 }
             }
             case ENTITY_SHADOWS -> {
-                if (combat || gpuBound || cpuBound) {
+                if (gpuBound || cpuBound) {
                     return new CapabilityValue.BoolValue(false);
                 }
             }
             case RENDER_DISTANCE -> {
-                if (mining) {
-                    return new CapabilityValue.IntValue(aggressive ? 4 : 6);
-                }
-                if (gpuBound || combat) {
+                if (gpuBound) {
                     return new CapabilityValue.IntValue(aggressive ? 6 : 8);
                 }
                 if (cpuBound) {
@@ -347,7 +367,7 @@ public final class ActionMatrix {
                 }
             }
             case SIMULATION_DISTANCE -> {
-                if (cpuBound || combat || mining) {
+                if (cpuBound) {
                     return new CapabilityValue.IntValue(aggressive ? 4 : 6);
                 }
                 if (balanced && !building) {
@@ -355,9 +375,6 @@ public final class ActionMatrix {
                 }
             }
             case ENTITY_DISTANCE -> {
-                if (combat || afk || loading) {
-                    return new CapabilityValue.IntValue(aggressive ? 60 : 70);
-                }
                 if (gpuBound) {
                     return new CapabilityValue.IntValue(aggressive ? 60 : 75);
                 }
@@ -366,7 +383,7 @@ public final class ActionMatrix {
                 }
             }
             case BIOME_BLEND -> {
-                if (combat || gpuBound) {
+                if (gpuBound) {
                     return new CapabilityValue.IntValue(aggressive ? 1 : 2);
                 }
                 if (cpuBound || balanced) {
@@ -374,7 +391,7 @@ public final class ActionMatrix {
                 }
             }
             case MIPMAP_LEVEL -> {
-                if (combat || gpuBound) {
+                if (gpuBound) {
                     return new CapabilityValue.IntValue(aggressive ? 1 : 2);
                 }
                 if (balanced && !building) {
@@ -382,12 +399,12 @@ public final class ActionMatrix {
                 }
             }
             case VSYNC -> {
-                if (combat || loading || gpuBound) {
+                if (loading || gpuBound) {
                     return new CapabilityValue.BoolValue(false);
                 }
             }
             case FOG -> {
-                if (combat || gpuBound) {
+                if (gpuBound) {
                     return new CapabilityValue.IntValue(aggressive ? 6 : 8);
                 }
                 if (balanced && !building) {
@@ -395,7 +412,7 @@ public final class ActionMatrix {
                 }
             }
             case GRAPHICS_MODE -> {
-                if (combat || gpuBound) {
+                if (gpuBound) {
                     return new CapabilityValue.EnumValue("FAST");
                 }
                 if (balanced && !building) {
@@ -403,32 +420,32 @@ public final class ActionMatrix {
                 }
             }
             case SMOOTH_LIGHTING -> {
-                if (combat || gpuBound || cpuBound) {
+                if (gpuBound || cpuBound) {
                     return new CapabilityValue.EnumValue("OFF");
                 }
             }
             case ARMOR_STANDS -> {
-                if (combat || afk || loading || (cpuBound && !building)) {
+                if (loading || (cpuBound && !building)) {
                     return new CapabilityValue.BoolValue(false);
                 }
             }
             case ITEM_FRAMES -> {
-                if (combat || afk || loading || (cpuBound && !building)) {
+                if (loading || (cpuBound && !building)) {
                     return new CapabilityValue.BoolValue(false);
                 }
             }
             case BLOCK_ENTITIES -> {
-                if (!building && (combat || afk || loading || cpuBound)) {
+                if (!building && (loading || cpuBound)) {
                     return new CapabilityValue.BoolValue(false);
                 }
             }
             case ANIMATIONS -> {
-                if (combat || afk || loading || (cpuBound && !building) || menu) {
+                if (loading || (cpuBound && !building) || menu) {
                     return new CapabilityValue.BoolValue(false);
                 }
             }
             case FPS_CAP -> {
-                if (menu || afk) {
+                if (menu) {
                     return new CapabilityValue.IntValue(60);
                 }
                 if (gpuBound && !combat) {
@@ -446,7 +463,7 @@ public final class ActionMatrix {
                 }
             }
             case DYNAMIC_LIGHTING -> {
-                if (combat || gpuBound || cpuBound || loading) {
+                if (gpuBound || cpuBound || loading) {
                     return new CapabilityValue.BoolValue(false);
                 }
             }
@@ -467,14 +484,150 @@ public final class ActionMatrix {
                 id.name(), confidence, metadata.expectedGainMs());
     }
 
-    private double scoreCandidate(ActionCandidate candidate, double maxExpectedGain) {
+    private double scoreCandidate(ActionCandidate candidate, double maxExpectedGain, double maxRanking,
+            ActionSelectionContext context) {
         double normalizedGain = maxExpectedGain > 0 ? candidate.expectedGainMs() / maxExpectedGain : 0.0;
-        return (candidate.confidenceScore() * CONFIDENCE_WEIGHT) + (normalizedGain * EXPECTED_GAIN_WEIGHT);
+        double ranking = sessionLearning.getRanking(candidate.capabilityId(), context.scenario());
+        double normalizedRanking = maxRanking > 0 ? ranking / maxRanking : 0.0;
+        double scenarioBoost = scenarioRuleWeight(candidate.capabilityId(), context.scenario(), context.profile());
+        double pressure = calculatePerformancePressure(context.p95FrametimeMs(), context.spikeCount());
+
+        double baseScore = (candidate.confidenceScore() * CONFIDENCE_WEIGHT)
+                + (normalizedGain * EXPECTED_GAIN_WEIGHT)
+                + (normalizedRanking * LEARNED_RANKING_WEIGHT)
+                + (scenarioBoost * SCENARIO_PRIORITY_WEIGHT);
+
+        return baseScore + (pressure * PERFORMANCE_PRESSURE_WEIGHT * (normalizedGain + scenarioBoost) / 2.0);
     }
 
     private double blendConfidence(double baseConfidence, double learnedConfidence) {
         return (baseConfidence * (1.0 - LEARNED_CONFIDENCE_WEIGHT))
                 + (learnedConfidence * LEARNED_CONFIDENCE_WEIGHT);
+    }
+
+    private CapabilityValue resolveScenarioTarget(CapabilityId id, Scenario scenario, boolean aggressive) {
+        ScenarioRuleSet ruleSet = SCENARIO_RULES.get(scenario);
+        if (ruleSet == null) {
+            return null;
+        }
+        return ruleSet.resolve(id, aggressive);
+    }
+
+    private double scenarioRuleWeight(CapabilityId id, Scenario scenario, OptimizationProfile profile) {
+        ScenarioRuleSet ruleSet = SCENARIO_RULES.get(scenario);
+        if (ruleSet == null) {
+            return 0.0;
+        }
+        return ruleSet.hasRule(id, profile != null && profile.isAggressive()) ? 1.0 : 0.0;
+    }
+
+    private double calculatePerformancePressure(double p95FrametimeMs, int spikeCount) {
+        double p95Pressure = 0.0;
+        if (p95FrametimeMs > 0) {
+            p95Pressure = Math.min(1.0, Math.max(0.0, (p95FrametimeMs - BASELINE_FRAME_MS) / BASELINE_FRAME_MS));
+        }
+        double spikePressure = spikeCount > 0 ? Math.min(1.0, spikeCount / MAX_SPIKE_PRESSURE) : 0.0;
+        return Math.min(1.0, Math.max(p95Pressure, spikePressure));
+    }
+
+    private static Map<Scenario, ScenarioRuleSet> buildScenarioRules() {
+        Map<Scenario, ScenarioRuleSet> rules = new java.util.EnumMap<>(Scenario.class);
+        rules.put(Scenario.COMBAT, combatRules());
+        rules.put(Scenario.AFK, afkRules());
+        rules.put(Scenario.MINING, miningRules());
+        return java.util.Collections.unmodifiableMap(rules);
+    }
+
+    private static ScenarioRuleSet combatRules() {
+        Map<CapabilityId, CapabilityValue> aggressive = new java.util.EnumMap<>(CapabilityId.class);
+        Map<CapabilityId, CapabilityValue> balanced = new java.util.EnumMap<>(CapabilityId.class);
+
+        aggressive.put(CapabilityId.PARTICLES, new CapabilityValue.EnumValue("MINIMAL"));
+        balanced.put(CapabilityId.PARTICLES, new CapabilityValue.EnumValue("MINIMAL"));
+        aggressive.put(CapabilityId.CLOUDS, new CapabilityValue.EnumValue("OFF"));
+        balanced.put(CapabilityId.CLOUDS, new CapabilityValue.EnumValue("OFF"));
+        aggressive.put(CapabilityId.ENTITY_SHADOWS, new CapabilityValue.BoolValue(false));
+        balanced.put(CapabilityId.ENTITY_SHADOWS, new CapabilityValue.BoolValue(false));
+        aggressive.put(CapabilityId.RENDER_DISTANCE, new CapabilityValue.IntValue(6));
+        balanced.put(CapabilityId.RENDER_DISTANCE, new CapabilityValue.IntValue(8));
+        aggressive.put(CapabilityId.SIMULATION_DISTANCE, new CapabilityValue.IntValue(4));
+        balanced.put(CapabilityId.SIMULATION_DISTANCE, new CapabilityValue.IntValue(6));
+        aggressive.put(CapabilityId.ENTITY_DISTANCE, new CapabilityValue.IntValue(60));
+        balanced.put(CapabilityId.ENTITY_DISTANCE, new CapabilityValue.IntValue(70));
+        aggressive.put(CapabilityId.BIOME_BLEND, new CapabilityValue.IntValue(1));
+        balanced.put(CapabilityId.BIOME_BLEND, new CapabilityValue.IntValue(2));
+        aggressive.put(CapabilityId.MIPMAP_LEVEL, new CapabilityValue.IntValue(1));
+        balanced.put(CapabilityId.MIPMAP_LEVEL, new CapabilityValue.IntValue(2));
+        aggressive.put(CapabilityId.VSYNC, new CapabilityValue.BoolValue(false));
+        balanced.put(CapabilityId.VSYNC, new CapabilityValue.BoolValue(false));
+        aggressive.put(CapabilityId.FOG, new CapabilityValue.IntValue(6));
+        balanced.put(CapabilityId.FOG, new CapabilityValue.IntValue(8));
+        aggressive.put(CapabilityId.GRAPHICS_MODE, new CapabilityValue.EnumValue("FAST"));
+        balanced.put(CapabilityId.GRAPHICS_MODE, new CapabilityValue.EnumValue("FAST"));
+        aggressive.put(CapabilityId.SMOOTH_LIGHTING, new CapabilityValue.EnumValue("OFF"));
+        balanced.put(CapabilityId.SMOOTH_LIGHTING, new CapabilityValue.EnumValue("OFF"));
+        aggressive.put(CapabilityId.ARMOR_STANDS, new CapabilityValue.BoolValue(false));
+        balanced.put(CapabilityId.ARMOR_STANDS, new CapabilityValue.BoolValue(false));
+        aggressive.put(CapabilityId.ITEM_FRAMES, new CapabilityValue.BoolValue(false));
+        balanced.put(CapabilityId.ITEM_FRAMES, new CapabilityValue.BoolValue(false));
+        aggressive.put(CapabilityId.BLOCK_ENTITIES, new CapabilityValue.BoolValue(false));
+        balanced.put(CapabilityId.BLOCK_ENTITIES, new CapabilityValue.BoolValue(false));
+        aggressive.put(CapabilityId.ANIMATIONS, new CapabilityValue.BoolValue(false));
+        balanced.put(CapabilityId.ANIMATIONS, new CapabilityValue.BoolValue(false));
+        aggressive.put(CapabilityId.DYNAMIC_LIGHTING, new CapabilityValue.BoolValue(false));
+        balanced.put(CapabilityId.DYNAMIC_LIGHTING, new CapabilityValue.BoolValue(false));
+
+        return new ScenarioRuleSet(aggressive, balanced);
+    }
+
+    private static ScenarioRuleSet afkRules() {
+        Map<CapabilityId, CapabilityValue> aggressive = new java.util.EnumMap<>(CapabilityId.class);
+        Map<CapabilityId, CapabilityValue> balanced = new java.util.EnumMap<>(CapabilityId.class);
+
+        aggressive.put(CapabilityId.ENTITY_DISTANCE, new CapabilityValue.IntValue(60));
+        balanced.put(CapabilityId.ENTITY_DISTANCE, new CapabilityValue.IntValue(70));
+        aggressive.put(CapabilityId.ARMOR_STANDS, new CapabilityValue.BoolValue(false));
+        balanced.put(CapabilityId.ARMOR_STANDS, new CapabilityValue.BoolValue(false));
+        aggressive.put(CapabilityId.ITEM_FRAMES, new CapabilityValue.BoolValue(false));
+        balanced.put(CapabilityId.ITEM_FRAMES, new CapabilityValue.BoolValue(false));
+        aggressive.put(CapabilityId.BLOCK_ENTITIES, new CapabilityValue.BoolValue(false));
+        balanced.put(CapabilityId.BLOCK_ENTITIES, new CapabilityValue.BoolValue(false));
+        aggressive.put(CapabilityId.ANIMATIONS, new CapabilityValue.BoolValue(false));
+        balanced.put(CapabilityId.ANIMATIONS, new CapabilityValue.BoolValue(false));
+        aggressive.put(CapabilityId.FPS_CAP, new CapabilityValue.IntValue(60));
+        balanced.put(CapabilityId.FPS_CAP, new CapabilityValue.IntValue(60));
+
+        return new ScenarioRuleSet(aggressive, balanced);
+    }
+
+    private static ScenarioRuleSet miningRules() {
+        Map<CapabilityId, CapabilityValue> aggressive = new java.util.EnumMap<>(CapabilityId.class);
+        Map<CapabilityId, CapabilityValue> balanced = new java.util.EnumMap<>(CapabilityId.class);
+
+        aggressive.put(CapabilityId.RENDER_DISTANCE, new CapabilityValue.IntValue(4));
+        balanced.put(CapabilityId.RENDER_DISTANCE, new CapabilityValue.IntValue(6));
+        aggressive.put(CapabilityId.SIMULATION_DISTANCE, new CapabilityValue.IntValue(4));
+        balanced.put(CapabilityId.SIMULATION_DISTANCE, new CapabilityValue.IntValue(6));
+
+        return new ScenarioRuleSet(aggressive, balanced);
+    }
+
+    private record ScenarioRuleSet(Map<CapabilityId, CapabilityValue> aggressive,
+            Map<CapabilityId, CapabilityValue> balanced) {
+        private CapabilityValue resolve(CapabilityId id, boolean isAggressive) {
+            return isAggressive ? aggressive.get(id) : balanced.get(id);
+        }
+
+        private boolean hasRule(CapabilityId id, boolean isAggressive) {
+            return isAggressive ? aggressive.containsKey(id) : balanced.containsKey(id);
+        }
+    }
+
+    private record ActionSelectionContext(
+            Scenario scenario,
+            OptimizationProfile profile,
+            double p95FrametimeMs,
+            int spikeCount) {
     }
 
     private boolean isQualityIncrease(CapabilityId id, CapabilityValue current, CapabilityValue baseline) {
