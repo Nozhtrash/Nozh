@@ -69,6 +69,10 @@ class StateInvariantValidatorTest {
                                 state.stateVersion(),
                                 state.currentScenario(),
                                 state.scenarioConfidence(),
+                                state.lastScenarioChangeTimestamp(),
+                                state.scenarioChangeCount(),
+                                state.rapidScenarioChangeCount(),
+                                state.combatAfkFlipCount(),
                                 state.baselineSettings(),
                                 state.currentSettings());
 
@@ -112,6 +116,10 @@ class StateInvariantValidatorTest {
                                 state.stateVersion(),
                                 state.currentScenario(),
                                 state.scenarioConfidence(),
+                                state.lastScenarioChangeTimestamp(),
+                                state.scenarioChangeCount(),
+                                state.rapidScenarioChangeCount(),
+                                state.combatAfkFlipCount(),
                                 state.baselineSettings(),
                                 state.currentSettings());
 
@@ -156,6 +164,10 @@ class StateInvariantValidatorTest {
                                 base.stateVersion(),
                                 base.currentScenario(),
                                 base.scenarioConfidence(),
+                                base.lastScenarioChangeTimestamp(),
+                                base.scenarioChangeCount(),
+                                base.rapidScenarioChangeCount(),
+                                base.combatAfkFlipCount(),
                                 base.baselineSettings(),
                                 base.currentSettings());
 
@@ -199,6 +211,10 @@ class StateInvariantValidatorTest {
                                 state.stateVersion(),
                                 state.currentScenario(),
                                 state.scenarioConfidence(),
+                                state.lastScenarioChangeTimestamp(),
+                                state.scenarioChangeCount(),
+                                state.rapidScenarioChangeCount(),
+                                state.combatAfkFlipCount(),
                                 state.baselineSettings(),
                                 state.currentSettings());
 
@@ -239,6 +255,10 @@ class StateInvariantValidatorTest {
                                 state.stateVersion(),
                                 state.currentScenario(),
                                 state.scenarioConfidence(),
+                                state.lastScenarioChangeTimestamp(),
+                                state.scenarioChangeCount(),
+                                state.rapidScenarioChangeCount(),
+                                state.combatAfkFlipCount(),
                                 state.baselineSettings(),
                                 state.currentSettings());
 
@@ -282,6 +302,10 @@ class StateInvariantValidatorTest {
                                 state.stateVersion(),
                                 state.currentScenario(),
                                 state.scenarioConfidence(),
+                                state.lastScenarioChangeTimestamp(),
+                                state.scenarioChangeCount(),
+                                state.rapidScenarioChangeCount(),
+                                state.combatAfkFlipCount(),
                                 state.baselineSettings(),
                                 state.currentSettings());
 
@@ -324,6 +348,10 @@ class StateInvariantValidatorTest {
                                 state.stateVersion(),
                                 state.currentScenario(),
                                 state.scenarioConfidence(),
+                                state.lastScenarioChangeTimestamp(),
+                                state.scenarioChangeCount(),
+                                state.rapidScenarioChangeCount(),
+                                state.combatAfkFlipCount(),
                                 state.baselineSettings(),
                                 state.currentSettings());
 
@@ -369,6 +397,10 @@ class StateInvariantValidatorTest {
                                 state.stateVersion(),
                                 state.currentScenario(),
                                 state.scenarioConfidence(),
+                                state.lastScenarioChangeTimestamp(),
+                                state.scenarioChangeCount(),
+                                state.rapidScenarioChangeCount(),
+                                state.combatAfkFlipCount(),
                                 state.baselineSettings(),
                                 state.currentSettings());
 
@@ -412,6 +444,10 @@ class StateInvariantValidatorTest {
                                 state.stateVersion(),
                                 state.currentScenario(),
                                 state.scenarioConfidence(),
+                                state.lastScenarioChangeTimestamp(),
+                                state.scenarioChangeCount(),
+                                state.rapidScenarioChangeCount(),
+                                state.combatAfkFlipCount(),
                                 state.baselineSettings(),
                                 state.currentSettings());
 
@@ -468,6 +504,10 @@ class StateInvariantValidatorTest {
                                 base.stateVersion(),
                                 base.currentScenario(),
                                 base.scenarioConfidence(),
+                                base.lastScenarioChangeTimestamp(),
+                                base.scenarioChangeCount(),
+                                base.rapidScenarioChangeCount(),
+                                base.combatAfkFlipCount(),
                                 base.baselineSettings(),
                                 base.currentSettings());
 

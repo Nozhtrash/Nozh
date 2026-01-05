@@ -38,6 +38,10 @@ public final class TestStates {
                 state.stateVersion(),
                 state.currentScenario(),
                 state.scenarioConfidence(),
+                state.lastScenarioChangeTimestamp(),
+                state.scenarioChangeCount(),
+                state.rapidScenarioChangeCount(),
+                state.combatAfkFlipCount(),
                 state.baselineSettings(),
                 state.currentSettings());
     }

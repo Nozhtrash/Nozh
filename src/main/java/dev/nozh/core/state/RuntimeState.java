@@ -60,9 +60,13 @@ public record RuntimeState(
         int stateVersion,
         dev.nozh.core.context.Scenario currentScenario,
         double scenarioConfidence,
+        long lastScenarioChangeTimestamp,
+        int scenarioChangeCount,
+        int rapidScenarioChangeCount,
+        int combatAfkFlipCount,
         Map<CapabilityId, CapabilityValue> baselineSettings,
         Map<CapabilityId, CapabilityValue> currentSettings) {
-    private static final int CURRENT_VERSION = 6; // Bump version
+    private static final int CURRENT_VERSION = 7; // Bump version
 
     /**
      * Create default initial state.
@@ -96,6 +100,10 @@ public record RuntimeState(
                 "", 0L, // lastDecisionReason, lastDecisionTimestamp
                 System.currentTimeMillis(), CURRENT_VERSION,
                 dev.nozh.core.context.Scenario.STANDARD, 0.5,
+                0L,
+                0,
+                0,
+                0,
                 Map.of(),
                 Map.of());
     }
@@ -125,6 +133,7 @@ public record RuntimeState(
                 lastDecisionReason, lastDecisionTimestamp,
                 sessionStartTime, stateVersion,
                 currentScenario, scenarioConfidence,
+                lastScenarioChangeTimestamp, scenarioChangeCount, rapidScenarioChangeCount, combatAfkFlipCount,
                 baselineSettings, currentSettings);
     }
 
@@ -155,6 +164,7 @@ public record RuntimeState(
                 lastDecisionReason, lastDecisionTimestamp,
                 sessionStartTime, stateVersion,
                 currentScenario, scenarioConfidence,
+                lastScenarioChangeTimestamp, scenarioChangeCount, rapidScenarioChangeCount, combatAfkFlipCount,
                 baselineSettings, currentSettings);
     }
 
@@ -180,6 +190,7 @@ public record RuntimeState(
                 lastDecisionReason, lastDecisionTimestamp,
                 sessionStartTime, stateVersion,
                 currentScenario, scenarioConfidence,
+                lastScenarioChangeTimestamp, scenarioChangeCount, rapidScenarioChangeCount, combatAfkFlipCount,
                 baselineSettings, currentSettings);
     }
 
@@ -209,6 +220,7 @@ public record RuntimeState(
                 lastDecisionReason, lastDecisionTimestamp,
                 sessionStartTime, stateVersion,
                 currentScenario, scenarioConfidence,
+                lastScenarioChangeTimestamp, scenarioChangeCount, rapidScenarioChangeCount, combatAfkFlipCount,
                 baselineSettings, currentSettings);
     }
 
@@ -234,6 +246,7 @@ public record RuntimeState(
                 lastDecisionReason, lastDecisionTimestamp,
                 sessionStartTime, stateVersion,
                 currentScenario, scenarioConfidence,
+                lastScenarioChangeTimestamp, scenarioChangeCount, rapidScenarioChangeCount, combatAfkFlipCount,
                 baselineSettings, currentSettings);
     }
 
@@ -261,6 +274,7 @@ public record RuntimeState(
                 lastDecisionReason, lastDecisionTimestamp,
                 sessionStartTime, stateVersion,
                 currentScenario, scenarioConfidence,
+                lastScenarioChangeTimestamp, scenarioChangeCount, rapidScenarioChangeCount, combatAfkFlipCount,
                 baselineSettings, currentSettings);
     }
 
@@ -280,6 +294,7 @@ public record RuntimeState(
                 lastDecisionReason, lastDecisionTimestamp,
                 sessionStartTime, stateVersion,
                 currentScenario, scenarioConfidence,
+                lastScenarioChangeTimestamp, scenarioChangeCount, rapidScenarioChangeCount, combatAfkFlipCount,
                 baselineSettings, currentSettings);
     }
 
@@ -301,6 +316,7 @@ public record RuntimeState(
                 lastDecisionReason, lastDecisionTimestamp,
                 sessionStartTime, stateVersion,
                 currentScenario, scenarioConfidence,
+                lastScenarioChangeTimestamp, scenarioChangeCount, rapidScenarioChangeCount, combatAfkFlipCount,
                 baselineSettings, currentSettings);
     }
 
@@ -320,6 +336,29 @@ public record RuntimeState(
                 lastDecisionReason, lastDecisionTimestamp,
                 sessionStartTime, stateVersion,
                 scenario, confidence,
+                lastScenarioChangeTimestamp, scenarioChangeCount, rapidScenarioChangeCount, combatAfkFlipCount,
+                baselineSettings, currentSettings);
+    }
+
+    public RuntimeState withScenarioUpdate(dev.nozh.core.context.Scenario scenario, double confidence, long nowMillis,
+            boolean changed, boolean rapidChange, boolean combatAfkFlip) {
+        long changeTimestamp = changed ? nowMillis : lastScenarioChangeTimestamp;
+        int changeCount = scenarioChangeCount + (changed ? 1 : 0);
+        int rapidCount = rapidScenarioChangeCount + (rapidChange ? 1 : 0);
+        int flipCount = combatAfkFlipCount + (combatAfkFlip ? 1 : 0);
+        return new RuntimeState(
+                enabled, safeMode, autoTuning, debugLogs,
+                governorDisabled, governorCooldownActive, governorLastActionTimestamp,
+                benchmarkRunning, benchmarkValidity, benchmarkStartTimestamp,
+                pendingAction, suggestedActions, pendingActionsCount, executionHistorySize, lastSnapshotHistorySize,
+                actionHistory,
+                sessionChangesCount,
+                avgFrametimeMs, p95FrametimeMs, p99FrametimeMs, frametimeStddevMs, tickTimeAvg, tickTimeP95,
+                spikeCount,
+                lastDecisionReason, lastDecisionTimestamp,
+                sessionStartTime, stateVersion,
+                scenario, confidence,
+                changeTimestamp, changeCount, rapidCount, flipCount,
                 baselineSettings, currentSettings);
     }
 
@@ -350,6 +389,7 @@ public record RuntimeState(
                 lastDecisionReason, lastDecisionTimestamp,
                 sessionStartTime, stateVersion,
                 currentScenario, scenarioConfidence,
+                lastScenarioChangeTimestamp, scenarioChangeCount, rapidScenarioChangeCount, combatAfkFlipCount,
                 baselineSettings, currentSettings);
     }
 
@@ -372,6 +412,7 @@ public record RuntimeState(
                 timestamp,
                 sessionStartTime, stateVersion,
                 currentScenario, scenarioConfidence,
+                lastScenarioChangeTimestamp, scenarioChangeCount, rapidScenarioChangeCount, combatAfkFlipCount,
                 baselineSettings, currentSettings);
     }
 
@@ -394,6 +435,7 @@ public record RuntimeState(
                 lastDecisionReason, lastDecisionTimestamp,
                 sessionStartTime, stateVersion,
                 currentScenario, scenarioConfidence,
+                lastScenarioChangeTimestamp, scenarioChangeCount, rapidScenarioChangeCount, combatAfkFlipCount,
                 baselineSettings, currentSettings);
     }
 
@@ -412,6 +454,7 @@ public record RuntimeState(
                 lastDecisionReason, lastDecisionTimestamp,
                 sessionStartTime, stateVersion,
                 currentScenario, scenarioConfidence,
+                lastScenarioChangeTimestamp, scenarioChangeCount, rapidScenarioChangeCount, combatAfkFlipCount,
                 baselineSettings, currentSettings);
     }
 
@@ -449,6 +492,10 @@ public record RuntimeState(
                 CURRENT_VERSION,
                 dev.nozh.core.context.Scenario.STANDARD,
                 0.5,
+                0L,
+                0,
+                0,
+                0,
                 Map.of(),
                 Map.of());
     }
@@ -466,6 +513,7 @@ public record RuntimeState(
                 lastDecisionReason, lastDecisionTimestamp,
                 sessionStartTime, stateVersion,
                 currentScenario, scenarioConfidence,
+                lastScenarioChangeTimestamp, scenarioChangeCount, rapidScenarioChangeCount, combatAfkFlipCount,
                 baseline,
                 currentSettings);
     }
@@ -483,6 +531,7 @@ public record RuntimeState(
                 lastDecisionReason, lastDecisionTimestamp,
                 sessionStartTime, stateVersion,
                 currentScenario, scenarioConfidence,
+                lastScenarioChangeTimestamp, scenarioChangeCount, rapidScenarioChangeCount, combatAfkFlipCount,
                 baselineSettings,
                 settings);
     }
@@ -511,6 +560,7 @@ public record RuntimeState(
                 lastDecisionReason, lastDecisionTimestamp,
                 sessionStartTime, stateVersion,
                 currentScenario, scenarioConfidence,
+                lastScenarioChangeTimestamp, scenarioChangeCount, rapidScenarioChangeCount, combatAfkFlipCount,
                 baselineSettings, currentSettings);
     }
 
