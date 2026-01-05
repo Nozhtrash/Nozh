@@ -17,6 +17,7 @@ import dev.nozh.core.context.Scenario;
 import dev.nozh.core.governor.ModePolicy;
 import dev.nozh.core.governor.OptimizationProfile;
 import dev.nozh.core.intelligence.SessionLearning;
+import dev.nozh.core.state.BaselineSnapshot;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -190,6 +191,35 @@ class ActionMatrixTest {
         assertEquals(CapabilityId.CLOUDS, candidates.get(0).capabilityId());
         assertEquals(RollbackGuarantee.BEST_EFFORT, candidates.get(0).rollbackGuarantee());
         assertEquals(RollbackGuarantee.STRONG, candidates.get(1).rollbackGuarantee());
+    }
+
+    @Test
+    void reverseCandidatesRestoreBaselineQuality() {
+        ProviderRegistry registry = registryWith(
+                provider(CapabilityId.RENDER_DISTANCE,
+                        metadata(ImpactLevel.LOW, ImpactLevel.LOW, SafetyLevel.SAFE, 1.0)));
+
+        ActionMatrix matrix = new ActionMatrix(
+                registry,
+                successTrackerWith(CapabilityId.RENDER_DISTANCE),
+                new ConfidenceCalculator(),
+                new SessionLearning(tempDir.toFile()));
+
+        BaselineSnapshot baseline = new BaselineSnapshot(Map.of(
+                CapabilityId.RENDER_DISTANCE, new CapabilityValue.IntValue(12)));
+        Map<CapabilityId, CapabilityValue> currentSettings = Map.of(
+                CapabilityId.RENDER_DISTANCE, new CapabilityValue.IntValue(8));
+
+        List<ActionCandidate> candidates = matrix.generateReverseCandidates(
+                ModePolicy.manualAssist(),
+                Scenario.STANDARD,
+                OptimizationProfile.BALANCED,
+                baseline,
+                currentSettings);
+
+        assertEquals(1, candidates.size());
+        assertEquals("12", candidateValue(candidates.get(0)));
+        assertTrue(candidates.get(0).reason().contains("restore baseline"));
     }
 
     private ProviderRegistry registryWith(CapabilityProvider... providers) {

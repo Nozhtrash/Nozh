@@ -200,6 +200,27 @@ public final class CrashLoopGuard {
         return (state != null) && state.sessionStable;
     }
 
+    /**
+     * Check if current state indicates a crash loop.
+     */
+    public static boolean isCrashLoopDetected() {
+        NozhState state = StateManager.getState();
+        return shouldEnterSafeMode(state);
+    }
+
+    /**
+     * Get audit-friendly metrics for safe mode and crash-loop checks.
+     */
+    public static CrashLoopAuditMetrics getAuditMetrics() {
+        synchronized (LOCK) {
+            NozhState state = StateManager.getState();
+            if (state == null) {
+                return CrashLoopAuditMetrics.empty(ticksSinceStart, initialized);
+            }
+            return CrashLoopAuditMetrics.fromState(state, ticksSinceStart, initialized, shouldEnterSafeMode(state));
+        }
+    }
+
     private static boolean shouldEnterSafeMode(NozhState state) {
         if (state == null) {
             return false;

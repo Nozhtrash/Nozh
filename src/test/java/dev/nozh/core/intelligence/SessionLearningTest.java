@@ -79,4 +79,15 @@ class SessionLearningTest {
         assertEquals(0.5, learning.getSuccessRate(CapabilityId.PARTICLES, Scenario.COMBAT), 1e-6);
         assertFalse(learning.shouldAvoid(CapabilityId.CLOUDS, Scenario.COMBAT));
     }
+
+    @Test
+    void tracksPredictionAccuracyAcrossSessions() {
+        SessionLearning learning = new SessionLearning(tempDir.toFile());
+        learning.recordPredictionOutcome(true, true, 0.8);
+        learning.recordPredictionOutcome(false, true, 0.4);
+        learning.save();
+
+        SessionLearning reloaded = new SessionLearning(tempDir.toFile());
+        assertTrue(reloaded.getPredictionAccuracy() > 0.0);
+    }
 }
