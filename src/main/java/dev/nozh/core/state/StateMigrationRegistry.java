@@ -19,10 +19,11 @@ import java.util.Optional;
  * - Version 4 (adds pending suggestion): Migrator adds suggestion field
  * - Version 5 (adds baseline/current settings): Migrator adds settings maps
  * - Version 6 (adds suggested action queue): Migrator adds suggestion list
+ * - Version 7 (adds scenario change metrics): Migrator adds scenario counters
  */
 public final class StateMigrationRegistry {
 
-    private static final int CURRENT_VERSION = 6; // Current state version
+    private static final int CURRENT_VERSION = 7; // Current state version
 
     private final Map<Integer, StateMigrator> migrators = new HashMap<>();
 
@@ -73,9 +74,13 @@ public final class StateMigrationRegistry {
                     oldState.spikeCount(),
                     "", 0L, // lastDecisionReason, lastDecisionTimestamp default
                     oldState.sessionStartTime(),
-                    6, // Target version is 6
+                    7, // Target version is 7
                     dev.nozh.core.context.Scenario.STANDARD,
                     0.5,
+                    0L,
+                    0,
+                    0,
+                    0,
                     java.util.Map.of(),
                     java.util.Map.of());
         });
@@ -108,9 +113,13 @@ public final class StateMigrationRegistry {
                 oldState.lastDecisionReason(),
                 oldState.lastDecisionTimestamp(),
                 oldState.sessionStartTime(),
-                6,
+                7,
                 oldState.currentScenario(),
                 oldState.scenarioConfidence(),
+                0L,
+                0,
+                0,
+                0,
                 java.util.Map.of(),
                 java.util.Map.of()));
 
@@ -142,9 +151,13 @@ public final class StateMigrationRegistry {
                 oldState.lastDecisionReason(),
                 oldState.lastDecisionTimestamp(),
                 oldState.sessionStartTime(),
-                6,
+                7,
                 oldState.currentScenario(),
                 oldState.scenarioConfidence(),
+                0L,
+                0,
+                0,
+                0,
                 java.util.Map.of(),
                 java.util.Map.of()));
 
@@ -176,9 +189,51 @@ public final class StateMigrationRegistry {
                 oldState.lastDecisionReason(),
                 oldState.lastDecisionTimestamp(),
                 oldState.sessionStartTime(),
-                6,
+                7,
                 oldState.currentScenario(),
                 oldState.scenarioConfidence(),
+                0L,
+                0,
+                0,
+                0,
+                oldState.baselineSettings(),
+                oldState.currentSettings()));
+
+        registerMigrator(6, oldState -> new RuntimeState(
+                oldState.enabled(),
+                oldState.safeMode(),
+                oldState.autoTuning(),
+                oldState.debugLogs(),
+                oldState.governorDisabled(),
+                oldState.governorCooldownActive(),
+                oldState.governorLastActionTimestamp(),
+                oldState.benchmarkRunning(),
+                oldState.benchmarkValidity(),
+                oldState.benchmarkStartTimestamp(),
+                oldState.pendingAction(),
+                oldState.suggestedActions(),
+                oldState.pendingActionsCount(),
+                oldState.executionHistorySize(),
+                oldState.lastSnapshotHistorySize(),
+                oldState.actionHistory(),
+                oldState.sessionChangesCount(),
+                oldState.avgFrametimeMs(),
+                oldState.p95FrametimeMs(),
+                oldState.p99FrametimeMs(),
+                oldState.frametimeStddevMs(),
+                oldState.tickTimeAvg(),
+                oldState.tickTimeP95(),
+                oldState.spikeCount(),
+                oldState.lastDecisionReason(),
+                oldState.lastDecisionTimestamp(),
+                oldState.sessionStartTime(),
+                7,
+                oldState.currentScenario(),
+                oldState.scenarioConfidence(),
+                0L,
+                0,
+                0,
+                0,
                 oldState.baselineSettings(),
                 oldState.currentSettings()));
 

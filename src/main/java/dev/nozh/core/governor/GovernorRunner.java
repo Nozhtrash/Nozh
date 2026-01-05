@@ -38,6 +38,7 @@ import java.util.Map;
 public final class GovernorRunner {
 
     private static final int MAX_SUGGESTED_QUEUE = 5;
+    private static final long RAPID_SCENARIO_CHANGE_WINDOW_MS = 5_000L;
 
     private final SimulationGovernor governor;
     private final ActionBus actionBus;
@@ -92,10 +93,23 @@ public final class GovernorRunner {
     public void onTick() {
         totalTicks++;
         dev.nozh.core.context.ScenarioSnapshot scenarioSnapshot = scenarioDetector.detect();
+        long nowMillis = nowMillis();
         try {
-            stateStore.update(s -> s.withScenario(
-                    scenarioSnapshot.scenario(),
-                    scenarioSnapshot.confidence()));
+            stateStore.update(state -> {
+                boolean changed = scenarioSnapshot.scenario() != state.currentScenario();
+                boolean rapidChange = changed
+                        && state.lastScenarioChangeTimestamp() > 0
+                        && nowMillis - state.lastScenarioChangeTimestamp() <= RAPID_SCENARIO_CHANGE_WINDOW_MS;
+                boolean combatAfkFlip = changed
+                        && isCombatAfkFlip(state.currentScenario(), scenarioSnapshot.scenario());
+                return state.withScenarioUpdate(
+                        scenarioSnapshot.scenario(),
+                        scenarioSnapshot.confidence(),
+                        nowMillis,
+                        changed,
+                        rapidChange,
+                        combatAfkFlip);
+            });
         } catch (Exception e) {
             // Ignore update failure
         }
@@ -400,6 +414,14 @@ public final class GovernorRunner {
             return GovernorMode.AUTO_AGGRESSIVE;
         }
         return GovernorMode.AUTO_CONSERVATIVE;
+    }
+
+    private boolean isCombatAfkFlip(dev.nozh.core.context.Scenario previous,
+            dev.nozh.core.context.Scenario current) {
+        return (previous == dev.nozh.core.context.Scenario.COMBAT
+                && current == dev.nozh.core.context.Scenario.AFK)
+                || (previous == dev.nozh.core.context.Scenario.AFK
+                        && current == dev.nozh.core.context.Scenario.COMBAT);
     }
 
     private void evaluatePendingAction(RuntimeState state, PendingAction pending, NozhConfig config) {
