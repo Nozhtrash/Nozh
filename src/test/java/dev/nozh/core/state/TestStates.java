@@ -45,6 +45,7 @@ public final class TestStates {
                 state.scenarioChangeCount(),
                 state.rapidScenarioChangeCount(),
                 state.combatAfkFlipCount(),
+                state.scenarioHistory(),
                 state.baselineSettings(),
                 state.currentSettings());
     }

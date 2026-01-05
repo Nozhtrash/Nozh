@@ -76,6 +76,7 @@ class StateInvariantValidatorTest {
                                 state.scenarioChangeCount(),
                                 state.rapidScenarioChangeCount(),
                                 state.combatAfkFlipCount(),
+                                state.scenarioHistory(),
                                 state.baselineSettings(),
                                 state.currentSettings());
 
@@ -126,6 +127,7 @@ class StateInvariantValidatorTest {
                                 state.scenarioChangeCount(),
                                 state.rapidScenarioChangeCount(),
                                 state.combatAfkFlipCount(),
+                                state.scenarioHistory(),
                                 state.baselineSettings(),
                                 state.currentSettings());
 
@@ -177,6 +179,7 @@ class StateInvariantValidatorTest {
                                 base.scenarioChangeCount(),
                                 base.rapidScenarioChangeCount(),
                                 base.combatAfkFlipCount(),
+                                base.scenarioHistory(),
                                 base.baselineSettings(),
                                 base.currentSettings());
 
@@ -227,6 +230,7 @@ class StateInvariantValidatorTest {
                                 state.scenarioChangeCount(),
                                 state.rapidScenarioChangeCount(),
                                 state.combatAfkFlipCount(),
+                                state.scenarioHistory(),
                                 state.baselineSettings(),
                                 state.currentSettings());
 
@@ -274,6 +278,7 @@ class StateInvariantValidatorTest {
                                 state.scenarioChangeCount(),
                                 state.rapidScenarioChangeCount(),
                                 state.combatAfkFlipCount(),
+                                state.scenarioHistory(),
                                 state.baselineSettings(),
                                 state.currentSettings());
 
@@ -324,6 +329,7 @@ class StateInvariantValidatorTest {
                                 state.scenarioChangeCount(),
                                 state.rapidScenarioChangeCount(),
                                 state.combatAfkFlipCount(),
+                                state.scenarioHistory(),
                                 state.baselineSettings(),
                                 state.currentSettings());
 
@@ -373,6 +379,7 @@ class StateInvariantValidatorTest {
                                 state.scenarioChangeCount(),
                                 state.rapidScenarioChangeCount(),
                                 state.combatAfkFlipCount(),
+                                state.scenarioHistory(),
                                 state.baselineSettings(),
                                 state.currentSettings());
 
@@ -425,6 +432,7 @@ class StateInvariantValidatorTest {
                                 state.scenarioChangeCount(),
                                 state.rapidScenarioChangeCount(),
                                 state.combatAfkFlipCount(),
+                                state.scenarioHistory(),
                                 state.baselineSettings(),
                                 state.currentSettings());
 
@@ -475,6 +483,7 @@ class StateInvariantValidatorTest {
                                 state.scenarioChangeCount(),
                                 state.rapidScenarioChangeCount(),
                                 state.combatAfkFlipCount(),
+                                state.scenarioHistory(),
                                 state.baselineSettings(),
                                 state.currentSettings());
 
@@ -538,6 +547,7 @@ class StateInvariantValidatorTest {
                                 base.scenarioChangeCount(),
                                 base.rapidScenarioChangeCount(),
                                 base.combatAfkFlipCount(),
+                                base.scenarioHistory(),
                                 base.baselineSettings(),
                                 base.currentSettings());
 

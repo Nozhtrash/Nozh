@@ -68,9 +68,13 @@ public record RuntimeState(
         int scenarioChangeCount,
         int rapidScenarioChangeCount,
         int combatAfkFlipCount,
+        List<ScenarioHistoryEntry> scenarioHistory,
         Map<CapabilityId, CapabilityValue> baselineSettings,
         Map<CapabilityId, CapabilityValue> currentSettings) {
-    private static final int CURRENT_VERSION = 8; // Bump version
+    private static final int CURRENT_VERSION = 9; // Bump version
+    private static final long SCENARIO_HISTORY_WINDOW_MS = 20_000L;
+    private static final double SCENARIO_DOMINANCE_THRESHOLD = 0.55;
+    private static final long RAPID_SCENARIO_CHANGE_WINDOW_MS = 5_000L;
 
     /**
      * Create default initial state.
@@ -111,6 +115,7 @@ public record RuntimeState(
                 0,
                 0,
                 0,
+                List.of(),
                 Map.of(),
                 Map.of());
     }
@@ -142,6 +147,7 @@ public record RuntimeState(
                 sessionStartTime, stateVersion,
                 currentScenario, scenarioConfidence,
                 lastScenarioChangeTimestamp, scenarioChangeCount, rapidScenarioChangeCount, combatAfkFlipCount,
+                scenarioHistory,
                 baselineSettings, currentSettings);
     }
 
@@ -174,6 +180,7 @@ public record RuntimeState(
                 sessionStartTime, stateVersion,
                 currentScenario, scenarioConfidence,
                 lastScenarioChangeTimestamp, scenarioChangeCount, rapidScenarioChangeCount, combatAfkFlipCount,
+                scenarioHistory,
                 baselineSettings, currentSettings);
     }
 
@@ -201,6 +208,7 @@ public record RuntimeState(
                 sessionStartTime, stateVersion,
                 currentScenario, scenarioConfidence,
                 lastScenarioChangeTimestamp, scenarioChangeCount, rapidScenarioChangeCount, combatAfkFlipCount,
+                scenarioHistory,
                 baselineSettings, currentSettings);
     }
 
@@ -232,6 +240,7 @@ public record RuntimeState(
                 sessionStartTime, stateVersion,
                 currentScenario, scenarioConfidence,
                 lastScenarioChangeTimestamp, scenarioChangeCount, rapidScenarioChangeCount, combatAfkFlipCount,
+                scenarioHistory,
                 baselineSettings, currentSettings);
     }
 
@@ -259,6 +268,7 @@ public record RuntimeState(
                 sessionStartTime, stateVersion,
                 currentScenario, scenarioConfidence,
                 lastScenarioChangeTimestamp, scenarioChangeCount, rapidScenarioChangeCount, combatAfkFlipCount,
+                scenarioHistory,
                 baselineSettings, currentSettings);
     }
 
@@ -288,6 +298,7 @@ public record RuntimeState(
                 sessionStartTime, stateVersion,
                 currentScenario, scenarioConfidence,
                 lastScenarioChangeTimestamp, scenarioChangeCount, rapidScenarioChangeCount, combatAfkFlipCount,
+                scenarioHistory,
                 baselineSettings, currentSettings);
     }
 
@@ -309,6 +320,7 @@ public record RuntimeState(
                 sessionStartTime, stateVersion,
                 currentScenario, scenarioConfidence,
                 lastScenarioChangeTimestamp, scenarioChangeCount, rapidScenarioChangeCount, combatAfkFlipCount,
+                scenarioHistory,
                 baselineSettings, currentSettings);
     }
 
@@ -332,6 +344,7 @@ public record RuntimeState(
                 sessionStartTime, stateVersion,
                 currentScenario, scenarioConfidence,
                 lastScenarioChangeTimestamp, scenarioChangeCount, rapidScenarioChangeCount, combatAfkFlipCount,
+                scenarioHistory,
                 baselineSettings, currentSettings);
     }
 
@@ -353,11 +366,21 @@ public record RuntimeState(
                 sessionStartTime, stateVersion,
                 scenario, confidence,
                 lastScenarioChangeTimestamp, scenarioChangeCount, rapidScenarioChangeCount, combatAfkFlipCount,
+                scenarioHistory,
                 baselineSettings, currentSettings);
     }
 
-    public RuntimeState withScenarioUpdate(dev.nozh.core.context.Scenario scenario, double confidence, long nowMillis,
-            boolean changed, boolean rapidChange, boolean combatAfkFlip) {
+    public RuntimeState withScenarioUpdate(dev.nozh.core.context.Scenario scenario, double confidence, long nowMillis) {
+        List<ScenarioHistoryEntry> updatedHistory = updateScenarioHistory(scenarioHistory, scenario, confidence,
+                nowMillis);
+        ScenarioAggregate aggregate = resolveScenarioAggregate(updatedHistory, currentScenario);
+        dev.nozh.core.context.Scenario resolvedScenario = aggregate.scenario();
+        double resolvedConfidence = aggregate.confidence();
+        boolean changed = resolvedScenario != currentScenario;
+        boolean rapidChange = changed
+                && lastScenarioChangeTimestamp > 0
+                && nowMillis - lastScenarioChangeTimestamp <= RAPID_SCENARIO_CHANGE_WINDOW_MS;
+        boolean combatAfkFlip = changed && isCombatAfkFlip(currentScenario, resolvedScenario);
         long changeTimestamp = changed ? nowMillis : lastScenarioChangeTimestamp;
         int changeCount = scenarioChangeCount + (changed ? 1 : 0);
         int rapidCount = rapidScenarioChangeCount + (rapidChange ? 1 : 0);
@@ -374,8 +397,9 @@ public record RuntimeState(
                 lastDecisionReason, lastDecisionTimestamp,
                 lastImpactMs, lastOutcome, lastDecisionAccepted,
                 sessionStartTime, stateVersion,
-                scenario, confidence,
+                resolvedScenario, resolvedConfidence,
                 changeTimestamp, changeCount, rapidCount, flipCount,
+                updatedHistory,
                 baselineSettings, currentSettings);
     }
 
@@ -408,6 +432,7 @@ public record RuntimeState(
                 sessionStartTime, stateVersion,
                 currentScenario, scenarioConfidence,
                 lastScenarioChangeTimestamp, scenarioChangeCount, rapidScenarioChangeCount, combatAfkFlipCount,
+                scenarioHistory,
                 baselineSettings, currentSettings);
     }
 
@@ -432,6 +457,7 @@ public record RuntimeState(
                 sessionStartTime, stateVersion,
                 currentScenario, scenarioConfidence,
                 lastScenarioChangeTimestamp, scenarioChangeCount, rapidScenarioChangeCount, combatAfkFlipCount,
+                scenarioHistory,
                 baselineSettings, currentSettings);
     }
 
@@ -456,6 +482,7 @@ public record RuntimeState(
                 sessionStartTime, stateVersion,
                 currentScenario, scenarioConfidence,
                 lastScenarioChangeTimestamp, scenarioChangeCount, rapidScenarioChangeCount, combatAfkFlipCount,
+                scenarioHistory,
                 baselineSettings, currentSettings);
     }
 
@@ -476,6 +503,7 @@ public record RuntimeState(
                 sessionStartTime, stateVersion,
                 currentScenario, scenarioConfidence,
                 lastScenarioChangeTimestamp, scenarioChangeCount, rapidScenarioChangeCount, combatAfkFlipCount,
+                scenarioHistory,
                 baselineSettings, currentSettings);
     }
 
@@ -520,6 +548,7 @@ public record RuntimeState(
                 0,
                 0,
                 0,
+                List.of(),
                 Map.of(),
                 Map.of());
     }
@@ -539,6 +568,7 @@ public record RuntimeState(
                 sessionStartTime, stateVersion,
                 currentScenario, scenarioConfidence,
                 lastScenarioChangeTimestamp, scenarioChangeCount, rapidScenarioChangeCount, combatAfkFlipCount,
+                scenarioHistory,
                 baseline,
                 currentSettings);
     }
@@ -558,6 +588,7 @@ public record RuntimeState(
                 sessionStartTime, stateVersion,
                 currentScenario, scenarioConfidence,
                 lastScenarioChangeTimestamp, scenarioChangeCount, rapidScenarioChangeCount, combatAfkFlipCount,
+                scenarioHistory,
                 baselineSettings,
                 settings);
     }
@@ -590,6 +621,7 @@ public record RuntimeState(
                 sessionStartTime, stateVersion,
                 currentScenario, scenarioConfidence,
                 lastScenarioChangeTimestamp, scenarioChangeCount, rapidScenarioChangeCount, combatAfkFlipCount,
+                scenarioHistory,
                 baselineSettings, currentSettings);
     }
 
@@ -606,5 +638,81 @@ public record RuntimeState(
             updated.remove(0);
         }
         return updated;
+    }
+
+    public dev.nozh.core.context.ScenarioConfidence scenarioConfidenceInfo() {
+        double stability = calculateScenarioStability(scenarioHistory);
+        return dev.nozh.core.context.ScenarioConfidence.from(scenarioConfidence, stability);
+    }
+
+    private List<ScenarioHistoryEntry> updateScenarioHistory(
+            List<ScenarioHistoryEntry> existing,
+            dev.nozh.core.context.Scenario scenario,
+            double confidence,
+            long nowMillis) {
+        List<ScenarioHistoryEntry> updated = new ArrayList<>(existing != null ? existing : List.of());
+        updated.add(new ScenarioHistoryEntry(nowMillis, scenario, confidence));
+        long cutoff = nowMillis - SCENARIO_HISTORY_WINDOW_MS;
+        updated.removeIf(entry -> entry.timestampMillis() < cutoff);
+        return updated;
+    }
+
+    private ScenarioAggregate resolveScenarioAggregate(List<ScenarioHistoryEntry> history,
+            dev.nozh.core.context.Scenario fallbackScenario) {
+        if (history == null || history.isEmpty()) {
+            return new ScenarioAggregate(fallbackScenario, scenarioConfidence, 1.0);
+        }
+        java.util.EnumMap<dev.nozh.core.context.Scenario, Double> scores = new java.util.EnumMap<>(
+                dev.nozh.core.context.Scenario.class);
+        java.util.EnumMap<dev.nozh.core.context.Scenario, Integer> counts = new java.util.EnumMap<>(
+                dev.nozh.core.context.Scenario.class);
+        double totalScore = 0.0;
+        for (ScenarioHistoryEntry entry : history) {
+            double score = clamp(entry.confidence());
+            scores.merge(entry.scenario(), score, Double::sum);
+            counts.merge(entry.scenario(), 1, Integer::sum);
+            totalScore += score;
+        }
+        dev.nozh.core.context.Scenario bestScenario = fallbackScenario;
+        double bestScore = -1.0;
+        for (var entry : scores.entrySet()) {
+            if (entry.getValue() > bestScore) {
+                bestScore = entry.getValue();
+                bestScenario = entry.getKey();
+            }
+        }
+        double stability = totalScore > 0 ? Math.min(1.0, bestScore / totalScore) : 0.0;
+        double avgConfidence = 0.0;
+        Integer count = counts.get(bestScenario);
+        if (count != null && count > 0) {
+            avgConfidence = bestScore / count;
+        }
+        if (stability < SCENARIO_DOMINANCE_THRESHOLD && fallbackScenario != null) {
+            bestScenario = fallbackScenario;
+        }
+        return new ScenarioAggregate(bestScenario, clamp(avgConfidence), stability);
+    }
+
+    private double calculateScenarioStability(List<ScenarioHistoryEntry> history) {
+        if (history == null || history.isEmpty()) {
+            return 1.0;
+        }
+        ScenarioAggregate aggregate = resolveScenarioAggregate(history, currentScenario);
+        return aggregate.stability();
+    }
+
+    private boolean isCombatAfkFlip(dev.nozh.core.context.Scenario previous,
+            dev.nozh.core.context.Scenario current) {
+        return (previous == dev.nozh.core.context.Scenario.COMBAT
+                && current == dev.nozh.core.context.Scenario.AFK)
+                || (previous == dev.nozh.core.context.Scenario.AFK
+                        && current == dev.nozh.core.context.Scenario.COMBAT);
+    }
+
+    private double clamp(double value) {
+        return Math.max(0.0, Math.min(1.0, value));
+    }
+
+    private record ScenarioAggregate(dev.nozh.core.context.Scenario scenario, double confidence, double stability) {
     }
 }

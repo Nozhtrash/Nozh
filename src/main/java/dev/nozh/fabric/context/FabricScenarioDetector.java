@@ -37,9 +37,11 @@ public class FabricScenarioDetector implements ScenarioDetector {
     private static final int ENTITY_CHECK_INTERVAL_TICKS = 20;
     private static final double ENTITY_RADIUS = 12.0;
     private static final int COMBAT_ENTITY_THRESHOLD = 8;
+    private static final int ENTITY_CROWD_THRESHOLD = 12;
     private static final double MOVEMENT_FAST_DISTANCE_SQ = 0.06 * 0.06;
     private static final double MOVEMENT_SLOW_DISTANCE_SQ = 0.02 * 0.02;
     private static final int CHUNK_LOAD_SPIKE_THRESHOLD = 6;
+    private static final int STATIONARY_SLOW_TICKS = 40;
 
     public FabricScenarioDetector() {
         this.client = MinecraftClient.getInstance();
@@ -71,6 +73,7 @@ public class FabricScenarioDetector implements ScenarioDetector {
         long inputAgeMs = InputActivityTracker.getLastInputAgeMs();
 
         int nearbyEntities = sampleNearbyEntities(player);
+        double entityPressure = clamp(nearbyEntities / (double) ENTITY_CROWD_THRESHOLD);
         int chunkLoadRate = sampleChunkLoads();
         double tpsDropConfidence = getTpsDropConfidence();
         HitResult.Type targetType = getCrosshairTargetType();
@@ -87,6 +90,17 @@ public class FabricScenarioDetector implements ScenarioDetector {
         boolean buildingCandidate = holdingBlockItem;
         boolean sprinting = player.isSprinting();
 
+        double movementConfidence = 0.0;
+        if (moveDistanceSq > MOVEMENT_SLOW_DISTANCE_SQ) {
+            movementConfidence += 0.2;
+        }
+        if (moveDistanceSq > MOVEMENT_FAST_DISTANCE_SQ) {
+            movementConfidence += 0.25;
+        }
+        if (sprinting) {
+            movementConfidence += 0.15;
+        }
+
         double combatConfidence = 0.0;
         if (holdingWeapon) {
             combatConfidence += 0.35;
@@ -102,6 +116,9 @@ public class FabricScenarioDetector implements ScenarioDetector {
         }
         if (targetEntity) {
             combatConfidence += 0.2;
+        }
+        if (entityPressure > 0.0) {
+            combatConfidence += entityPressure * 0.2;
         }
         if (sprinting) {
             combatConfidence += 0.1;
@@ -121,10 +138,10 @@ public class FabricScenarioDetector implements ScenarioDetector {
         if (holdingPickaxe && (handSwinging || targetBlock)) {
             miningConfidence += 0.2;
         }
-        if (!inputRecent && stationaryTicks > 40) {
+        if (!inputRecent && stationaryTicks > STATIONARY_SLOW_TICKS) {
             miningConfidence += 0.1;
         }
-        miningConfidence = clamp(miningConfidence + tpsDropConfidence * 0.05);
+        miningConfidence = clamp(miningConfidence + tpsDropConfidence * 0.05 + movementConfidence * 0.05);
 
         double buildingConfidence = 0.0;
         if (buildingCandidate) {
@@ -139,6 +156,9 @@ public class FabricScenarioDetector implements ScenarioDetector {
         if (inputRecent) {
             buildingConfidence += 0.1;
         }
+        if (movementConfidence > 0.0) {
+            buildingConfidence += movementConfidence * 0.1;
+        }
         buildingConfidence = clamp(buildingConfidence);
 
         double afkConfidence = 0.0;
@@ -151,21 +171,14 @@ public class FabricScenarioDetector implements ScenarioDetector {
         if (inputAgeMs == Long.MAX_VALUE) {
             afkConfidence += 0.1;
         }
+        if (entityPressure > 0.25) {
+            afkConfidence -= entityPressure * 0.2;
+        }
         afkConfidence = clamp(afkConfidence - tpsDropConfidence * 0.2);
-
-        double movementConfidence = 0.0;
-        if (moveDistanceSq > MOVEMENT_SLOW_DISTANCE_SQ) {
-            movementConfidence += 0.15;
-        }
-        if (moveDistanceSq > MOVEMENT_FAST_DISTANCE_SQ) {
-            movementConfidence += 0.2;
-        }
-        if (sprinting) {
-            movementConfidence += 0.15;
-        }
         double standardConfidence = inputRecent ? 0.55 : 0.4;
         standardConfidence = clamp(standardConfidence + movementConfidence - tpsDropConfidence * 0.05);
 
+        double heavyTickConfidence = clamp(tpsDropConfidence * 0.8);
         double loadingConfidence = 0.0;
         if (chunkLoadRate >= CHUNK_LOAD_SPIKE_THRESHOLD) {
             loadingConfidence += 0.55;
@@ -173,7 +186,7 @@ public class FabricScenarioDetector implements ScenarioDetector {
         if (chunkLoadRate > 0) {
             loadingConfidence += Math.min(0.3, chunkLoadRate * 0.03);
         }
-        loadingConfidence = clamp(loadingConfidence + tpsDropConfidence * 0.15);
+        loadingConfidence = clamp(loadingConfidence + heavyTickConfidence * 0.2 + tpsDropConfidence * 0.15);
 
         dev.nozh.core.context.Scenario scenario = dev.nozh.core.context.Scenario.STANDARD;
         double confidence = standardConfidence;
