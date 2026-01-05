@@ -131,6 +131,11 @@ public final class CloudsProvider implements CapabilityProvider {
         }
 
         @Override
+        public CostLevel costLevel() {
+            return CostLevel.LOW;
+        }
+
+        @Override
         public ImpactLevel visualImpact() {
             return ImpactLevel.LOW;
         }

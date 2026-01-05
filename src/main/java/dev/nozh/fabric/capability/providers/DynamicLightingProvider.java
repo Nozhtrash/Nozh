@@ -4,6 +4,7 @@ import dev.nozh.core.bus.CapabilityId;
 import dev.nozh.core.bus.CapabilityValue;
 import dev.nozh.core.capability.ApplyResult;
 import dev.nozh.core.capability.CapabilityProvider;
+import dev.nozh.core.capability.CostLevel;
 import dev.nozh.core.capability.ImpactLevel;
 import dev.nozh.core.capability.ProviderMetadata;
 import dev.nozh.core.capability.ProviderStatus;
@@ -103,6 +104,11 @@ public final class DynamicLightingProvider implements CapabilityProvider {
         @Override
         public ImpactLevel gameplayImpact() {
             return ImpactLevel.NONE;
+        }
+
+        @Override
+        public CostLevel costLevel() {
+            return CostLevel.MED;
         }
 
         @Override

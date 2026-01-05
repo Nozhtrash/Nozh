@@ -1,6 +1,7 @@
 package dev.nozh.core.ui;
 
 import dev.nozh.core.capability.CapabilityProvider;
+import dev.nozh.core.capability.ProviderCoverage;
 import dev.nozh.core.capability.ProviderRegistry;
 import dev.nozh.core.capability.ProviderStatus;
 import dev.nozh.core.context.Scenario;
@@ -58,6 +59,7 @@ public final class HudViewModelBuilder {
         int healthy = 0;
         int degraded = 0;
         int broken = 0;
+        ProviderCoverage coverage = registry != null ? registry.coverage() : ProviderCoverage.of(0, 0);
 
         CompatibilityMatrix compatibilityMatrix = null;
         try {
@@ -145,6 +147,9 @@ public final class HudViewModelBuilder {
                 healthy,
                 degraded,
                 broken,
+                coverage.coveragePercent(),
+                coverage.controlledCapabilities(),
+                coverage.totalCapabilities(),
 
                 issuesTotal,
                 critical,

@@ -104,6 +104,15 @@ public final class ProviderRegistry {
     }
 
     /**
+     * Get effective provider coverage (what % of capabilities we control).
+     */
+    public ProviderCoverage coverage() {
+        int totalCapabilities = CapabilityId.values().length;
+        int controlledCapabilities = getRegisteredIds().size();
+        return ProviderCoverage.of(totalCapabilities, controlledCapabilities);
+    }
+
+    /**
      * Discover and register providers (manual list for determinism).
      * 
      * This is where you explicitly list all providers.

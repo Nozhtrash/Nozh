@@ -172,6 +172,11 @@ public final class EntityDistanceProvider implements CapabilityProvider {
         }
 
         @Override
+        public CostLevel costLevel() {
+            return CostLevel.MED;
+        }
+
+        @Override
         public ImpactLevel visualImpact() {
             return ImpactLevel.MED;
         }

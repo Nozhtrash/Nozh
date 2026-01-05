@@ -166,6 +166,11 @@ public final class ParticlesProvider implements CapabilityProvider {
         }
 
         @Override
+        public CostLevel costLevel() {
+            return CostLevel.LOW;
+        }
+
+        @Override
         public ImpactLevel visualImpact() {
             return ImpactLevel.MED;
         }

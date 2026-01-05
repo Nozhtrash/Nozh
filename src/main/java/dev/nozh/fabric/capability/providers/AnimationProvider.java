@@ -122,6 +122,11 @@ public final class AnimationProvider implements CapabilityProvider {
         }
 
         @Override
+        public CostLevel costLevel() {
+            return CostLevel.HIGH;
+        }
+
+        @Override
         public ImpactLevel visualImpact() {
             return ImpactLevel.MED;
         }

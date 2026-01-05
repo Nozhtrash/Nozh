@@ -121,6 +121,9 @@ public final class ActionMatrix {
             if (provider.status() == ProviderStatus.BROKEN) {
                 continue; // Skip broken providers
             }
+            if (provider.status() == ProviderStatus.DEGRADED) {
+                continue; // Skip unstable providers
+            }
 
             if (!provider.isAvailable()) {
                 continue;
@@ -245,9 +248,12 @@ public final class ActionMatrix {
             ModePolicy policy,
             Scenario scenario,
             OptimizationProfile profile,
-            Map<CapabilityId, CapabilityValue> baselineSettings,
+            dev.nozh.core.state.BaselineSnapshot baselineSnapshot,
             Map<CapabilityId, CapabilityValue> currentSettings) {
         List<ActionCandidate> candidates = new ArrayList<>();
+        if (baselineSnapshot == null || baselineSnapshot.isEmpty()) {
+            return candidates;
+        }
         long now = System.currentTimeMillis();
 
         for (CapabilityProvider provider : registry.getAllProviders()) {
@@ -258,7 +264,11 @@ public final class ActionMatrix {
                 continue;
             }
 
-            CapabilityValue baseline = baselineSettings.get(id);
+            if (provider.status() == ProviderStatus.DEGRADED) {
+                continue;
+            }
+
+            CapabilityValue baseline = baselineSnapshot.get(id).orElse(null);
             CapabilityValue current = currentSettings.get(id);
             if (baseline == null || current == null) {
                 continue;
@@ -351,154 +361,189 @@ public final class ActionMatrix {
         boolean loading = scenario == Scenario.LOADING;
 
         CapabilityValue scenarioTarget = scenarioRules.resolveTarget(id, scenario, profile);
-        if (scenarioTarget != null) {
-            return scenarioTarget;
+        CapabilityValue targetValue = scenarioTarget;
+        if (targetValue != null) {
+            return scenarioRules.applyLimits(id, scenario, profile, targetValue);
         }
 
         switch (id) {
             case PARTICLES -> {
                 if (loading) {
-                    return new CapabilityValue.EnumValue("MINIMAL");
+                    targetValue = new CapabilityValue.EnumValue("MINIMAL");
+                    break;
                 }
                 if (cpuBound) {
-                    return new CapabilityValue.EnumValue("MINIMAL");
+                    targetValue = new CapabilityValue.EnumValue("MINIMAL");
+                    break;
                 }
                 if (gpuBound || balanced) {
-                    return new CapabilityValue.EnumValue(aggressive ? "MINIMAL" : "DECREASED");
+                    targetValue = new CapabilityValue.EnumValue(aggressive ? "MINIMAL" : "DECREASED");
+                    break;
                 }
             }
             case CLOUDS -> {
                 if (loading || cpuBound) {
-                    return new CapabilityValue.EnumValue("OFF");
+                    targetValue = new CapabilityValue.EnumValue("OFF");
+                    break;
                 }
                 if (gpuBound || balanced) {
-                    return new CapabilityValue.EnumValue(aggressive ? "OFF" : "FAST");
+                    targetValue = new CapabilityValue.EnumValue(aggressive ? "OFF" : "FAST");
+                    break;
                 }
             }
             case ENTITY_SHADOWS -> {
                 if (gpuBound || cpuBound) {
-                    return new CapabilityValue.BoolValue(false);
+                    targetValue = new CapabilityValue.BoolValue(false);
+                    break;
                 }
             }
             case RENDER_DISTANCE -> {
                 if (gpuBound) {
-                    return new CapabilityValue.IntValue(aggressive ? 6 : 8);
+                    targetValue = new CapabilityValue.IntValue(aggressive ? 6 : 8);
+                    break;
                 }
                 if (cpuBound) {
-                    return new CapabilityValue.IntValue(aggressive ? 8 : 10);
+                    targetValue = new CapabilityValue.IntValue(aggressive ? 8 : 10);
+                    break;
                 }
             }
             case SIMULATION_DISTANCE -> {
                 if (cpuBound) {
-                    return new CapabilityValue.IntValue(aggressive ? 4 : 6);
+                    targetValue = new CapabilityValue.IntValue(aggressive ? 4 : 6);
+                    break;
                 }
                 if (balanced && !building) {
-                    return new CapabilityValue.IntValue(aggressive ? 5 : 7);
+                    targetValue = new CapabilityValue.IntValue(aggressive ? 5 : 7);
+                    break;
                 }
             }
             case ENTITY_DISTANCE -> {
                 if (gpuBound) {
-                    return new CapabilityValue.IntValue(aggressive ? 60 : 75);
+                    targetValue = new CapabilityValue.IntValue(aggressive ? 60 : 75);
+                    break;
                 }
                 if (cpuBound && !building) {
-                    return new CapabilityValue.IntValue(aggressive ? 65 : 80);
+                    targetValue = new CapabilityValue.IntValue(aggressive ? 65 : 80);
+                    break;
                 }
             }
             case BIOME_BLEND -> {
                 if (gpuBound) {
-                    return new CapabilityValue.IntValue(aggressive ? 1 : 2);
+                    targetValue = new CapabilityValue.IntValue(aggressive ? 1 : 2);
+                    break;
                 }
                 if (cpuBound || balanced) {
-                    return new CapabilityValue.IntValue(aggressive ? 2 : 3);
+                    targetValue = new CapabilityValue.IntValue(aggressive ? 2 : 3);
+                    break;
                 }
             }
             case MIPMAP_LEVEL -> {
                 if (gpuBound) {
-                    return new CapabilityValue.IntValue(aggressive ? 1 : 2);
+                    targetValue = new CapabilityValue.IntValue(aggressive ? 1 : 2);
+                    break;
                 }
                 if (balanced && !building) {
-                    return new CapabilityValue.IntValue(aggressive ? 2 : 3);
+                    targetValue = new CapabilityValue.IntValue(aggressive ? 2 : 3);
+                    break;
                 }
             }
             case VSYNC -> {
                 if (loading || gpuBound) {
-                    return new CapabilityValue.BoolValue(false);
+                    targetValue = new CapabilityValue.BoolValue(false);
+                    break;
                 }
             }
             case FOG -> {
                 if (gpuBound) {
-                    return new CapabilityValue.IntValue(aggressive ? 6 : 8);
+                    targetValue = new CapabilityValue.IntValue(aggressive ? 6 : 8);
+                    break;
                 }
                 if (balanced && !building) {
-                    return new CapabilityValue.IntValue(aggressive ? 8 : 10);
+                    targetValue = new CapabilityValue.IntValue(aggressive ? 8 : 10);
+                    break;
                 }
             }
             case GRAPHICS_MODE -> {
                 if (gpuBound) {
-                    return new CapabilityValue.EnumValue("FAST");
+                    targetValue = new CapabilityValue.EnumValue("FAST");
+                    break;
                 }
                 if (balanced && !building) {
-                    return new CapabilityValue.EnumValue("FAST");
+                    targetValue = new CapabilityValue.EnumValue("FAST");
+                    break;
                 }
             }
             case SMOOTH_LIGHTING -> {
                 if (gpuBound || cpuBound) {
-                    return new CapabilityValue.EnumValue("OFF");
+                    targetValue = new CapabilityValue.EnumValue("OFF");
+                    break;
                 }
             }
             case ARMOR_STANDS -> {
                 if (loading || (cpuBound && !building)) {
-                    return new CapabilityValue.BoolValue(false);
+                    targetValue = new CapabilityValue.BoolValue(false);
+                    break;
                 }
             }
             case ITEM_FRAMES -> {
                 if (loading || (cpuBound && !building)) {
-                    return new CapabilityValue.BoolValue(false);
+                    targetValue = new CapabilityValue.BoolValue(false);
+                    break;
                 }
             }
             case BLOCK_ENTITIES -> {
                 if (!building && (loading || cpuBound)) {
-                    return new CapabilityValue.BoolValue(false);
+                    targetValue = new CapabilityValue.BoolValue(false);
+                    break;
                 }
             }
             case ANIMATIONS -> {
                 if (loading || (cpuBound && !building) || menu) {
-                    return new CapabilityValue.BoolValue(false);
+                    targetValue = new CapabilityValue.BoolValue(false);
+                    break;
                 }
             }
             case FPS_CAP -> {
                 if (menu) {
-                    return new CapabilityValue.IntValue(60);
+                    targetValue = new CapabilityValue.IntValue(60);
+                    break;
                 }
                 if (gpuBound && !combat) {
-                    return new CapabilityValue.IntValue(90);
+                    targetValue = new CapabilityValue.IntValue(90);
+                    break;
                 }
             }
             case RESOLUTION_SCALE -> {
                 if (gpuBound || loading) {
-                    return new CapabilityValue.FloatValue(aggressive ? 0.6f : 0.8f);
+                    targetValue = new CapabilityValue.FloatValue(aggressive ? 0.6f : 0.8f);
+                    break;
                 }
             }
             case DISTORTION_EFFECT_SCALE -> {
                 if (gpuBound || loading) {
-                    return new CapabilityValue.FloatValue(aggressive ? 0.0f : 0.5f);
+                    targetValue = new CapabilityValue.FloatValue(aggressive ? 0.0f : 0.5f);
+                    break;
                 }
             }
             case DYNAMIC_LIGHTING -> {
                 if (gpuBound || cpuBound || loading) {
-                    return new CapabilityValue.BoolValue(false);
+                    targetValue = new CapabilityValue.BoolValue(false);
+                    break;
                 }
             }
             case CHUNK_LOADING -> {
                 if (loading || cpuBound) {
-                    return new CapabilityValue.EnumValue(aggressive ? "AGGRESSIVE" : "BALANCED");
+                    targetValue = new CapabilityValue.EnumValue(aggressive ? "AGGRESSIVE" : "BALANCED");
+                    break;
                 }
             }
             default -> {
             }
         }
-
-        return null;
+        if (targetValue == null) {
+            return null;
+        }
+        return scenarioRules.applyLimits(id, scenario, profile, targetValue);
     }
 
     private String generateReason(CapabilityId id, double confidence, ProviderMetadata metadata) {

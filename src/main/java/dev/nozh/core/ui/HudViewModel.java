@@ -40,6 +40,9 @@ public record HudViewModel(
                 int providersHealthy,
                 int providersDegraded,
                 int providersBroken,
+                double providersCoveragePercent,
+                int providersCoverageControlled,
+                int providersCoverageTotal,
 
                 // Issues summary
                 int issuesTotal,
@@ -95,6 +98,7 @@ public record HudViewModel(
                         "UNKNOWN",
                         0, 0, 0, 0, 0, false,
                         0, 0, 0, 0,
+                        0.0, 0, 0,
                         0, 0, 0,
                         "",
                         0,

@@ -8,6 +8,7 @@ import dev.nozh.core.bus.StandardActionProcessor;
 import dev.nozh.core.config.ConfigManager;
 import dev.nozh.core.config.NozhConfig;
 import dev.nozh.core.config.ConfigSyncService;
+import dev.nozh.core.capability.ProviderCoverage;
 import dev.nozh.core.capability.ProviderRegistry;
 import dev.nozh.core.governor.GovernorRunner;
 import dev.nozh.core.governor.ActionOutcome;
@@ -101,6 +102,11 @@ public class NozhModClient implements ClientModInitializer {
         providerRegistry = new ProviderRegistry(healthTracker);
         ProviderBootstrap.registerAll(providerRegistry, optionsAdapter);
         logger.info("Registered " + providerRegistry.getAllProviders().size() + " capability providers");
+        ProviderCoverage coverage = providerRegistry.coverage();
+        logger.info(String.format("Capability coverage: %.1f%% (%d/%d)",
+                coverage.coveragePercent(),
+                coverage.controlledCapabilities(),
+                coverage.totalCapabilities()));
 
         // 5. Create ActionSuccessTracker (uses in-memory storage for now)
         String storagePath = ".minecraft/config/nozh/action_success.json";
