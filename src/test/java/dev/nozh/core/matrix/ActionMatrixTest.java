@@ -4,6 +4,7 @@ import dev.nozh.core.bus.CapabilityId;
 import dev.nozh.core.bus.CapabilityValue;
 import dev.nozh.core.capability.ApplyResult;
 import dev.nozh.core.capability.CapabilityProvider;
+import dev.nozh.core.capability.CostLevel;
 import dev.nozh.core.capability.ImpactLevel;
 import dev.nozh.core.capability.ProviderHealthTracker;
 import dev.nozh.core.capability.ProviderMetadata;
@@ -250,6 +251,7 @@ class ActionMatrixTest {
                 safetyLevel,
                 rollbackGuarantee,
                 gameplayImpact,
+                CostLevel.LOW,
                 visualImpact,
                 expectedGain,
                 Set.of(),
@@ -261,6 +263,7 @@ class ActionMatrixTest {
             SafetyLevel safetyLevel,
             RollbackGuarantee rollbackGuarantee,
             ImpactLevel gameplayImpact,
+            dev.nozh.core.capability.CostLevel costLevel,
             ImpactLevel visualImpact,
             double expectedGainMs,
             Set<String> requiredMods,
