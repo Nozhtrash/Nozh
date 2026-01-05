@@ -17,41 +17,47 @@ public final class CompatRegistry {
 
     private final Map<String, CompatModule> modules = new HashMap<>();
     private final Map<String, CompatAdapter> adapters = new HashMap<>();
+    private final CompatActionRegistry actionRegistry = new CompatActionRegistry();
 
     public CompatRegistry() {
         register(new CompatModule("sodium", "Sodium",
                 EnumSet.of(CapabilityId.CLOUDS, CapabilityId.VSYNC, CapabilityId.FOG, CapabilityId.BIOME_BLEND,
-                        CapabilityId.ENTITY_DISTANCE, CapabilityId.RENDER_DISTANCE, CapabilityId.MIPMAP_LEVEL),
-                EnumSet.of(CapabilityId.CLOUDS, CapabilityId.SMOOTH_LIGHTING, CapabilityId.MIPMAP_LEVEL)));
+                        CapabilityId.ENTITY_DISTANCE, CapabilityId.RENDER_DISTANCE, CapabilityId.MIPMAP_LEVEL)));
         register(new CompatModule("sodium-extra", "Sodium Extra",
-                EnumSet.of(CapabilityId.PARTICLES, CapabilityId.FOG),
-                EnumSet.noneOf(CapabilityId.class)));
+                EnumSet.of(CapabilityId.PARTICLES, CapabilityId.FOG)));
         register(new CompatModule("iris", "Iris",
-                EnumSet.of(CapabilityId.CLOUDS, CapabilityId.FOG, CapabilityId.SMOOTH_LIGHTING),
-                EnumSet.noneOf(CapabilityId.class)));
+                EnumSet.of(CapabilityId.CLOUDS, CapabilityId.FOG, CapabilityId.SMOOTH_LIGHTING)));
         register(new CompatModule("lithium", "Lithium",
-                EnumSet.of(CapabilityId.SIMULATION_DISTANCE),
-                EnumSet.noneOf(CapabilityId.class)));
+                EnumSet.of(CapabilityId.SIMULATION_DISTANCE)));
         register(new CompatModule("entityculling", "Entity Culling",
-                EnumSet.of(CapabilityId.ENTITY_DISTANCE),
-                EnumSet.noneOf(CapabilityId.class)));
+                EnumSet.of(CapabilityId.ENTITY_DISTANCE)));
         register(new CompatModule("moreculling", "More Culling",
-                EnumSet.of(CapabilityId.ENTITY_DISTANCE),
-                EnumSet.noneOf(CapabilityId.class)));
+                EnumSet.of(CapabilityId.ENTITY_DISTANCE)));
         register(new CompatModule("bobby", "Bobby",
-                EnumSet.of(CapabilityId.RENDER_DISTANCE),
-                EnumSet.noneOf(CapabilityId.class)));
+                EnumSet.of(CapabilityId.RENDER_DISTANCE)));
         register(new CompatModule("vulkanmod", "VulkanMod",
-                EnumSet.of(CapabilityId.RENDER_DISTANCE, CapabilityId.VSYNC, CapabilityId.CLOUDS),
-                EnumSet.noneOf(CapabilityId.class)));
+                EnumSet.of(CapabilityId.RENDER_DISTANCE, CapabilityId.VSYNC, CapabilityId.CLOUDS)));
         register(new CompatModule("canvas", "Canvas",
-                EnumSet.of(CapabilityId.CLOUDS, CapabilityId.VSYNC, CapabilityId.PARTICLES),
-                EnumSet.noneOf(CapabilityId.class)));
+                EnumSet.of(CapabilityId.CLOUDS, CapabilityId.VSYNC, CapabilityId.PARTICLES)));
         register(new CompatModule("lambdynlights", "LambDynamicLights",
-                EnumSet.of(CapabilityId.DYNAMIC_LIGHTING),
-                EnumSet.noneOf(CapabilityId.class)));
+                EnumSet.of(CapabilityId.DYNAMIC_LIGHTING)));
+
+        actionRegistry.register("sodium", EnumSet.of(
+                CapabilityId.CLOUDS,
+                CapabilityId.SMOOTH_LIGHTING,
+                CapabilityId.MIPMAP_LEVEL));
+        actionRegistry.register("sodium-extra", EnumSet.noneOf(CapabilityId.class));
+        actionRegistry.register("iris", EnumSet.noneOf(CapabilityId.class));
+        actionRegistry.register("lithium", EnumSet.noneOf(CapabilityId.class));
+        actionRegistry.register("entityculling", EnumSet.noneOf(CapabilityId.class));
+        actionRegistry.register("moreculling", EnumSet.noneOf(CapabilityId.class));
+        actionRegistry.register("bobby", EnumSet.noneOf(CapabilityId.class));
+        actionRegistry.register("vulkanmod", EnumSet.noneOf(CapabilityId.class));
+        actionRegistry.register("canvas", EnumSet.noneOf(CapabilityId.class));
+        actionRegistry.register("lambdynlights", EnumSet.of(CapabilityId.DYNAMIC_LIGHTING));
 
         registerAdapter(new SodiumOptionsAdapter());
+        registerAdapter(new LambDynamicLightsAdapter());
     }
 
     private void register(CompatModule module) {
@@ -79,13 +85,13 @@ public final class CompatRegistry {
 
     public boolean isActionPermitted(CapabilityId capability) {
         return modules.values().stream()
-                .filter(module -> module.permits(capability) && isLoaded(module.modId()))
+                .filter(module -> actionRegistry.isPermitted(module.modId(), capability) && isLoaded(module.modId()))
                 .anyMatch(module -> isActionPermitted(module, capability));
     }
 
     public Optional<CompatAdapter> getAdapter(CapabilityId capability) {
         return modules.values().stream()
-                .filter(module -> module.permits(capability) && isLoaded(module.modId()))
+                .filter(module -> actionRegistry.isPermitted(module.modId(), capability) && isLoaded(module.modId()))
                 .map(module -> adapters.get(module.modId()))
                 .filter(adapter -> adapter != null && adapter.isAvailable()
                         && adapter.supportedCapabilities().contains(capability))
@@ -106,7 +112,7 @@ public final class CompatRegistry {
                 continue;
             }
             EnumSet<CapabilityId> actions = EnumSet.noneOf(CapabilityId.class);
-            for (CapabilityId capability : module.permittedActions()) {
+            for (CapabilityId capability : actionRegistry.permittedActions(module.modId())) {
                 if (isActionPermitted(module, capability)) {
                     actions.add(capability);
                 }
@@ -127,7 +133,7 @@ public final class CompatRegistry {
     }
 
     private boolean isActionPermitted(CompatModule module, CapabilityId capability) {
-        if (!module.permits(capability)) {
+        if (!actionRegistry.isPermitted(module.modId(), capability)) {
             return false;
         }
         CompatAdapter adapter = adapters.get(module.modId());
