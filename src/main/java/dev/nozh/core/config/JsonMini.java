@@ -23,9 +23,11 @@ public final class JsonMini {
                 "  \"debugLogs\": " + c.debugLogs + ",\n" +
                 "  \"language\": \"" + (c.language == null ? "auto" : c.language) + "\",\n" +
                 "  \"showHud\": " + c.showHud + ",\n" +
+                "  \"showHudSuggestions\": " + c.showHudSuggestions + ",\n" +
                 "  \"hudAnchor\": \"" + (c.hudAnchor == null ? "TOP_LEFT" : c.hudAnchor) + "\",\n" +
                 "  \"hudOffsetX\": " + c.hudOffsetX + ",\n" +
                 "  \"hudOffsetY\": " + c.hudOffsetY + ",\n" +
+                "  \"hudScale\": " + c.hudScale + ",\n" +
 
                 "  \"targetFps\": " + c.targetFps + ",\n" +
                 "  \"optimizationProfile\": \"" + (c.optimizationProfile == null ? "BALANCED" : c.optimizationProfile)
@@ -113,9 +115,11 @@ public final class JsonMini {
             c.debugLogs = getBool(json, "debugLogs", getBool(json, "debug", c.debugLogs));
             c.language = getString(json, "language", c.language);
             c.showHud = getBool(json, "showHud", c.showHud);
+            c.showHudSuggestions = getBool(json, "showHudSuggestions", c.showHudSuggestions);
             c.hudAnchor = getString(json, "hudAnchor", c.hudAnchor);
             c.hudOffsetX = getInt(json, "hudOffsetX", c.hudOffsetX);
             c.hudOffsetY = getInt(json, "hudOffsetY", c.hudOffsetY);
+            c.hudScale = getDouble(json, "hudScale", c.hudScale);
 
             // Targets
             c.targetFps = getInt(json, "targetFps", c.targetFps);

@@ -10,8 +10,6 @@ import dev.nozh.core.state.StateStore;
 import dev.nozh.core.telemetry.TelemetrySnapshot;
 import dev.nozh.core.ui.HudViewModel;
 import dev.nozh.core.ui.HudViewModelBuilder;
-import dev.nozh.core.safety.NozhState;
-import dev.nozh.core.safety.StateManager;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
 import net.fabricmc.fabric.api.client.rendering.v1.HudRenderCallback;
@@ -108,26 +106,54 @@ public class NozhHudRenderer implements HudRenderCallback {
     private List<Text> buildHudLines(HudViewModel viewModel, RuntimeState state) {
         List<Text> lines = new java.util.ArrayList<>();
         lines.add(Text.translatable("nozh.hud.title"));
-        lines.add(Text.translatable("nozh.hud.mode", viewModel.governorMode().name()));
-        lines.add(Text.translatable("nozh.hud.scenario", viewModel.currentScenario().name()));
+        lines.add(Text.translatable("nozh.hud.mode", resolveMode(state)));
+        lines.add(Text.translatable("nozh.hud.scenario", Text.translatable(viewModel.scenarioKey())));
+        lines.add(Text.translatable("nozh.hud.metrics.fps", formatFps(viewModel.avgFrametimeMs())));
         lines.add(Text.translatable(
-                "nozh.hud.metrics.fps_p95",
-                formatFps(viewModel.avgFrametimeMs()),
-                formatMs(viewModel.p95FrametimeMs())));
+                "nozh.hud.metrics.p95_spikes",
+                formatMs(viewModel.p95FrametimeMs()),
+                viewModel.spikeCount()));
 
-        lines.add(Text.translatable("nozh.hud.last_action", resolveLastAction()));
-        lines.add(Text.translatable("nozh.hud.suggestion", resolveSuggestion(state)));
+        lines.add(Text.translatable("nozh.hud.last_action", resolveLastAction(viewModel)));
+        lines.add(Text.translatable("nozh.hud.last_outcome", resolveLastOutcome(viewModel)));
+        NozhConfig config = ConfigManager.getConfig();
+        if (config == null || config.showHudSuggestions) {
+            if (state != null && !state.autoTuning()) {
+                lines.add(Text.translatable("nozh.hud.suggestion", resolveSuggestion(state)));
+            }
+        }
         return lines;
     }
 
-    private String resolveLastAction() {
-        NozhState state = StateManager.getState();
-        if (state == null || state.executionHistory.isEmpty()) {
+    private String resolveMode(RuntimeState state) {
+        if (state == null) {
+            return Text.translatable("nozh.hud.mode.unknown").getString();
+        }
+        if (!state.enabled()) {
+            return Text.translatable("nozh.hud.mode.off").getString();
+        }
+        if (state.safeMode()) {
+            return Text.translatable("nozh.hud.mode.safemode").getString();
+        }
+        if (!state.autoTuning()) {
+            return Text.translatable("nozh.hud.mode.manual").getString();
+        }
+        return Text.translatable("nozh.hud.mode.auto").getString();
+    }
+
+    private String resolveLastAction(HudViewModel viewModel) {
+        if (viewModel == null || viewModel.lastActionSummary() == null || viewModel.lastActionSummary().isBlank()) {
             return Text.translatable("nozh.hud.last_action.none").getString();
         }
+        return viewModel.lastActionSummary();
+    }
 
-        var last = state.executionHistory.get(state.executionHistory.size() - 1);
-        return formatAction(last.type().name(), last.oldValue(), last.newValue());
+    private String resolveLastOutcome(HudViewModel viewModel) {
+        if (viewModel == null || viewModel.lastActionOutcome() == null || viewModel.lastActionOutcome().isBlank()) {
+            return Text.translatable("nozh.hud.last_outcome.none").getString();
+        }
+        String outcome = viewModel.lastActionOutcome().trim().toUpperCase();
+        return Text.translatable("nozh.hud.outcome." + outcome.toLowerCase()).getString();
     }
 
     private String resolveSuggestion(RuntimeState state) {
@@ -141,10 +167,6 @@ public class NozhHudRenderer implements HudRenderCallback {
             return Text.translatable("nozh.hud.suggestion.apply_hint_many", summary, remaining).getString();
         }
         return Text.translatable("nozh.hud.suggestion.apply_hint", summary).getString();
-    }
-
-    private String formatAction(String capability, String previousValue, String newValue) {
-        return capability + ": " + previousValue + " → " + newValue;
     }
 
     private String formatAction(String capability, String value) {
