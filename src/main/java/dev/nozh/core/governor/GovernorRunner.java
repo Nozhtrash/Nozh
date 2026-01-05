@@ -19,6 +19,7 @@ import dev.nozh.core.state.RuntimeState;
 import dev.nozh.core.state.StateStore;
 import dev.nozh.core.state.PendingAction;
 import dev.nozh.core.state.ActionHistoryEntry;
+import dev.nozh.core.state.BaselineSnapshot;
 import dev.nozh.core.bus.CapabilityValue;
 import dev.nozh.api.PerfSnapshot;
 import dev.nozh.core.governor.ActionOutcome;
@@ -202,7 +203,7 @@ public final class GovernorRunner {
                 config.targetFps,
                 config.reverseEpsilonMs,
                 reverseReady,
-                state.baselineSettings(),
+                state.baselineSnapshot(),
                 state.currentSettings());
 
         if (decisionOpt.isEmpty()) {
@@ -332,7 +333,7 @@ public final class GovernorRunner {
     }
 
     private void syncBaselineIfNeeded(RuntimeState state) {
-        if (state.baselineSettings() != null && !state.baselineSettings().isEmpty()) {
+        if (state.baselineSnapshot() != null && !state.baselineSnapshot().isEmpty()) {
             return;
         }
         refreshBaselineSettings();
@@ -678,13 +679,12 @@ public final class GovernorRunner {
 
     private Optional<CapabilityValue> resolveRollbackValue(RuntimeState state, PendingAction pending) {
         Optional<CapabilityValue> candidate = pending.previousValue();
-        CapabilityValue baseline = state != null && state.baselineSettings() != null
-                ? state.baselineSettings().get(pending.capability())
-                : null;
+        BaselineSnapshot baselineSnapshot = state != null ? state.baselineSnapshot() : BaselineSnapshot.empty();
+        CapabilityValue baseline = baselineSnapshot.get(pending.capability()).orElse(null);
 
         if (candidate.isPresent()) {
             CapabilityValue value = candidate.get();
-            if (baseline != null && exceedsBaseline(pending.capability(), value, baseline)) {
+            if (baseline != null && baselineSnapshot.exceedsBaseline(pending.capability(), value)) {
                 return Optional.of(baseline);
             }
             return Optional.of(value);
@@ -729,60 +729,6 @@ public final class GovernorRunner {
         }
     }
 
-    private boolean exceedsBaseline(dev.nozh.core.bus.CapabilityId capabilityId, CapabilityValue candidate,
-            CapabilityValue baseline) {
-        if (candidate == null || baseline == null) {
-            return false;
-        }
-        return switch (capabilityId) {
-            case PARTICLES -> compareEnum(candidate, baseline, java.util.List.of("MINIMAL", "DECREASED", "ALL"));
-            case CLOUDS -> compareEnum(candidate, baseline, java.util.List.of("OFF", "FAST", "FANCY"));
-            case GRAPHICS_MODE -> compareEnum(candidate, baseline, java.util.List.of("FAST", "FANCY", "FABULOUS"));
-            case ENTITY_SHADOWS, ARMOR_STANDS, ITEM_FRAMES, BLOCK_ENTITIES, ANIMATIONS, VSYNC, DYNAMIC_LIGHTING ->
-                    compareBool(candidate, baseline);
-            case RENDER_DISTANCE, SIMULATION_DISTANCE, ENTITY_DISTANCE, BIOME_BLEND, MIPMAP_LEVEL, FOG ->
-                    compareInt(candidate, baseline);
-            case RESOLUTION_SCALE, DISTORTION_EFFECT_SCALE -> compareFloat(candidate, baseline);
-            default -> false;
-        };
-    }
-
-    private boolean compareEnum(CapabilityValue candidate, CapabilityValue baseline, java.util.List<String> ordering) {
-        if (!(candidate instanceof CapabilityValue.EnumValue candidateEnum)
-                || !(baseline instanceof CapabilityValue.EnumValue baselineEnum)) {
-            return false;
-        }
-        int candidateIndex = ordering.indexOf(candidateEnum.name());
-        int baselineIndex = ordering.indexOf(baselineEnum.name());
-        if (candidateIndex < 0 || baselineIndex < 0) {
-            return false;
-        }
-        return candidateIndex > baselineIndex;
-    }
-
-    private boolean compareBool(CapabilityValue candidate, CapabilityValue baseline) {
-        if (!(candidate instanceof CapabilityValue.BoolValue candidateBool)
-                || !(baseline instanceof CapabilityValue.BoolValue baselineBool)) {
-            return false;
-        }
-        return candidateBool.value() && !baselineBool.value();
-    }
-
-    private boolean compareInt(CapabilityValue candidate, CapabilityValue baseline) {
-        if (!(candidate instanceof CapabilityValue.IntValue candidateInt)
-                || !(baseline instanceof CapabilityValue.IntValue baselineInt)) {
-            return false;
-        }
-        return candidateInt.value() > baselineInt.value();
-    }
-
-    private boolean compareFloat(CapabilityValue candidate, CapabilityValue baseline) {
-        if (!(candidate instanceof CapabilityValue.FloatValue candidateFloat)
-                || !(baseline instanceof CapabilityValue.FloatValue baselineFloat)) {
-            return false;
-        }
-        return candidateFloat.value() > baselineFloat.value();
-    }
 
     private int resolveObservationWindowSeconds(NozhConfig config, PerfSnapshot snapshot) {
         if (config != null && config.observationWindowSeconds > 0) {

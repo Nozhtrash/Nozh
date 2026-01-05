@@ -143,6 +143,11 @@ public final class FpsCapProvider implements CapabilityProvider {
         }
 
         @Override
+        public CostLevel costLevel() {
+            return CostLevel.MED;
+        }
+
+        @Override
         public ImpactLevel visualImpact() {
             return ImpactLevel.NONE;
         }

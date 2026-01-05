@@ -33,6 +33,11 @@ public interface ProviderMetadata {
     ImpactLevel gameplayImpact();
 
     /**
+     * Estimated cost level (quality or disruption cost).
+     */
+    CostLevel costLevel();
+
+    /**
      * Expected visual impact level.
      */
     ImpactLevel visualImpact();

@@ -573,6 +573,13 @@ public record RuntimeState(
                 currentSettings);
     }
 
+    public BaselineSnapshot baselineSnapshot() {
+        if (baselineSettings == null || baselineSettings.isEmpty()) {
+            return BaselineSnapshot.empty();
+        }
+        return new BaselineSnapshot(baselineSettings);
+    }
+
     public RuntimeState withCurrentSettings(Map<CapabilityId, CapabilityValue> settings) {
         return new RuntimeState(
                 enabled, safeMode, autoTuning, debugLogs,

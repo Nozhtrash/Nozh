@@ -171,6 +171,11 @@ public final class BiomeBlendRadiusProvider implements CapabilityProvider {
         }
 
         @Override
+        public CostLevel costLevel() {
+            return CostLevel.LOW;
+        }
+
+        @Override
         public ImpactLevel visualImpact() {
             return ImpactLevel.LOW;
         }

@@ -85,7 +85,7 @@ public final class SimulationGovernor {
                         int targetFps,
                         double reverseEpsilonMs,
                         boolean reverseReady,
-                        Map<dev.nozh.core.bus.CapabilityId, dev.nozh.core.bus.CapabilityValue> baselineSettings,
+                        dev.nozh.core.state.BaselineSnapshot baselineSnapshot,
                         Map<dev.nozh.core.bus.CapabilityId, dev.nozh.core.bus.CapabilityValue> currentSettings) {
                 // OFF mode → no decisions
                 if (mode == GovernorMode.OFF) {
@@ -97,13 +97,13 @@ public final class SimulationGovernor {
 
                 // Generate candidates
                 if (reverseReady
-                                && shouldReverseOptimize(state, targetFps, reverseEpsilonMs, baselineSettings,
+                                && shouldReverseOptimize(state, targetFps, reverseEpsilonMs, baselineSnapshot,
                                                 currentSettings)) {
                         List<ActionCandidate> reverseCandidates = actionMatrix.generateReverseCandidates(
                                         policy,
                                         state.currentScenario(),
                                         profile,
-                                        baselineSettings,
+                                        baselineSnapshot,
                                         currentSettings);
                         if (!reverseCandidates.isEmpty()) {
                                 return Optional.of(reverseCandidates.get(0));
@@ -130,9 +130,9 @@ public final class SimulationGovernor {
                         RuntimeState state,
                         int targetFps,
                         double reverseEpsilonMs,
-                        Map<dev.nozh.core.bus.CapabilityId, dev.nozh.core.bus.CapabilityValue> baselineSettings,
+                        dev.nozh.core.state.BaselineSnapshot baselineSnapshot,
                         Map<dev.nozh.core.bus.CapabilityId, dev.nozh.core.bus.CapabilityValue> currentSettings) {
-                if (baselineSettings == null || baselineSettings.isEmpty()) {
+                if (baselineSnapshot == null || baselineSnapshot.isEmpty()) {
                         return false;
                 }
                 if (currentSettings == null || currentSettings.isEmpty()) {

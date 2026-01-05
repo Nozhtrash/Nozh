@@ -46,6 +46,11 @@ public final class StandardCapabilityExecutor implements dev.nozh.core.bus.Capab
 
         CapabilityProvider provider = providerOpt.get();
 
+        ProviderHealthCheck.Result health = ProviderHealthCheck.check(provider);
+        if (!health.healthy()) {
+            return new ExecutionResult.Failure("Health check failed: " + health.reason());
+        }
+
         // Apply
         ApplyResult result = provider.apply(value);
 
