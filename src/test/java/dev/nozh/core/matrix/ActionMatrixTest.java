@@ -157,7 +157,7 @@ class ActionMatrixTest {
                 Scenario.COMBAT, OptimizationProfile.BALANCED, -1.0, 0);
 
         Map<CapabilityId, ActionCandidate> byId = byId(candidates);
-        assertEquals("MINIMAL", candidateValue(byId.get(CapabilityId.PARTICLES)));
+        assertEquals("DECREASED", candidateValue(byId.get(CapabilityId.PARTICLES)));
         assertEquals("OFF", candidateValue(byId.get(CapabilityId.CLOUDS)));
     }
 
