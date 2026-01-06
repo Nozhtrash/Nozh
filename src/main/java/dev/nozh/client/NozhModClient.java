@@ -13,6 +13,7 @@ import dev.nozh.core.matrix.ActionSuccessTracker;
 import dev.nozh.core.safety.CrashLoopGuard;
 import dev.nozh.core.state.RuntimeState;
 import dev.nozh.core.state.StateStore;
+import dev.nozh.core.benchmark.InitialBenchmarkRunner;
 import dev.nozh.fabric.FabricNozhLogger;
 import dev.nozh.fabric.capability.CompatAwareMinecraftOptionsAdapter;
 import dev.nozh.fabric.capability.MinecraftOptionsAdapter;
@@ -54,6 +55,7 @@ public class NozhModClient implements ClientModInitializer {
     private static dev.nozh.core.intelligence.SessionLearning sessionLearning;
     private static ProviderRegistry providerRegistry;
     private static dev.nozh.fabric.context.FabricScenarioDetector scenarioDetector;
+    private static InitialBenchmarkRunner initialBenchmarkRunner;
     private static KeyBinding toggleHudKey;
     private static KeyBinding applySuggestionKey;
     private static ManualConfirmationHandler manualConfirmationHandler;
@@ -120,6 +122,8 @@ public class NozhModClient implements ClientModInitializer {
         perfManager = new dev.nozh.core.profiler.PerfManager();
         tickTimeSampler = new dev.nozh.core.monitoring.TickTimeSampler();
         perfManager.setTickSnapshotSupplier(() -> tickTimeSampler.getSnapshot());
+        initialBenchmarkRunner = new InitialBenchmarkRunner(stateStore,
+                () -> perfManager != null ? perfManager.getSnapshot() : dev.nozh.api.PerfSnapshot.empty());
 
         // 8. Create ActionProcessor bridge
         StandardActionProcessor actionProcessor = new StandardActionProcessor(
@@ -252,6 +256,10 @@ public class NozhModClient implements ClientModInitializer {
                 sessionLearning.saveIfDue();
             }
 
+            if (initialBenchmarkRunner != null) {
+                initialBenchmarkRunner.tick();
+            }
+
             if (perfManager != null) {
                 perfManager.onRenderPhaseEnd(dev.nozh.core.profiler.RenderPhase.CLIENT_TICK);
             }
@@ -260,6 +268,9 @@ public class NozhModClient implements ClientModInitializer {
         ClientPlayConnectionEvents.DISCONNECT.register((handler, clientInstance) -> {
             if (sessionLearning != null) {
                 sessionLearning.save();
+            }
+            if (initialBenchmarkRunner != null) {
+                initialBenchmarkRunner.onSessionEnd();
             }
         });
 
@@ -274,6 +285,9 @@ public class NozhModClient implements ClientModInitializer {
                     sessionLearning.save();
                     lastSessionKey = sessionKey;
                 }
+            }
+            if (initialBenchmarkRunner != null) {
+                initialBenchmarkRunner.onSessionStart();
             }
         });
 
