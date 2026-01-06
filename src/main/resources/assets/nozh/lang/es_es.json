@@ -14,5 +14,9 @@
   "nozh.command.status": "Estado de NOZH",
   "nozh.command.history": "Últimas 10 Decisiones del Gobernador",
   "nozh.command.perf": "Análisis de Rendimiento",
-  "nozh.command.safemode.reset": "Modo Seguro reiniciado forzosamente"
+  "nozh.command.safemode.reset": "Modo Seguro reiniciado forzosamente",
+  
+  "key.nozh.confirm_suggestion": "Confirmar Sugerencia (K)",
+  "key.nozh.dismiss_suggestion": "Descartar Sugerencia (N)",
+  "category.nozh": "Optimización NOZH"
 }

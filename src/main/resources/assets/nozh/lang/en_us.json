@@ -14,5 +14,9 @@
   "nozh.command.status": "NOZH Status",
   "nozh.command.history": "Last 10 Governor Decisions",
   "nozh.command.perf": "Performance Analysis",
-  "nozh.command.safemode.reset": "Safe Mode forcibly reset"
+  "nozh.command.safemode.reset": "Safe Mode forcibly reset",
+  
+  "key.nozh.confirm_suggestion": "Confirm Suggestion (K)",
+  "key.nozh.dismiss_suggestion": "Dismiss Suggestion (N)",
+  "category.nozh": "NOZH Optimization"
 }

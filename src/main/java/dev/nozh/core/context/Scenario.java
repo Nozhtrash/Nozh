@@ -17,6 +17,9 @@ public enum Scenario {
     /** Underground, low render distance needed */
     MINING,
 
+    /** Active exploration (fast movement, chunk loading) */
+    EXPLORING,
+
     /** No input for extended time */
     AFK,
 

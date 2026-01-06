@@ -2,7 +2,6 @@ package dev.nozh.core.monitoring;
 
 import java.lang.management.ManagementFactory;
 import java.lang.management.OperatingSystemMXBean;
-import com.sun.management.OperatingSystemMXBean as SunOSMXBean;
 
 /**
  * Advanced system resource monitor for intelligent optimization decisions.
@@ -32,7 +31,7 @@ public final class SystemMonitor {
 
     public SystemMonitor() {
         this.osMXBean = ManagementFactory.getOperatingSystemMXBean();
-        this.cpuLoadAvailable = osMXBean instanceof SunOSMXBean;
+        this.cpuLoadAvailable = osMXBean instanceof com.sun.management.OperatingSystemMXBean;
     }
 
     /**
@@ -51,8 +50,8 @@ public final class SystemMonitor {
         }
 
         try {
-            SunOSMXBean sunBean = (SunOSMXBean) osMXBean;
-            double load = sunBean.getCpuLoad(); // Previously called getSystemCpuLoad()
+            com.sun.management.OperatingSystemMXBean sunBean = (com.sun.management.OperatingSystemMXBean) osMXBean;
+            double load = sunBean.getCpuLoad();
             if (load >= 0) {
                 cachedCpuLoad = load;
                 lastCpuLoadUpdate = now;
@@ -76,7 +75,7 @@ public final class SystemMonitor {
         }
 
         try {
-            SunOSMXBean sunBean = (SunOSMXBean) osMXBean;
+            com.sun.management.OperatingSystemMXBean sunBean = (com.sun.management.OperatingSystemMXBean) osMXBean;
             return sunBean.getProcessCpuLoad();
         } catch (Exception e) {
             return -1.0;
