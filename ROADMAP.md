@@ -2,7 +2,7 @@
 
 ## v0.1.0 (Current) - " The Foundation"
 
-* **Status**: Released / RC
+* **Status**: Released / RC (IMPLEMENTADO)
 * **Features/Phases Completed**:
   * Phase 0-2: Safe architecture, atomic config, SafeMode.
   * Phase 3: Accurate P95 Frametime Profiler.
@@ -14,15 +14,17 @@
 
 > **Contract**: Closed phases (0–6.5) are considered architecturally frozen in v0.x releases. New functionality must extend the system, not rewrite it.
 
-## v0.2.0 - "The Analyst" (Planned)
+## v0.2.0 - "The Analyst" (Planificado)
 
+* **Status**: Planificado (NO implementado aún)
 * **Goal**: Distinguish CPU vs GPU bottlenecks accurately.
 * **Tech**: Tick Time measurements.
 * **Phase 4.5**: Implement TickTimeSampler (read-only initially - no actions).
 * **Phase 5 update**: Updated rules to target specific bottlenecks (e.g. reduce entities for CPU, render distance for GPU).
 
-## v0.3.0 - "The Executive" (Planned)
+## v0.3.0 - "The Executive" (Planificado)
 
+* **Status**: Planificado (NO implementado aún)
 * **Goal**: Expand the arsenal of actions.
 * **New Actions**:
   * `DECREASE_RENDER_DISTANCE` (with fog adjustment)

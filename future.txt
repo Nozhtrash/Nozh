@@ -1,9 +1,9 @@
 # NOZH - FUTURE ROADMAP & IMPLEMENTATION GUIDE
 # THIS FILE IS GOLD - Complete optimization strategy
 # Updated: January 6, 2026
-# Status: PRIORITY 1 & 2 COMPLETED
+# Status: PRIORITY 1 IMPLEMENTED (v0.1) / PRIORITY 2-3 PLANNED (v0.2+)
 
-## 🎯 COMPLETED FEATURES (PRIORITY 1)
+## 🎯 IMPLEMENTADO (PRIORITY 1 / v0.1)
 
 ### ✅ 1. FEEDBACK LOOP COMPLETO
 - SessionLearning integrado y activo
@@ -32,7 +32,7 @@
 - StateStore actualizado en tiempo real
 - Governor responde a cambios inmediatos
 
-## 🛠️ EN DESARROLLO (PRIORITY 2)
+## 🛠️ PLANIFICADO (PRIORITY 2 / v0.2)
 
 ### 🔄 1. DETECCIÓN CPU vs GPU AVANZADA
 ```java
@@ -72,7 +72,7 @@
 - Status visible en HUD
 ```
 
-## 🚀 PLANEADO (PRIORITY 3 - PULIDO)
+## 🚀 PLANIFICADO (PRIORITY 3 / v0.3 - PULIDO)
 
 ### 1. ALGORITMO PREDICTIVO
 ```java
@@ -293,9 +293,10 @@ EXPLORING:
 
 ### Version Scheme:
 ```
-v0.2.0-beta  - Priority 1 completo
-v0.3.0-beta  - Priority 2 completo
-v1.0.0       - Priority 3 completo (RELEASE)
+v0.1.0        - Priority 1 completo (IMPLEMENTADO)
+v0.2.0-beta   - Priority 2 completo (PLANIFICADO)
+v0.3.0-beta   - Priority 3 completo (PLANIFICADO)
+v1.0.0        - Release estable (post Priority 3)
 ```
 
 ## 🎓 COMMUNITY
