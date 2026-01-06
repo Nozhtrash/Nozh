@@ -51,6 +51,12 @@ public class NozhConfig {
     public int benchmarkMicroIntervalMillis = 5000;
     public String hardwareProfile = "";
 
+    // Adaptive Visual Quality
+    public boolean adaptiveVisualQualityEnabled = true;
+    public double adaptiveVisualQualitySensitivityMs = 1.5;
+    public int adaptiveVisualQualityMinStep = 0;
+    public int adaptiveVisualQualityMaxStep = 17;
+
     // Limits & Cooldowns
     public int historyMaxEntries = 50;
     public int historyCommandLimit = 10;
@@ -103,6 +109,26 @@ public class NozhConfig {
 
         if (benchmarkMicroIntervalMillis < 1000 || benchmarkMicroIntervalMillis > 30000) {
             benchmarkMicroIntervalMillis = clamp(benchmarkMicroIntervalMillis, 1000, 30000);
+            corrected = true;
+        }
+
+        if (adaptiveVisualQualitySensitivityMs < 0.25 || adaptiveVisualQualitySensitivityMs > 8.0) {
+            adaptiveVisualQualitySensitivityMs = clamp(adaptiveVisualQualitySensitivityMs, 0.25, 8.0);
+            corrected = true;
+        }
+
+        if (adaptiveVisualQualityMinStep < 0 || adaptiveVisualQualityMinStep > 50) {
+            adaptiveVisualQualityMinStep = clamp(adaptiveVisualQualityMinStep, 0, 50);
+            corrected = true;
+        }
+
+        if (adaptiveVisualQualityMaxStep < 0 || adaptiveVisualQualityMaxStep > 50) {
+            adaptiveVisualQualityMaxStep = clamp(adaptiveVisualQualityMaxStep, 0, 50);
+            corrected = true;
+        }
+
+        if (adaptiveVisualQualityMinStep > adaptiveVisualQualityMaxStep) {
+            adaptiveVisualQualityMaxStep = adaptiveVisualQualityMinStep;
             corrected = true;
         }
 

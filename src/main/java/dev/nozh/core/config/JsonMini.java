@@ -58,7 +58,12 @@ public final class JsonMini {
                 "  \"evalPeriodTicks\": " + c.evalPeriodTicks + ",\n" +
                 "  \"benchmarkModeEnabled\": " + c.benchmarkModeEnabled + ",\n" +
                 "  \"benchmarkMicroIntervalMillis\": " + c.benchmarkMicroIntervalMillis + ",\n" +
-                "  \"hardwareProfile\": \"" + (c.hardwareProfile == null ? "" : c.hardwareProfile) + "\"\n" +
+                "  \"hardwareProfile\": \"" + (c.hardwareProfile == null ? "" : c.hardwareProfile) + "\",\n" +
+
+                "  \"adaptiveVisualQualityEnabled\": " + c.adaptiveVisualQualityEnabled + ",\n" +
+                "  \"adaptiveVisualQualitySensitivityMs\": " + c.adaptiveVisualQualitySensitivityMs + ",\n" +
+                "  \"adaptiveVisualQualityMinStep\": " + c.adaptiveVisualQualityMinStep + ",\n" +
+                "  \"adaptiveVisualQualityMaxStep\": " + c.adaptiveVisualQualityMaxStep + "\n" +
                 "}\n";
     }
 
@@ -208,6 +213,14 @@ public final class JsonMini {
             c.benchmarkMicroIntervalMillis = getInt(json, "benchmarkMicroIntervalMillis",
                     c.benchmarkMicroIntervalMillis);
             c.hardwareProfile = getString(json, "hardwareProfile", c.hardwareProfile);
+            c.adaptiveVisualQualityEnabled = getBool(json, "adaptiveVisualQualityEnabled",
+                    c.adaptiveVisualQualityEnabled);
+            c.adaptiveVisualQualitySensitivityMs = getDouble(json, "adaptiveVisualQualitySensitivityMs",
+                    c.adaptiveVisualQualitySensitivityMs);
+            c.adaptiveVisualQualityMinStep = getInt(json, "adaptiveVisualQualityMinStep",
+                    c.adaptiveVisualQualityMinStep);
+            c.adaptiveVisualQualityMaxStep = getInt(json, "adaptiveVisualQualityMaxStep",
+                    c.adaptiveVisualQualityMaxStep);
 
         } catch (Exception e) {
             // Log if possible, otherwise rely on validate() default

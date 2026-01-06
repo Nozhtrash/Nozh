@@ -67,6 +67,7 @@ public final class GovernorRunner {
     private final dev.nozh.core.monitoring.ChunkLoadMonitor chunkLoadMonitor;
     private final dev.nozh.core.context.ScenarioDetector scenarioDetector;
     private final Optional<ModpackProfile> modpackProfile;
+    private final AdaptiveVisualQualityController visualQualityController;
     private ActionMatrixTuning actionMatrixTuning = ActionMatrixTuning.defaults();
     private String lastHardwareProfile = "";
     private String lastModpackId = "";
@@ -114,6 +115,7 @@ public final class GovernorRunner {
         this.systemMonitor = new SystemMonitor();
         this.chunkLoadMonitor = new ChunkLoadMonitor();
         this.modpackProfile = ModpackRegistry.detect();
+        this.visualQualityController = new AdaptiveVisualQualityController();
     }
 
     public void onTick() {
@@ -189,6 +191,17 @@ public final class GovernorRunner {
         if (systemMonitor.isMemoryCritical()) {
             logger.warn("Skipping governor decision - memory critical");
             return;
+        }
+
+        Optional<AdaptiveVisualQualityController.QualityChange> visualChange = visualQualityController.evaluate(
+                state,
+                config,
+                providerRegistry,
+                now);
+        if (visualChange.isPresent()) {
+            if (dispatchAdaptiveVisualChange(state, config, now, visualChange.get())) {
+                return;
+            }
         }
 
         GovernorMode mode = determineMode(state);
@@ -355,6 +368,80 @@ public final class GovernorRunner {
         } else {
             logger.info("Governor PASSIVE: yield decision, no action dispatched");
         }
+    }
+
+    private boolean dispatchAdaptiveVisualChange(RuntimeState state, NozhConfig config, long now,
+            AdaptiveVisualQualityController.QualityChange change) {
+        if (change == null || change.targetValue() == null) {
+            return false;
+        }
+        PerfSnapshot baselineSnapshot = captureSnapshot();
+        int observationWindowSeconds = resolveObservationWindowSeconds(config, baselineSnapshot);
+        Optional<dev.nozh.core.bus.CapabilityValue> previousValue = providerRegistry.get(change.capabilityId())
+                .flatMap(provider -> provider.getCurrentValueSafe());
+        Command cmd = new Command.ApplyCapability(change.capabilityId(), change.targetValue());
+        PendingAction pending = new PendingAction(
+                now,
+                totalTicks,
+                change.capabilityId(),
+                cmd,
+                previousValue,
+                change.targetValue(),
+                state.avgFrametimeMs(),
+                state.p95FrametimeMs(),
+                state.currentScenario(),
+                state.scenarioConfidence(),
+                baselineSnapshot);
+
+        String actionSummary = "adaptive_visual=" + change.capabilityId().name()
+                + "=" + formatCapabilityValue(change.targetValue());
+        ActionHistoryEntry actionEntry = new ActionHistoryEntry(
+                now,
+                actionSummary,
+                state.currentScenario(),
+                state.scenarioConfidence(),
+                baselineSnapshot,
+                PerfSnapshot.empty(),
+                0.0,
+                0,
+                observationWindowSeconds,
+                ActionOutcome.NEUTRAL,
+                false);
+
+        try {
+            stateStore.update(currentState -> currentState.withDecision(change.reason(), now));
+        } catch (Exception e) {
+            logger.warn("Failed to update state decision: " + e.getMessage());
+        }
+
+        actionBus.dispatch(cmd, report -> {
+            if (report.succeeded()) {
+                logger.info("Adaptive visual quality action succeeded");
+                long appliedAt = report.finishedAtMillis() > 0 ? report.finishedAtMillis() : nowMillis();
+                visualQualityController.onChangeApplied(change.nextStep(), appliedAt);
+                predictiveAnalyzer.reset();
+                refreshCurrentSettings();
+            } else {
+                logger.warn("Adaptive visual quality action failed: " +
+                        report.error().orElse("unknown"));
+                try {
+                    stateStore.update(RuntimeState::withPendingActionCleared);
+                } catch (Exception e) {
+                    logger.error("Failed to clear pending action after execution failure");
+                }
+            }
+        });
+
+        try {
+            stateStore.update(currentState -> currentState.withGovernorAction(
+                    now,
+                    pending,
+                    actionEntry,
+                    config.historyMaxEntries));
+        } catch (Exception e) {
+            logger.warn("Failed to update state after adaptive visual action: " + e.getMessage());
+        }
+        return true;
     }
 
     private void syncBaselineIfNeeded(RuntimeState state) {
