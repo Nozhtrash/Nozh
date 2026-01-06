@@ -18,11 +18,13 @@ jobs:
       with:
         java-version: '17'
         distribution: 'temurin'
+        cache: 'gradle'
     
     - name: Setup Gradle
-      uses: gradle/gradle-build-action@v2
+      uses: gradle/gradle-build-action@v3
       with:
-        cache-disabled: true
+        gradle-home-cache-cleanup: true
+        cache-read-only: ${{ github.ref != 'refs/heads/main' && github.ref != 'refs/heads/master' }}
     
     - name: Grant execute permission for gradlew
       run: chmod +x gradlew
@@ -31,10 +33,25 @@ jobs:
       run: ./gradlew --version
     
     - name: Build with Gradle
-      run: ./gradlew build --no-daemon --refresh-dependencies
+      run: ./gradlew build --no-daemon --stacktrace
+      env:
+        # Improve Gradle performance in CI
+        GRADLE_OPTS: '-Dorg.gradle.daemon=false -Dorg.gradle.parallel=true -Dorg.gradle.caching=true'
     
     - name: Upload artifacts
+      if: success()
       uses: actions/upload-artifact@v4
       with:
         name: nozh-artifacts
         path: build/libs/*.jar
+        retention-days: 30
+    
+    - name: Upload build reports
+      if: failure()
+      uses: actions/upload-artifact@v4
+      with:
+        name: build-reports
+        path: |
+          build/reports/
+          build/test-results/
+        retention-days: 7
