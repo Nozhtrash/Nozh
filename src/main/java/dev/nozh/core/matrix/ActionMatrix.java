@@ -247,6 +247,17 @@ public final class ActionMatrix {
         return candidates;
     }
 
+    public List<ActionCandidate> generateCandidates(
+            ModePolicy policy,
+            String currentBound,
+            Scenario scenario,
+            OptimizationProfile profile,
+            double p95FrametimeMs,
+            int spikeCount) {
+        return generateCandidates(policy, currentBound, scenario, profile, p95FrametimeMs, spikeCount,
+                ActionMatrixTuning.defaults());
+    }
+
     public List<ActionCandidate> generateReverseCandidates(
             ModePolicy policy,
             Scenario scenario,
@@ -326,6 +337,16 @@ public final class ActionMatrix {
                 .thenComparing(Comparator.comparingDouble(ActionCandidate::confidenceScore).reversed()));
 
         return candidates;
+    }
+
+    public List<ActionCandidate> generateReverseCandidates(
+            ModePolicy policy,
+            Scenario scenario,
+            OptimizationProfile profile,
+            dev.nozh.core.state.BaselineSnapshot baselineSnapshot,
+            Map<CapabilityId, CapabilityValue> currentSettings) {
+        return generateReverseCandidates(policy, scenario, profile, baselineSnapshot, currentSettings,
+                ActionMatrixTuning.defaults());
     }
 
     private int determineTier(ProviderMetadata metadata) {
