@@ -4,6 +4,7 @@ import dev.nozh.core.context.Scenario;
 import dev.nozh.core.context.ScenarioConfidence;
 import dev.nozh.core.context.ScenarioDetector;
 import dev.nozh.core.context.ScenarioSnapshot;
+import dev.nozh.core.util.DebugLogger;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.network.ClientPlayerEntity;
 import net.minecraft.entity.mob.HostileEntity;
@@ -276,6 +277,29 @@ public final class FabricScenarioDetector implements ScenarioDetector {
     public void tick() {
         if (blocksPlacedRecent > 0) blocksPlacedRecent--;
         if (blocksBrokenRecent > 0) blocksBrokenRecent--;
+    }
+
+    public void logTelemetry() {
+        int attacks = countRecentActions(ActionType.ATTACK);
+        int damage = countRecentActions(ActionType.DAMAGE);
+        int inventory = countRecentActions(ActionType.INVENTORY);
+        DebugLogger.log("SCENARIO",
+                "Recent actions: attacks=" + attacks
+                        + " damage=" + damage
+                        + " placed=" + blocksPlacedRecent
+                        + " broken=" + blocksBrokenRecent
+                        + " inventory=" + inventory
+                        + " history=" + actionHistory.size());
+    }
+
+    private int countRecentActions(ActionType type) {
+        int count = 0;
+        for (PlayerAction action : actionHistory) {
+            if (action.type() == type) {
+                count++;
+            }
+        }
+        return count;
     }
 
     private record PlayerAction(long tick, ActionType type) {}
