@@ -10,6 +10,9 @@
         "MixinKeyboard",
         "MixinMouse",
         "MixinEntityRenderDispatcher",
+        "MixinGameRenderer",
+        "MixinArmorStandEntity",
+        "MixinItemFrameEntity",
         "MixinBlockEntityRenderDispatcher",
         "MixinClientChunkManager",
         "MixinParticleManager"
