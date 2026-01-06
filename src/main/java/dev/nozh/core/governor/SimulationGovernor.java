@@ -13,6 +13,7 @@ package dev.nozh.core.governor;
 
 import dev.nozh.core.matrix.ActionCandidate;
 import dev.nozh.core.matrix.ActionMatrix;
+import dev.nozh.core.matrix.ActionMatrixTuning;
 import dev.nozh.core.state.RuntimeState;
 import dev.nozh.api.PerfSnapshot;
 
@@ -86,7 +87,8 @@ public final class SimulationGovernor {
                         double reverseEpsilonMs,
                         boolean reverseReady,
                         dev.nozh.core.state.BaselineSnapshot baselineSnapshot,
-                        Map<dev.nozh.core.bus.CapabilityId, dev.nozh.core.bus.CapabilityValue> currentSettings) {
+                        Map<dev.nozh.core.bus.CapabilityId, dev.nozh.core.bus.CapabilityValue> currentSettings,
+                        ActionMatrixTuning tuning) {
                 // OFF mode → no decisions
                 if (mode == GovernorMode.OFF) {
                         return Optional.empty();
@@ -104,7 +106,8 @@ public final class SimulationGovernor {
                                         state.currentScenario(),
                                         profile,
                                         baselineSnapshot,
-                                        currentSettings);
+                                        currentSettings,
+                                        tuning);
                         if (!reverseCandidates.isEmpty()) {
                                 return Optional.of(reverseCandidates.get(0));
                         }
@@ -116,7 +119,8 @@ public final class SimulationGovernor {
                                 state.currentScenario(),
                                 profile,
                                 state.p95FrametimeMs(),
-                                state.spikeCount());
+                                state.spikeCount(),
+                                tuning);
 
                 if (candidates.isEmpty()) {
                         return Optional.empty();

@@ -4,6 +4,7 @@ import dev.nozh.core.NozhLogger;
 import dev.nozh.core.config.NozhConfig;
 import dev.nozh.core.matrix.ActionCandidate;
 import dev.nozh.core.matrix.ActionMatrix;
+import dev.nozh.core.matrix.ActionMatrixTuning;
 import dev.nozh.core.state.RuntimeState;
 
 import java.util.Map;
@@ -32,7 +33,8 @@ public final class HybridGovernor {
             boolean reverseReady,
             dev.nozh.core.state.BaselineSnapshot baselineSnapshot,
             Map<dev.nozh.core.bus.CapabilityId, dev.nozh.core.bus.CapabilityValue> currentSettings,
-            NozhConfig config) {
+            NozhConfig config,
+            ActionMatrixTuning tuning) {
         Optional<ActionCandidate> candidate = rulesGovernor.decide(
                 state,
                 mode,
@@ -43,7 +45,8 @@ public final class HybridGovernor {
                 reverseEpsilonMs,
                 reverseReady,
                 baselineSnapshot,
-                currentSettings);
+                currentSettings,
+                tuning);
         if (candidate.isEmpty()) {
             return candidate;
         }

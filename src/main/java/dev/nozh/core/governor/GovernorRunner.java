@@ -13,6 +13,7 @@ import dev.nozh.core.matrix.ActionCandidate;
 import dev.nozh.core.matrix.ActionMatrix;
 import dev.nozh.core.matrix.ActionSuccessTracker;
 import dev.nozh.core.matrix.ConfidenceCalculator;
+import dev.nozh.core.matrix.ActionMatrixTuning;
 import dev.nozh.core.governor.OptimizationProfile;
 import dev.nozh.core.compat.IrisCompat;
 import dev.nozh.core.compatibility.CompatibilityMatrix;
@@ -25,15 +26,20 @@ import dev.nozh.core.state.BaselineSnapshot;
 import dev.nozh.core.bus.CapabilityValue;
 import dev.nozh.api.PerfSnapshot;
 import dev.nozh.core.governor.ActionOutcome;
+import dev.nozh.core.preset.HardwareProfile;
+import dev.nozh.core.preset.ModpackProfile;
+import dev.nozh.core.preset.ModpackRegistry;
+import dev.nozh.core.preset.PresetTuningResolver;
 
 import dev.nozh.core.monitoring.ChunkLoadMonitor;
 import dev.nozh.core.monitoring.SystemMonitor;
 
-import java.util.Optional;
 import java.util.function.Supplier;
 import java.util.function.ToDoubleFunction;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
 
 /**
  * Governor runner - integration loop (Phase G).
@@ -60,6 +66,10 @@ public final class GovernorRunner {
     private final dev.nozh.core.monitoring.SystemMonitor systemMonitor;
     private final dev.nozh.core.monitoring.ChunkLoadMonitor chunkLoadMonitor;
     private final dev.nozh.core.context.ScenarioDetector scenarioDetector;
+    private final Optional<ModpackProfile> modpackProfile;
+    private ActionMatrixTuning actionMatrixTuning = ActionMatrixTuning.defaults();
+    private String lastHardwareProfile = "";
+    private String lastModpackId = "";
 
     private int tickCounter = 0;
     private long totalTicks = 0;
@@ -103,6 +113,7 @@ public final class GovernorRunner {
         this.predictiveAnalyzer = new PredictiveAnalyzer();
         this.systemMonitor = new SystemMonitor();
         this.chunkLoadMonitor = new ChunkLoadMonitor();
+        this.modpackProfile = ModpackRegistry.detect();
     }
 
     public void onTick() {
@@ -132,6 +143,7 @@ public final class GovernorRunner {
         long now = System.currentTimeMillis();
         NozhConfig config = ConfigManager.getConfig();
 
+        refreshActionMatrixTuning(config);
         syncObservationWindow(config);
         refreshCurrentSettings();
         RuntimeState state = stateStore.snapshotSafe();
@@ -208,7 +220,8 @@ public final class GovernorRunner {
                 reverseReady,
                 state.baselineSnapshot(),
                 state.currentSettings(),
-                config);
+                config,
+                actionMatrixTuning);
 
         if (perfManager != null && !perfManager.isDecisionWithinBudget(decisionStartNanos,
                 config.governorDecisionBudgetMs)) {
@@ -710,6 +723,19 @@ public final class GovernorRunner {
             perfManager.setObservationWindowSeconds(config.observationWindowSeconds);
         }
         lastObservationWindowSeconds = config.observationWindowSeconds;
+    }
+
+    private void refreshActionMatrixTuning(NozhConfig config) {
+        String hardwareProfile = config != null ? config.hardwareProfile : "";
+        String modpackId = modpackProfile.map(ModpackProfile::id).orElse("");
+        if (Objects.equals(lastHardwareProfile, hardwareProfile)
+                && Objects.equals(lastModpackId, modpackId)) {
+            return;
+        }
+        HardwareProfile hardware = HardwareProfile.parse(hardwareProfile).orElse(HardwareProfile.unknown());
+        actionMatrixTuning = PresetTuningResolver.resolve(hardware, modpackProfile.orElse(null));
+        lastHardwareProfile = hardwareProfile;
+        lastModpackId = modpackId;
     }
 
     private PerfSnapshot captureSnapshot() {
