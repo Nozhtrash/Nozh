@@ -113,11 +113,13 @@ public final class ManualConfirmationHandler {
             }
         });
 
-        // Remove from suggestion queue
+        // FIXED: Remove from suggestion queue using existing method
         try {
-            stateStore.update(currentState -> 
-                currentState.withSuggestedActionRemoved(suggestion)
-            );
+            stateStore.update(currentState -> {
+                List<PendingAction> updated = new ArrayList<>(currentState.suggestedActions());
+                updated.remove(suggestion);
+                return createStateWithUpdatedSuggestions(currentState, updated);
+            });
         } catch (Exception e) {
             // Ignore update failures
         }
@@ -132,12 +134,14 @@ public final class ManualConfirmationHandler {
             return;
         }
 
-        // Remove first suggestion
+        // FIXED: Remove first suggestion using existing method
         PendingAction suggestion = suggestions.get(0);
         try {
-            stateStore.update(currentState -> 
-                currentState.withSuggestedActionRemoved(suggestion)
-            );
+            stateStore.update(currentState -> {
+                List<PendingAction> updated = new ArrayList<>(currentState.suggestedActions());
+                updated.remove(suggestion);
+                return createStateWithUpdatedSuggestions(currentState, updated);
+            });
             showMessage("❌ Dismissed: " + suggestion.capability().name(), false);
         } catch (Exception e) {
             showMessage("❌ Failed to dismiss", true);
@@ -170,12 +174,62 @@ public final class ManualConfirmationHandler {
                             filtered.add(s);
                         }
                     }
-                    return currentState.withSuggestedActions(filtered);
+                    // FIXED: Use helper method to create new state
+                    return createStateWithUpdatedSuggestions(currentState, filtered);
                 });
             } catch (Exception e) {
                 // Ignore update failures
             }
         }
+    }
+
+    /**
+     * FIXED: Helper method to create a new RuntimeState with updated suggestions.
+     * Uses existing RuntimeState constructor to rebuild the state.
+     */
+    private RuntimeState createStateWithUpdatedSuggestions(RuntimeState currentState, List<PendingAction> suggestions) {
+        return new RuntimeState(
+            currentState.enabled(),
+            currentState.safeMode(),
+            currentState.autoTuning(),
+            currentState.debugLogs(),
+            currentState.governorDisabled(),
+            currentState.governorCooldownActive(),
+            currentState.governorLastActionTimestamp(),
+            currentState.benchmarkRunning(),
+            currentState.benchmarkValidity(),
+            currentState.benchmarkStartTimestamp(),
+            currentState.pendingAction(),
+            suggestions, // Updated suggestions list
+            currentState.pendingActionsCount(),
+            currentState.executionHistorySize(),
+            currentState.lastSnapshotHistorySize(),
+            currentState.actionHistory(),
+            currentState.sessionChangesCount(),
+            currentState.avgFrametimeMs(),
+            currentState.p95FrametimeMs(),
+            currentState.p99FrametimeMs(),
+            currentState.frametimeStddevMs(),
+            currentState.tickTimeAvg(),
+            currentState.tickTimeP95(),
+            currentState.spikeCount(),
+            currentState.lastDecisionReason(),
+            currentState.lastDecisionTimestamp(),
+            currentState.lastImpactMs(),
+            currentState.lastOutcome(),
+            currentState.lastDecisionAccepted(),
+            currentState.sessionStartTime(),
+            currentState.stateVersion(),
+            currentState.currentScenario(),
+            currentState.scenarioConfidence(),
+            currentState.lastScenarioChangeTimestamp(),
+            currentState.scenarioChangeCount(),
+            currentState.rapidScenarioChangeCount(),
+            currentState.combatAfkFlipCount(),
+            currentState.scenarioHistory(),
+            currentState.baselineSettings(),
+            currentState.currentSettings()
+        );
     }
 
     private void showMessage(String message, boolean error) {
@@ -206,7 +260,7 @@ public final class ManualConfirmationHandler {
             stateStore.update(currentState -> {
                 List<PendingAction> current = new ArrayList<>(currentState.suggestedActions());
                 current.add(suggestion);
-                return currentState.withSuggestedActions(current);
+                return createStateWithUpdatedSuggestions(currentState, current);
             });
             return true;
         } catch (Exception e) {
@@ -238,7 +292,7 @@ public final class ManualConfirmationHandler {
     public void clearAll() {
         try {
             stateStore.update(currentState -> 
-                currentState.withSuggestedActions(List.of())
+                createStateWithUpdatedSuggestions(currentState, List.of())
             );
             showMessage("All suggestions cleared", false);
         } catch (Exception e) {
