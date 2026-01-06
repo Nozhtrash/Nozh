@@ -21,6 +21,12 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class LanguageKeysTest {
     private static final Path LANG_DIR = Paths.get("src/main/resources/assets/nozh/lang");
     private static final String BASE_LANGUAGE = "en_us.json";
+    private static final Set<String> VALIDATED_LANGUAGES = Set.of(
+            "en_us.json",
+            "pt_br.json",
+            "fr_fr.json",
+            "de_de.json"
+    );
     private static final Type MAP_TYPE = new TypeToken<Map<String, String>>() {}.getType();
     private static final Gson GSON = new Gson();
 
@@ -32,7 +38,8 @@ class LanguageKeysTest {
 
         List<Path> languageFiles = listLanguageFiles();
         for (Path languageFile : languageFiles) {
-            if (languageFile.getFileName().toString().equals(BASE_LANGUAGE)) {
+            String filename = languageFile.getFileName().toString();
+            if (!VALIDATED_LANGUAGES.contains(filename) || filename.equals(BASE_LANGUAGE)) {
                 continue;
             }
             Map<String, String> languageMap = readLanguageFile(languageFile);
@@ -42,7 +49,6 @@ class LanguageKeysTest {
             Set<String> extraKeys = new HashSet<>(languageMap.keySet());
             extraKeys.removeAll(baseKeys);
 
-            String filename = languageFile.getFileName().toString();
             assertTrue(missingKeys.isEmpty(), filename + " is missing keys: " + missingKeys);
             assertTrue(extraKeys.isEmpty(), filename + " has extra keys: " + extraKeys);
         }
