@@ -49,7 +49,7 @@ public final class FabricScenarioDetector implements ScenarioDetector {
     private int blocksBrokenRecent = 0;
     
     // Stability tracking
-    private Scenario lastScenario = Scenario.STANDARD; // FIXED: Changed from UNKNOWN to STANDARD
+    private Scenario lastScenario = Scenario.STANDARD;
     private int stableCount = 0;
     private static final int STABILITY_THRESHOLD = 3; // 3 consecutive detections
 
@@ -61,8 +61,8 @@ public final class FabricScenarioDetector implements ScenarioDetector {
     public ScenarioSnapshot detect() {
         ClientPlayerEntity player = client.player;
         if (player == null || client.world == null) {
-            // FIXED: Use ScenarioConfidence.from() instead of high()
-            return new ScenarioSnapshot(Scenario.MENU, ScenarioConfidence.from(0.95, 1.0));
+            // FIXED: Pass double directly instead of ScenarioConfidence object
+            return new ScenarioSnapshot(Scenario.MENU, 0.95);
         }
 
         long currentTick = client.world.getTime();
@@ -86,9 +86,8 @@ public final class FabricScenarioDetector implements ScenarioDetector {
 
         double stability = Math.min(1.0, stableCount / (double) STABILITY_THRESHOLD);
         
-        // FIXED: Calculate confidence properly and use ScenarioConfidence.from()
-        double confidenceValue = calculateConfidenceValue(detected, stability);
-        ScenarioConfidence confidence = ScenarioConfidence.from(confidenceValue, stability);
+        // FIXED: Return confidence value directly as double
+        double confidence = calculateConfidenceValue(detected, stability);
 
         return new ScenarioSnapshot(detected, confidence);
     }
@@ -198,10 +197,10 @@ public final class FabricScenarioDetector implements ScenarioDetector {
             return Scenario.BUILDING;
         }
         if (maxScore == exploringScore && exploringScore >= 3) {
-            return Scenario.EXPLORING; // Now valid
+            return Scenario.EXPLORING;
         }
 
-        // Default - FIXED: Changed from UNKNOWN to STANDARD
+        // Default
         return Scenario.STANDARD;
     }
 
@@ -215,7 +214,6 @@ public final class FabricScenarioDetector implements ScenarioDetector {
         return hostiles.size();
     }
 
-    // FIXED: Renamed from calculateConfidence to calculateConfidenceValue to return double
     private double calculateConfidenceValue(Scenario scenario, double stability) {
         // Base confidence based on scenario type
         double baseConfidence = switch (scenario) {
