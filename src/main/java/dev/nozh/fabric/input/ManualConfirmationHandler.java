@@ -1,14 +1,18 @@
 package dev.nozh.fabric.input;
 
 import dev.nozh.core.bus.ActionBus;
-import dev.nozh.core.bus.Command;
 import dev.nozh.core.state.PendingAction;
 import dev.nozh.core.state.RuntimeState;
 import dev.nozh.core.state.StateStore;
+import dev.nozh.core.state.ActionHistoryEntry;
+import dev.nozh.core.governor.ActionOutcome;
+import dev.nozh.core.config.ConfigManager;
 import dev.nozh.fabric.hud.NozhHudRenderer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper;
+import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.option.KeyBinding;
+import net.minecraft.client.toast.SystemToast;
 import net.minecraft.client.util.InputUtil;
 import net.minecraft.text.Text;
 import org.lwjgl.glfw.GLFW;
@@ -43,26 +47,32 @@ public final class ManualConfirmationHandler {
     public ManualConfirmationHandler(
             StateStore stateStore,
             ActionBus actionBus,
-            NozhHudRenderer hudRenderer) {
+            NozhHudRenderer hudRenderer,
+            KeyBinding confirmKey,
+            KeyBinding dismissKey) {
         
         this.stateStore = stateStore;
         this.actionBus = actionBus;
         this.hudRenderer = hudRenderer;
 
         // Register keybinds
-        this.confirmKey = KeyBindingHelper.registerKeyBinding(new KeyBinding(
-            "key.nozh.confirm_suggestion",
-            InputUtil.Type.KEYSYM,
-            GLFW.GLFW_KEY_K,
-            "category.nozh"
-        ));
+        this.confirmKey = confirmKey != null
+            ? confirmKey
+            : KeyBindingHelper.registerKeyBinding(new KeyBinding(
+                "key.nozh.confirm_suggestion",
+                InputUtil.Type.KEYSYM,
+                GLFW.GLFW_KEY_K,
+                "category.nozh"
+            ));
 
-        this.dismissKey = KeyBindingHelper.registerKeyBinding(new KeyBinding(
-            "key.nozh.dismiss_suggestion",
-            InputUtil.Type.KEYSYM,
-            GLFW.GLFW_KEY_N,
-            "category.nozh"
-        ));
+        this.dismissKey = dismissKey != null
+            ? dismissKey
+            : KeyBindingHelper.registerKeyBinding(new KeyBinding(
+                "key.nozh.dismiss_suggestion",
+                InputUtil.Type.KEYSYM,
+                GLFW.GLFW_KEY_N,
+                "category.nozh"
+            ));
 
         // Register tick handler
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
@@ -84,45 +94,23 @@ public final class ManualConfirmationHandler {
     }
 
     private void handleConfirm() {
+        MinecraftClient client = MinecraftClient.getInstance();
+        if (client == null) {
+            return;
+        }
         RuntimeState state = stateStore.snapshotSafe();
         List<PendingAction> suggestions = state.suggestedActions();
 
         if (suggestions == null || suggestions.isEmpty()) {
-            showMessage("⚠️ No pending suggestions", true);
+            notifyClient(client,
+                Text.translatable("nozh.suggestion.apply.none"),
+                Text.translatable("nozh.suggestion.apply.none_detail"));
             return;
         }
 
         // Apply first suggestion
         PendingAction suggestion = suggestions.get(0);
-        Command command = suggestion.command();
-
-        showMessage("✓ Applying: " + suggestion.capability().name(), false);
-
-        // Dispatch action
-        actionBus.dispatch(command, report -> {
-            if (report.succeeded()) {
-                showMessage("✓ Applied successfully", false);
-                if (hudRenderer != null) {
-                    hudRenderer.notifyActionApplied(
-                        suggestion.capability().name(), 
-                        0.0
-                    );
-                }
-            } else {
-                showMessage("❌ Failed: " + report.error().orElse("unknown"), true);
-            }
-        });
-
-        // FIXED: Remove from suggestion queue using existing method
-        try {
-            stateStore.update(currentState -> {
-                List<PendingAction> updated = new ArrayList<>(currentState.suggestedActions());
-                updated.remove(suggestion);
-                return createStateWithUpdatedSuggestions(currentState, updated);
-            });
-        } catch (Exception e) {
-            // Ignore update failures
-        }
+        applySuggestion(client, suggestion);
     }
 
     private void handleDismiss() {
@@ -301,6 +289,13 @@ public final class ManualConfirmationHandler {
     }
 
     /**
+     * Apply the next suggestion via external trigger (keybind or command).
+     */
+    public void requestApply() {
+        handleConfirm();
+    }
+
+    /**
      * Get confirmation keybind for display.
      */
     public String getConfirmKeyName() {
@@ -312,5 +307,65 @@ public final class ManualConfirmationHandler {
      */
     public String getDismissKeyName() {
         return dismissKey.getBoundKeyLocalizedText().getString();
+    }
+
+    private void applySuggestion(MinecraftClient client, PendingAction pending) {
+        if (actionBus == null) {
+            notifyClient(client,
+                Text.translatable("nozh.suggestion.apply.failed"),
+                Text.translatable("nozh.suggestion.apply.unavailable"));
+            return;
+        }
+
+        long now = System.currentTimeMillis();
+        int maxHistoryEntries = ConfigManager.getConfig() != null ? ConfigManager.getConfig().historyMaxEntries : 50;
+        ActionHistoryEntry actionEntry = new ActionHistoryEntry(
+            now,
+            pending.capability().name() + "=" + pending.newValue(),
+            pending.scenario(),
+            pending.scenarioConfidence(),
+            pending.baselineSnapshot(),
+            dev.nozh.api.PerfSnapshot.empty(),
+            0.0,
+            0,
+            0,
+            ActionOutcome.NEUTRAL,
+            false);
+
+        actionBus.dispatch(pending.command(), report -> {
+            if (report.succeeded()) {
+                notifyClient(client,
+                    Text.translatable("nozh.suggestion.apply.success"),
+                    Text.translatable("nozh.suggestion.apply.success_detail",
+                        pending.capability().name(), pending.newValue().toString()));
+                if (hudRenderer != null) {
+                    hudRenderer.notifyActionApplied(
+                        pending.capability().name(),
+                        0.0
+                    );
+                }
+            } else {
+                String reason = report.error().orElse("unknown");
+                notifyClient(client,
+                    Text.translatable("nozh.suggestion.apply.failed"),
+                    Text.translatable("nozh.suggestion.apply.failed_detail", reason));
+                stateStore.update(RuntimeState::withPendingActionCleared);
+            }
+        });
+
+        stateStore.update(currentState -> currentState
+            .withAppliedSuggestion(now, pending, actionEntry, maxHistoryEntries));
+    }
+
+    private void notifyClient(MinecraftClient client, Text title, Text message) {
+        if (client == null) {
+            return;
+        }
+        if (client.getToastManager() != null) {
+            SystemToast.add(client.getToastManager(), SystemToast.Type.TUTORIAL_HINT, title, message);
+        }
+        if (client.inGameHud != null) {
+            client.inGameHud.getChatHud().addMessage(title.copy().append(Text.literal(" ")).append(message));
+        }
     }
 }

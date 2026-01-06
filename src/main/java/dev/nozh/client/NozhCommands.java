@@ -4,7 +4,6 @@ import dev.nozh.NozhConstants;
 import dev.nozh.core.compat.CompatService;
 import dev.nozh.core.config.ConfigManager;
 import dev.nozh.core.config.NozhConfig;
-import dev.nozh.core.state.PendingAction;
 import dev.nozh.core.state.RuntimeState;
 import dev.nozh.core.state.StateStore;
 import dev.nozh.core.safety.CrashLoopGuard;
@@ -92,11 +91,6 @@ public final class NozhCommands {
                             .then(ClientCommandManager.literal("disable")
                                     .executes(context -> {
                                         runDisable(context.getSource());
-                                        return 1;
-                                    }))
-                            .then(ClientCommandManager.literal("apply")
-                                    .executes(context -> {
-                                        runApplySuggestion(context.getSource());
                                         return 1;
                                     }))
                             .then(ClientCommandManager.literal("safemode")
@@ -315,17 +309,12 @@ public final class NozhCommands {
         source.sendFeedback(Text.translatable("nozh.disable.success"));
     }
 
-    private static void runApply(FabricClientCommandSource source) {
-        runApplySuggestion(source);
-    }
-
     private static void runApplySuggestion(FabricClientCommandSource source) {
-        MinecraftClient client = MinecraftClient.getInstance();
-        if (client == null) {
+        if (MinecraftClient.getInstance() == null) {
             source.sendFeedback(Text.translatable("nozh.suggestion.apply.unavailable"));
             return;
         }
-        NozhModClient.requestSuggestedAction(client, NozhModClient.ApplyTrigger.COMMAND);
+        NozhModClient.requestSuggestedAction();
     }
 
     private static void runClearSuggestion(FabricClientCommandSource source) {
