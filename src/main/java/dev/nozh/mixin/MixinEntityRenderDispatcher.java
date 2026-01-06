@@ -1,5 +1,8 @@
 package dev.nozh.mixin;
 
+import dev.nozh.client.NozhModClient;
+import dev.nozh.core.profiler.PerfManager;
+import dev.nozh.core.profiler.RenderPhase;
 import dev.nozh.core.render.RenderVisibilityDecider;
 import net.minecraft.client.render.VertexConsumerProvider;
 import net.minecraft.client.render.entity.EntityRenderDispatcher;
@@ -19,17 +22,36 @@ public class MixinEntityRenderDispatcher {
     private <E extends Entity> void onRender(E entity, double x, double y, double z, float yaw, float tickDelta,
             MatrixStack matrices, VertexConsumerProvider vertexConsumers, int light,
             CallbackInfo ci) {
+        PerfManager perfManager = NozhModClient.getPerfManager();
+        if (perfManager != null) {
+            perfManager.onRenderPhaseStart(RenderPhase.ENTITIES);
+        }
 
         // Armor Stands
         if (entity instanceof ArmorStandEntity && !RenderVisibilityDecider.isArmorStandVisible()) {
+            if (perfManager != null) {
+                perfManager.onRenderPhaseEnd(RenderPhase.ENTITIES);
+            }
             ci.cancel();
             return;
         }
 
         // Item Frames (and Glowing Item Frames which inherit)
         if (entity instanceof ItemFrameEntity && !RenderVisibilityDecider.isItemFrameVisible()) {
+            if (perfManager != null) {
+                perfManager.onRenderPhaseEnd(RenderPhase.ENTITIES);
+            }
             ci.cancel();
             return;
+        }
+    }
+
+    @Inject(method = "render", at = @At("RETURN"))
+    private <E extends Entity> void onRenderReturn(E entity, double x, double y, double z, float yaw, float tickDelta,
+            MatrixStack matrices, VertexConsumerProvider vertexConsumers, int light, CallbackInfo ci) {
+        PerfManager perfManager = NozhModClient.getPerfManager();
+        if (perfManager != null) {
+            perfManager.onRenderPhaseEnd(RenderPhase.ENTITIES);
         }
     }
 }
