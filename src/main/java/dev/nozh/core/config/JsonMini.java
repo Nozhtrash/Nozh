@@ -1,5 +1,6 @@
 package dev.nozh.core.config;
 
+import dev.nozh.core.safety.CrashFailureContext;
 import dev.nozh.core.safety.NozhState;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -80,6 +81,40 @@ public final class JsonMini {
         sb.append("  \"sessionStable\": ").append(state.sessionStable).append(",\n");
         sb.append("  \"safeModeActivatedAt\": ").append(state.safeModeActivatedAt).append(",\n");
         sb.append("  \"sessionStartTime\": ").append(state.sessionStartTime).append(",\n");
+
+        sb.append("  \"lastFailureContext\": ");
+        if (state.lastFailureContext == null) {
+            sb.append("null,\n");
+        } else {
+            CrashFailureContext ctx = state.lastFailureContext;
+            sb.append("{ ");
+            sb.append("\"timestamp\": ").append(ctx.timestamp()).append(", ");
+            sb.append("\"source\": \"").append(ctx.source() == null ? "" : ctx.source()).append("\", ");
+            sb.append("\"capabilityId\": \"").append(ctx.capabilityId() == null ? "" : ctx.capabilityId())
+                    .append("\", ");
+            sb.append("\"commandType\": \"").append(ctx.commandType() == null ? "" : ctx.commandType()).append("\", ");
+            sb.append("\"requestedValue\": \"").append(ctx.requestedValue() == null ? "" : ctx.requestedValue())
+                    .append("\", ");
+            sb.append("\"errorMessage\": \"").append(ctx.errorMessage() == null ? "" : ctx.errorMessage())
+                    .append("\", ");
+            sb.append("\"exceptionType\": \"").append(ctx.exceptionType() == null ? "" : ctx.exceptionType())
+                    .append("\"");
+            sb.append(" },\n");
+        }
+
+        sb.append("  \"quarantinedCapabilities\": [\n");
+        boolean firstQuarantine = true;
+        for (var entry : state.quarantinedCapabilities.entrySet()) {
+            if (!firstQuarantine) {
+                sb.append(",\n");
+            }
+            sb.append("    { ");
+            sb.append("\"id\": \"").append(entry.getKey().name()).append("\", ");
+            sb.append("\"retryAt\": ").append(entry.getValue());
+            sb.append(" }");
+            firstQuarantine = false;
+        }
+        sb.append("\n  ],\n");
 
         sb.append("  \"executionHistory\": [\n");
         java.util.List<dev.nozh.core.executor.ExecutedAction> history = state.executionHistory;
@@ -219,6 +254,19 @@ public final class JsonMini {
             s.safeModeActivatedAt = getLong(json, "safeModeActivatedAt", s.safeModeActivatedAt);
             s.sessionStartTime = getLong(json, "sessionStartTime", s.sessionStartTime);
 
+            String failureBlock = getObjectBlock(json, "lastFailureContext");
+            if (failureBlock != null) {
+                CrashFailureContext context = parseFailureContext(failureBlock);
+                if (context != null) {
+                    s.lastFailureContext = context;
+                }
+            }
+
+            String quarantineBlock = getArrayBlock(json, "quarantinedCapabilities");
+            if (quarantineBlock != null) {
+                parseQuarantinedCapabilities(quarantineBlock, s);
+            }
+
             String historyBlock = getArrayBlock(json, "executionHistory");
             if (historyBlock != null) {
                 parseExecutionHistory(historyBlock, s);
@@ -266,6 +314,63 @@ public final class JsonMini {
                     dev.nozh.core.executor.ExecutedAction action = parseActionObject(objJson);
                     if (action != null)
                         state.executionHistory.add(action);
+                    start = -1;
+                }
+            }
+        }
+    }
+
+    private static CrashFailureContext parseFailureContext(String json) {
+        if (json == null || json.isBlank() || json.contains(": null")) {
+            return null;
+        }
+        long timestamp = getLong(json, "timestamp", 0L);
+        String source = getRawString(json, "source");
+        String capabilityId = getRawString(json, "capabilityId");
+        String commandType = getRawString(json, "commandType");
+        String requestedValue = getRawString(json, "requestedValue");
+        String errorMessage = getRawString(json, "errorMessage");
+        String exceptionType = getRawString(json, "exceptionType");
+        if (timestamp == 0L && source == null && capabilityId == null) {
+            return null;
+        }
+        return new CrashFailureContext(
+                timestamp,
+                source,
+                capabilityId,
+                commandType,
+                requestedValue,
+                errorMessage,
+                exceptionType);
+    }
+
+    private static void parseQuarantinedCapabilities(String block, NozhState state) {
+        if (block.length() < 2) {
+            return;
+        }
+        String content = block.substring(1, block.length() - 1);
+        int depth = 0;
+        int start = -1;
+        for (int i = 0; i < content.length(); i++) {
+            char c = content.charAt(i);
+            if (c == '{') {
+                if (depth == 0) {
+                    start = i;
+                }
+                depth++;
+            } else if (c == '}') {
+                depth--;
+                if (depth == 0 && start != -1) {
+                    String objJson = content.substring(start, i + 1);
+                    String id = getRawString(objJson, "id");
+                    long retryAt = getLong(objJson, "retryAt", 0L);
+                    if (id != null && retryAt > 0L) {
+                        try {
+                            dev.nozh.core.bus.CapabilityId capabilityId = dev.nozh.core.bus.CapabilityId.valueOf(id);
+                            state.quarantinedCapabilities.put(capabilityId, retryAt);
+                        } catch (IllegalArgumentException ignored) {
+                        }
+                    }
                     start = -1;
                 }
             }
@@ -372,6 +477,42 @@ public final class JsonMini {
                 depth--;
                 if (depth == 0)
                     return json.substring(openBracket, i + 1);
+            }
+        }
+        return null;
+    }
+
+    private static String getObjectBlock(String json, String key) {
+        int startIndex = json.indexOf("\"" + key + "\"");
+        if (startIndex == -1) {
+            return null;
+        }
+        int colonIndex = json.indexOf(":", startIndex);
+        if (colonIndex != -1) {
+            int cursor = colonIndex + 1;
+            while (cursor < json.length() && Character.isWhitespace(json.charAt(cursor))) {
+                cursor++;
+            }
+            if (json.startsWith("null", cursor)) {
+                return null;
+            }
+        }
+        int openBrace = json.indexOf("{", startIndex);
+        if (openBrace == -1) {
+            return null;
+        }
+
+        int depth = 0;
+        for (int i = openBrace; i < json.length(); i++) {
+            char c = json.charAt(i);
+            if (c == '{') {
+                depth++;
+            }
+            if (c == '}') {
+                depth--;
+                if (depth == 0) {
+                    return json.substring(openBrace, i + 1);
+                }
             }
         }
         return null;

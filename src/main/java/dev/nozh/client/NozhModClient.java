@@ -14,6 +14,7 @@ import dev.nozh.core.safety.CrashLoopGuard;
 import dev.nozh.core.state.RuntimeState;
 import dev.nozh.core.state.StateStore;
 import dev.nozh.core.benchmark.InitialBenchmarkRunner;
+import dev.nozh.core.telemetry.TelemetryManager;
 import dev.nozh.fabric.FabricNozhLogger;
 import dev.nozh.fabric.capability.CompatAwareMinecraftOptionsAdapter;
 import dev.nozh.fabric.capability.MinecraftOptionsAdapter;
@@ -59,6 +60,7 @@ public class NozhModClient implements ClientModInitializer {
     private static KeyBinding toggleHudKey;
     private static KeyBinding applySuggestionKey;
     private static ManualConfirmationHandler manualConfirmationHandler;
+    private static TelemetryManager telemetryManager;
     private static boolean safeModeNotified = false;
     private static String lastSessionKey = null;
 
@@ -82,6 +84,9 @@ public class NozhModClient implements ClientModInitializer {
 
         // 1. Create logger
         NozhLogger logger = new FabricNozhLogger();
+
+        telemetryManager = new TelemetryManager();
+        CrashLoopGuard.setTelemetryManager(telemetryManager);
 
         // 2. Get StateStore singleton
         stateStore = StateStore.getInstance();

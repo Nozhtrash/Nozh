@@ -4,6 +4,8 @@ import dev.nozh.api.PerfSnapshot;
 import dev.nozh.core.NozhLogger;
 import dev.nozh.core.intelligence.SessionLearning;
 import dev.nozh.core.matrix.ActionSuccessTracker;
+import dev.nozh.core.safety.CrashFailureContext;
+import dev.nozh.core.safety.CrashLoopGuard;
 
 import java.util.Optional;
 import java.util.function.Consumer;
@@ -101,6 +103,22 @@ public final class StandardActionProcessor implements ActionProcessor {
             successTracker.recordPreActionSnapshot(capability, beforeSnapshot);
         }
 
+        if (CrashLoopGuard.isCapabilityQuarantined(capability)) {
+            long finishedAt = System.currentTimeMillis();
+            CommandExecutionReport report = new CommandExecutionReport(
+                    cmd.id(),
+                    cmd.type(),
+                    capability,
+                    CommandLifecycle.ABORTED,
+                    0,
+                    startedAt,
+                    finishedAt,
+                    Optional.of("Capability quarantined after crash loop recovery"),
+                    Optional.empty());
+            callback.accept(report);
+            return;
+        }
+
         // Store old value for potential rollback
         Optional<CapabilityValue> oldValue = Optional.empty();
         boolean supportsRollback = executor.supportsRollback(capability);
@@ -126,6 +144,13 @@ public final class StandardActionProcessor implements ActionProcessor {
                 // Execution reported failure
                 CapabilityExecutor.ExecutionResult.Failure failure = (CapabilityExecutor.ExecutionResult.Failure) result;
                 error = Optional.of(failure.error());
+                CrashLoopGuard.recordFailureContext(CrashFailureContext.forCommandFailure(
+                        "ACTION_EXECUTION",
+                        capability,
+                        cmd.type(),
+                        value,
+                        failure.error(),
+                        null));
 
                 // Attempt rollback if supported
                 if (supportsRollback && oldValue.isPresent()) {
@@ -147,6 +172,13 @@ public final class StandardActionProcessor implements ActionProcessor {
         } catch (Throwable t) {
             // Execution threw exception (NEVER propagate)
             error = Optional.of(t.getMessage() != null ? t.getMessage() : t.getClass().getSimpleName());
+            CrashLoopGuard.recordFailureContext(CrashFailureContext.forCommandFailure(
+                    "ACTION_EXECUTION",
+                    capability,
+                    cmd.type(),
+                    value,
+                    error.orElse("unknown"),
+                    t));
 
             // Attempt rollback if supported
             if (supportsRollback && oldValue.isPresent()) {

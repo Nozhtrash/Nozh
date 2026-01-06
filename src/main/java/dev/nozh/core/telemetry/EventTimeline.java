@@ -72,6 +72,7 @@ public final class EventTimeline {
         GOVERNOR_DECISION,
         ROLLBACK,
         SAFE_MODE,
+        CRASH_LOOP,
         COMPAT_CONFLICT,
         PERFORMANCE_SPIKE,
         CONFIG_CHANGE,
