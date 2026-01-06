@@ -11,16 +11,38 @@ base {
 }
 
 repositories {
-	maven { url = 'https://api.modrinth.com/maven' }
+	// Primary repositories
+	mavenCentral()
+	maven { 
+		url = 'https://maven.fabricmc.net/'
+		content {
+			includeGroup 'net.fabricmc'
+		}
+	}
+	
+	// Modrinth for mod dependencies
+	maven { 
+		url = 'https://api.modrinth.com/maven' 
+		content {
+			includeGroup 'maven.modrinth'
+		}
+	}
+	
+	// Terraformers for additional mods
 	maven {
 		url = 'https://maven.terraformersmc.com/releases/'
 		content {
 			includeGroup 'com.terraformersmc'
 		}
 	}
-
-	maven { url = 'https://maven.fabricmc.net/' }
-	mavenCentral()
+	
+	// Fallback repositories (in case of Maven Central issues)
+	maven { 
+		url = 'https://repo1.maven.org/maven2/' 
+	}
+	maven { 
+		url = 'https://jitpack.io' 
+	}
 }
 
 loom {
@@ -53,6 +75,7 @@ dependencies {
 
 test {
 	useJUnitPlatform()
+	maxParallelForks = Runtime.runtime.availableProcessors().intdiv(2) ?: 1
 }
 
 java {
@@ -64,6 +87,7 @@ java {
 tasks.withType(JavaCompile).configureEach {
 	options.encoding = "UTF-8"
 	options.release = 17
+	options.compilerArgs += ['-Xlint:deprecation', '-Xlint:unchecked']
 }
 
 processResources {
