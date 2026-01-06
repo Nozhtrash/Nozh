@@ -97,7 +97,9 @@ public final class CommandValidator {
 
         // Boolean capabilities
         if (cap == CapabilityId.ENTITY_SHADOWS || cap == CapabilityId.VSYNC ||
-                cap == CapabilityId.SMOOTH_LIGHTING) {
+                cap == CapabilityId.SMOOTH_LIGHTING || cap == CapabilityId.DYNAMIC_LIGHTING ||
+                cap == CapabilityId.ARMOR_STANDS || cap == CapabilityId.ITEM_FRAMES ||
+                cap == CapabilityId.BLOCK_ENTITIES || cap == CapabilityId.ANIMATIONS) {
             if (!(val instanceof CapabilityValue.BoolValue)) {
                 return new ValidationResult.Invalid(
                         cap + " requires BoolValue, got " + val.getClass().getSimpleName());
@@ -110,6 +112,14 @@ public final class CommandValidator {
             if (!(val instanceof CapabilityValue.FloatValue)) {
                 return new ValidationResult.Invalid(
                         cap + " requires FloatValue, got " + val.getClass().getSimpleName());
+            }
+            return new ValidationResult.Valid();
+        }
+
+        if (cap == CapabilityId.DISTORTION_EFFECT_SCALE) {
+            if (!(val instanceof CapabilityValue.FloatValue) && !(val instanceof CapabilityValue.IntValue)) {
+                return new ValidationResult.Invalid(
+                        cap + " requires FloatValue or IntValue, got " + val.getClass().getSimpleName());
             }
             return new ValidationResult.Valid();
         }
@@ -179,6 +189,16 @@ public final class CommandValidator {
             float v = ((CapabilityValue.FloatValue) val).value();
             if (v < 0.25f || v > 1.0f) {
                 return new ValidationResult.Invalid("Resolution scale must be 0.25-1.0, got " + v);
+            }
+            return new ValidationResult.Valid();
+        }
+
+        if (cap == CapabilityId.DISTORTION_EFFECT_SCALE) {
+            double v = val instanceof CapabilityValue.FloatValue floatValue
+                    ? floatValue.value()
+                    : ((CapabilityValue.IntValue) val).value();
+            if (v < 0.0 || v > 1.0) {
+                return new ValidationResult.Invalid("Distortion effect scale must be 0.0-1.0, got " + v);
             }
             return new ValidationResult.Valid();
         }
