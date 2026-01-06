@@ -135,8 +135,9 @@ public class NozhModClient implements ClientModInitializer {
                 () -> perfManager != null ? perfManager.getSnapshot() : dev.nozh.api.PerfSnapshot.empty(),
                 successTracker);
 
-        // Create ScenarioDetector (Fabric implementation)
-        dev.nozh.core.context.ScenarioDetector scenarioDetector = new dev.nozh.fabric.context.FabricScenarioDetector();
+        // Create ScenarioDetector (Fabric implementation) - FIXED: Added MinecraftClient parameter
+        MinecraftClient client = MinecraftClient.getInstance();
+        dev.nozh.core.context.ScenarioDetector scenarioDetector = new dev.nozh.fabric.context.FabricScenarioDetector(client);
 
         // 9. Create GovernorRunner with all dependencies
         governorRunner = new GovernorRunner(
@@ -179,7 +180,7 @@ public class NozhModClient implements ClientModInitializer {
         // === TICK HANDLER SETUP ===
 
         // Register tick handler for ActionBus, telemetry updates, and governor
-        ClientTickEvents.END_CLIENT_TICK.register(client -> {
+        ClientTickEvents.END_CLIENT_TICK.register(clientInstance -> {
             if (!ConfigManager.getConfig().enabled)
                 return;
 
@@ -204,13 +205,13 @@ public class NozhModClient implements ClientModInitializer {
 
             if (applySuggestionKey != null) {
                 while (applySuggestionKey.wasPressed()) {
-                    requestSuggestedAction(client, ApplyTrigger.KEYBIND);
+                    requestSuggestedAction(clientInstance, ApplyTrigger.KEYBIND);
                 }
             }
 
             if (!safeModeNotified && CrashLoopGuard.isInSafeMode()) {
                 safeModeNotified = true;
-                notifyClient(client,
+                notifyClient(clientInstance,
                         Text.translatable("nozh.safemode.entered.title"),
                         Text.translatable("nozh.safemode.entered.message"));
             }
@@ -230,18 +231,18 @@ public class NozhModClient implements ClientModInitializer {
             }
         });
 
-        ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> {
+        ClientPlayConnectionEvents.DISCONNECT.register((handler, clientInstance) -> {
             if (sessionLearning != null) {
                 sessionLearning.save();
             }
         });
 
-        ClientPlayConnectionEvents.JOIN.register((handler, sender, client) -> {
+        ClientPlayConnectionEvents.JOIN.register((handler, sender, clientInstance) -> {
             if (governorRunner != null) {
                 governorRunner.captureBaselineSettings();
             }
             if (sessionLearning != null) {
-                String sessionKey = resolveSessionKey(client, handler);
+                String sessionKey = resolveSessionKey(clientInstance, handler);
                 if (lastSessionKey == null || !lastSessionKey.equals(sessionKey)) {
                     sessionLearning.resetForSession(sessionKey);
                     sessionLearning.save();

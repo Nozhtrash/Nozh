@@ -9,16 +9,14 @@
   "nozh.hud.scenario.loading": "Escenario: CARGANDO",
   "nozh.hud.last_action": "✓ %s (+%d%% FPS)",
   "nozh.hud.suggestion": "⚡ Sugerencia: %s (Presiona K)",
-  "nozh.hud.mod_coordination": "Coordinando con: %s",
-  
-  "key.nozh.confirm_suggestion": "Confirmar Sugerencia NOZH",
-  "key.nozh.dismiss_suggestion": "Descartar Sugerencia NOZH",
-  "category.nozh": "Optimización NOZH",
   
   "nozh.command.selfcheck": "Ejecutando auto-diagnóstico de NOZH...",
   "nozh.command.status": "Estado de NOZH",
   "nozh.command.history": "Últimas 10 Decisiones del Gobernador",
   "nozh.command.perf": "Análisis de Rendimiento",
   "nozh.command.safemode.reset": "Modo Seguro reiniciado forzosamente",
-  "nozh.command.coordination": "Reporte de Coordinación de Mods"
+  
+  "key.nozh.confirm_suggestion": "Confirmar Sugerencia (K)",
+  "key.nozh.dismiss_suggestion": "Descartar Sugerencia (N)",
+  "category.nozh": "Optimización NOZH"
 }

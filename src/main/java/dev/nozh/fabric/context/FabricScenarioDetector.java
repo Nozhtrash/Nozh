@@ -61,7 +61,6 @@ public final class FabricScenarioDetector implements ScenarioDetector {
     public ScenarioSnapshot detect() {
         ClientPlayerEntity player = client.player;
         if (player == null || client.world == null) {
-            // FIXED: Pass double directly instead of ScenarioConfidence object
             return new ScenarioSnapshot(Scenario.MENU, 0.95);
         }
 
@@ -85,9 +84,7 @@ public final class FabricScenarioDetector implements ScenarioDetector {
         }
 
         double stability = Math.min(1.0, stableCount / (double) STABILITY_THRESHOLD);
-        
-        // FIXED: Return confidence value directly as double
-        double confidence = calculateConfidenceValue(detected, stability);
+        double confidence = calculateConfidence(detected, stability);
 
         return new ScenarioSnapshot(detected, confidence);
     }
@@ -214,7 +211,7 @@ public final class FabricScenarioDetector implements ScenarioDetector {
         return hostiles.size();
     }
 
-    private double calculateConfidenceValue(Scenario scenario, double stability) {
+    private double calculateConfidence(Scenario scenario, double stability) {
         // Base confidence based on scenario type
         double baseConfidence = switch (scenario) {
             case MENU, LOADING -> 0.95; // Very certain
