@@ -59,6 +59,7 @@ public class NozhModClient implements ClientModInitializer {
     private static ConfigSyncService configSyncService;
     private static dev.nozh.core.intelligence.SessionLearning sessionLearning;
     private static ProviderRegistry providerRegistry;
+    private static dev.nozh.fabric.context.FabricScenarioDetector scenarioDetector;
     private static KeyBinding toggleHudKey;
     private static KeyBinding applySuggestionKey;
     private static boolean safeModeNotified = false;
@@ -137,7 +138,7 @@ public class NozhModClient implements ClientModInitializer {
 
         // Create ScenarioDetector (Fabric implementation) - FIXED: Added MinecraftClient parameter
         MinecraftClient client = MinecraftClient.getInstance();
-        dev.nozh.core.context.ScenarioDetector scenarioDetector = new dev.nozh.fabric.context.FabricScenarioDetector(client);
+        scenarioDetector = new dev.nozh.fabric.context.FabricScenarioDetector(client);
 
         // 9. Create GovernorRunner with all dependencies
         governorRunner = new GovernorRunner(
@@ -195,6 +196,10 @@ public class NozhModClient implements ClientModInitializer {
             // Sample tick time (must be called once per tick)
             tickTimeSampler.onTick();
 
+            if (scenarioDetector != null) {
+                scenarioDetector.tick();
+            }
+
             if (toggleHudKey != null) {
                 while (toggleHudKey.wasPressed()) {
                     var config = ConfigManager.getConfig();
@@ -219,6 +224,9 @@ public class NozhModClient implements ClientModInitializer {
             // Update RuntimeState with telemetry data every second
             if (tickCounter % TELEMETRY_UPDATE_INTERVAL == 0) {
                 updateTelemetryState();
+                if (scenarioDetector != null) {
+                    scenarioDetector.logTelemetry();
+                }
             }
 
             // Run governor decision loop every 5 seconds
@@ -307,6 +315,10 @@ public class NozhModClient implements ClientModInitializer {
 
     public static StateStore getStateStore() {
         return stateStore;
+    }
+
+    public static dev.nozh.fabric.context.FabricScenarioDetector getScenarioDetector() {
+        return scenarioDetector;
     }
 
     public static KeyBinding getApplySuggestionKey() {
