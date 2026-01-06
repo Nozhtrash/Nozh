@@ -461,7 +461,7 @@ public final class ChaosTestRunner {
             return new ProviderMetadata() {
                 @Override
                 public SideEffects sideEffects() {
-                    return SideEffects.NONE;
+                    return SideEffects.none();
                 }
 
                 @Override
