@@ -4,6 +4,11 @@
 **Version:** v0.2-alpha  
 **Status:** ZERO DEBT
 
+## Implementation Status (Explicit)
+
+- **Implemented (v0.1.x)**: Current shipped baseline, no new wiring beyond existing TODO placeholders.
+- **Planned (v0.2-beta)**: RuntimeState wiring, Chaos scenarios, and HUD integration TODOs listed below.
+
 ---
 
 ## TODOs Analysis (24 found)
