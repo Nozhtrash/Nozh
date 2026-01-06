@@ -6,6 +6,7 @@ import dev.nozh.core.capability.ProviderRegistry;
 import dev.nozh.core.capability.ProviderStatus;
 import dev.nozh.core.context.Scenario;
 import dev.nozh.core.compatibility.CompatibilityMatrix;
+import dev.nozh.api.compat.StewardshipMode;
 import dev.nozh.core.governor.ActionOutcome;
 import dev.nozh.core.issues.Issue;
 import dev.nozh.core.issues.IssueSeverity;
@@ -130,6 +131,23 @@ public final class HudViewModelBuilder {
         String scenarioKey = scenario.translationKey();
         double scenarioConfidence = state.scenarioConfidence();
 
+        List<HudViewModel.DirectorTrace> stewardshipTraces = new ArrayList<>();
+        if (compatibilityMatrix != null) {
+            for (var decision : compatibilityMatrix.getStewardshipTraces()) {
+                StewardshipMode mode = decision.mode();
+                if (mode == null || mode == StewardshipMode.NONE) {
+                    continue;
+                }
+                String modeKey = "nozh.hud.director.mode." + mode.name().toLowerCase();
+                String reason = decision.reason() == null ? "" : decision.reason();
+                stewardshipTraces.add(new HudViewModel.DirectorTrace(
+                        decision.capability().name(),
+                        decision.steward(),
+                        modeKey,
+                        reason));
+            }
+        }
+
         return new HudViewModel(
                 state.enabled(),
                 dev.nozh.core.governor.GovernorMode.AUTO_CONSERVATIVE, // Default
@@ -180,6 +198,7 @@ public final class HudViewModelBuilder {
                 benchmarkRunning,
                 benchmarkValidity,
 
+                stewardshipTraces,
                 providerVMs,
                 issues != null ? new ArrayList<>(issues) : List.of(),
                 recentActions);

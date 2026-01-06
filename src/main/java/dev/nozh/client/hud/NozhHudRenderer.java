@@ -156,6 +156,7 @@ public class NozhHudRenderer implements HudRenderCallback {
 
         lines.add(Text.translatable("nozh.hud.last_action", resolveLastAction(viewModel)));
         lines.add(Text.translatable("nozh.hud.last_outcome", resolveLastOutcome(viewModel)));
+        appendDirectorTraces(lines, viewModel);
         NozhConfig config = ConfigManager.getConfig();
         if (config == null || config.showHudSuggestions) {
             if (state != null && !state.autoTuning()) {
@@ -163,6 +164,29 @@ public class NozhHudRenderer implements HudRenderCallback {
             }
         }
         return lines;
+    }
+
+    private void appendDirectorTraces(List<Text> lines, HudViewModel viewModel) {
+        if (viewModel == null || viewModel.stewardshipTraces() == null || viewModel.stewardshipTraces().isEmpty()) {
+            return;
+        }
+        lines.add(Text.translatable("nozh.hud.director.title"));
+        int limit = Math.min(viewModel.stewardshipTraces().size(), 5);
+        for (int i = 0; i < limit; i++) {
+            HudViewModel.DirectorTrace trace = viewModel.stewardshipTraces().get(i);
+            Text mode = Text.translatable(trace.modeKey());
+            if (trace.reason() != null && !trace.reason().isBlank()) {
+                lines.add(Text.translatable("nozh.hud.director.trace_reason",
+                        trace.capabilityId(), trace.steward(), mode, trace.reason()));
+            } else {
+                lines.add(Text.translatable("nozh.hud.director.trace",
+                        trace.capabilityId(), trace.steward(), mode));
+            }
+        }
+        int remaining = viewModel.stewardshipTraces().size() - limit;
+        if (remaining > 0) {
+            lines.add(Text.translatable("nozh.hud.director.more", remaining));
+        }
     }
 
     private String resolveMode(RuntimeState state) {
