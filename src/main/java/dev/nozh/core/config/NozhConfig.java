@@ -16,6 +16,7 @@ public class NozhConfig {
     public String language = "auto"; // "auto", "en_us", "es_cl"
     public boolean showHud = true;
     public boolean showHudSuggestions = true;
+    public String hudMode = "ANALYST"; // COMPACT, ANALYST, EXPERT
     public String hudAnchor = "TOP_LEFT"; // TOP_LEFT, TOP_RIGHT, BOTTOM_LEFT, BOTTOM_RIGHT
     public int hudOffsetX = 0;
     public int hudOffsetY = 0;
@@ -219,6 +220,11 @@ public class NozhConfig {
             corrected = true;
         }
 
+        if (!isValidHudMode(hudMode)) {
+            hudMode = "ANALYST";
+            corrected = true;
+        }
+
         int clampedHudOffsetX = clamp(hudOffsetX, -200, 200);
         if (clampedHudOffsetX != hudOffsetX) {
             hudOffsetX = clampedHudOffsetX;
@@ -261,5 +267,14 @@ public class NozhConfig {
                 || anchor.equals("TOP_RIGHT")
                 || anchor.equals("BOTTOM_LEFT")
                 || anchor.equals("BOTTOM_RIGHT");
+    }
+
+    private boolean isValidHudMode(String mode) {
+        if (mode == null) {
+            return false;
+        }
+        return mode.equals("COMPACT")
+                || mode.equals("ANALYST")
+                || mode.equals("EXPERT");
     }
 }

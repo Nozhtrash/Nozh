@@ -59,6 +59,7 @@ public class NozhModClient implements ClientModInitializer {
     private static InitialBenchmarkRunner initialBenchmarkRunner;
     private static KeyBinding toggleHudKey;
     private static KeyBinding applySuggestionKey;
+    private static KeyBinding exportReportKey;
     private static ManualConfirmationHandler manualConfirmationHandler;
     private static TelemetryManager telemetryManager;
     private static boolean safeModeNotified = false;
@@ -170,6 +171,12 @@ public class NozhModClient implements ClientModInitializer {
                 GLFW.GLFW_KEY_K,
                 "category.nozh"));
 
+        exportReportKey = KeyBindingHelper.registerKeyBinding(new KeyBinding(
+                "key.nozh.export_report",
+                InputUtil.Type.KEYSYM,
+                GLFW.GLFW_KEY_P,
+                "category.nozh"));
+
         manualConfirmationHandler = new ManualConfirmationHandler(
                 stateStore,
                 actionBus,
@@ -195,7 +202,8 @@ public class NozhModClient implements ClientModInitializer {
                 stateStore,
                 providerRegistry,
                 () -> perfManager != null ? perfManager.getSnapshot() : dev.nozh.api.PerfSnapshot.empty(),
-                perfManager));
+                perfManager,
+                NozhModClient::resolveExportKeyLabel));
 
         // === TICK HANDLER SETUP ===
 
@@ -234,6 +242,12 @@ public class NozhModClient implements ClientModInitializer {
                     var config = ConfigManager.getConfig();
                     config.showHud = !config.showHud;
                     ConfigManager.saveAndNotify();
+                }
+            }
+
+            if (exportReportKey != null) {
+                while (exportReportKey.wasPressed()) {
+                    exportHudReport(clientInstance);
                 }
             }
 
@@ -363,6 +377,34 @@ public class NozhModClient implements ClientModInitializer {
             return;
         }
         manualConfirmationHandler.requestApply();
+    }
+
+    private static void exportHudReport(MinecraftClient client) {
+        if (perfManager == null) {
+            notifyClient(client,
+                    Text.translatable("nozh.telemetry.export.failed"),
+                    Text.translatable("nozh.telemetry.export.unavailable"));
+            return;
+        }
+        try {
+            var output = perfManager.exportTelemetry(
+                    NozhConstants.CONFIG_DIR.resolve("telemetry_exports"),
+                    dev.nozh.core.telemetry.TelemetryExportFormat.JSON);
+            notifyClient(client,
+                    Text.translatable("nozh.telemetry.export.success", output.toString()),
+                    Text.translatable("nozh.telemetry.export.complete"));
+        } catch (Exception e) {
+            notifyClient(client,
+                    Text.translatable("nozh.telemetry.export.failed"),
+                    Text.literal(e.getMessage() != null ? e.getMessage() : "Error"));
+        }
+    }
+
+    private static String resolveExportKeyLabel() {
+        if (exportReportKey == null) {
+            return "";
+        }
+        return exportReportKey.getBoundKeyLocalizedText().getString();
     }
 
     private static void notifyClient(MinecraftClient client, Text title, Text message) {

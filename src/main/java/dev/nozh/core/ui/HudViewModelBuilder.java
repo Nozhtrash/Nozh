@@ -105,7 +105,7 @@ public final class HudViewModelBuilder {
         String lastDecisionReason = "";
         long lastDecisionTimestamp = 0L;
         String directorSteward = "NOZH";
-        String currentBound = "BALANCED";
+        String currentBound = resolveBoundKey(state);
 
         boolean benchmarkRunning = state.benchmarkRunning();
         String benchmarkValidity = state.benchmarkValidity();
@@ -212,6 +212,40 @@ public final class HudViewModelBuilder {
             return "ROLLBACK";
         }
         return outcome.name();
+    }
+
+    private static String resolveBoundKey(RuntimeState state) {
+        if (state == null) {
+            return "nozh.hud.bound.unknown";
+        }
+        double avgMs = state.avgFrametimeMs();
+        double p95Ms = state.p95FrametimeMs();
+        double tickAvgMs = state.tickTimeAvg();
+        double tickP95Ms = state.tickTimeP95();
+
+        boolean frameAvailable = avgMs >= 0 || p95Ms >= 0;
+        boolean tickAvailable = tickAvgMs >= 0 || tickP95Ms >= 0;
+
+        if (!frameAvailable && !tickAvailable) {
+            return "nozh.hud.bound.unknown";
+        }
+
+        double frameMs = avgMs >= 0 ? avgMs : p95Ms;
+        double tickMs = tickAvgMs >= 0 ? tickAvgMs : tickP95Ms;
+
+        boolean frameHigh = frameAvailable && frameMs > 16.67;
+        boolean tickHigh = tickAvailable && tickMs > 50.0;
+
+        if (frameHigh && tickHigh) {
+            return "nozh.hud.bound.mixed";
+        }
+        if (tickHigh) {
+            return "nozh.hud.bound.cpu";
+        }
+        if (frameHigh) {
+            return "nozh.hud.bound.gpu";
+        }
+        return "nozh.hud.bound.balanced";
     }
 
     private HudViewModelBuilder() {
