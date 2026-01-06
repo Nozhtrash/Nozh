@@ -9,6 +9,8 @@ import dev.nozh.core.executor.handlers.DecreaseEntityDistanceHandler;
 import dev.nozh.core.executor.handlers.DecreaseParticlesHandler;
 import dev.nozh.core.executor.handlers.DecreaseRenderDistanceHandler;
 import dev.nozh.core.executor.handlers.DecreaseSimulationDistanceHandler;
+import dev.nozh.core.safety.CrashFailureContext;
+import dev.nozh.core.safety.CrashLoopGuard;
 import dev.nozh.core.safety.NozhState;
 import dev.nozh.core.safety.StateManager;
 import net.minecraft.client.MinecraftClient;
@@ -67,6 +69,13 @@ public class StandardActionExecutor implements ActionExecutor {
             success = handler.execute(client);
         } catch (Exception e) {
             NozhConstants.LOGGER.error("[EXECUTOR] FAILED handling action {}: {}", decision.type(), e.getMessage());
+            CrashLoopGuard.recordFailureContext(CrashFailureContext.forCommandFailure(
+                    "ACTION_HANDLER",
+                    resolveCapabilityId(decision.type()),
+                    null,
+                    null,
+                    e.getMessage(),
+                    e));
             return new ExecutionResult(ExecutionStatus.FAILED, e.getMessage(), now);
         }
 
@@ -132,5 +141,21 @@ public class StandardActionExecutor implements ActionExecutor {
                 NozhConstants.LOGGER.warn("[EXECUTOR] FAILED to rollback action {}", last.type());
             }
         }
+    }
+
+    private static dev.nozh.core.bus.CapabilityId resolveCapabilityId(ActionType actionType) {
+        if (actionType == null) {
+            return null;
+        }
+        return switch (actionType) {
+            case DECREASE_PARTICLES -> dev.nozh.core.bus.CapabilityId.PARTICLES;
+            case DECREASE_RENDER_DISTANCE -> dev.nozh.core.bus.CapabilityId.RENDER_DISTANCE;
+            case DECREASE_SIMULATION_DISTANCE -> dev.nozh.core.bus.CapabilityId.SIMULATION_DISTANCE;
+            case DECREASE_ENTITY_DISTANCE -> dev.nozh.core.bus.CapabilityId.ENTITY_DISTANCE;
+            case DISABLE_CLOUDS -> dev.nozh.core.bus.CapabilityId.CLOUDS;
+            case DISABLE_ENTITY_SHADOWS -> dev.nozh.core.bus.CapabilityId.ENTITY_SHADOWS;
+            case DECREASE_BIOME_BLEND -> dev.nozh.core.bus.CapabilityId.BIOME_BLEND;
+            default -> null;
+        };
     }
 }

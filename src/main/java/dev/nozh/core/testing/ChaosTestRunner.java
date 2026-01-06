@@ -25,6 +25,11 @@ import dev.nozh.core.matrix.ConfidenceCalculator;
 import dev.nozh.core.preset.HardwareTier;
 import dev.nozh.core.preset.PresetConstraints;
 import dev.nozh.core.preset.PresetRegistry;
+import dev.nozh.core.safety.CrashFailureContext;
+import dev.nozh.core.safety.CrashLoopGuard;
+import dev.nozh.core.safety.CrashRecoveryAction;
+import dev.nozh.core.safety.CrashRecoveryDecision;
+import dev.nozh.core.safety.NozhState;
 import dev.nozh.core.state.RuntimeState;
 import dev.nozh.core.state.StateInvariantViolationException;
 import dev.nozh.core.state.StateStore;
@@ -101,6 +106,8 @@ public final class ChaosTestRunner {
                     return testSafeModeDispatch(start);
                 case HUD_SNAPSHOT_CORRUPTION:
                     return testHudSnapshotCorruption(start);
+                case CRASH_LOOP_RECOVERY:
+                    return testCrashLoopRecovery(start);
                 default:
                     return ChaosScenarioResult.fail(scenario, "Unknown scenario", 0);
             }
@@ -376,6 +383,58 @@ public final class ChaosTestRunner {
 
         long duration = System.currentTimeMillis() - start;
         return ChaosScenarioResult.pass(ChaosScenario.HUD_SNAPSHOT_CORRUPTION, duration);
+    }
+
+    private static ChaosScenarioResult testCrashLoopRecovery(long start) {
+        NozhState state = new NozhState();
+        state.bootAttempts = dev.nozh.NozhConstants.MAX_BOOT_ATTEMPTS_BEFORE_SAFE_MODE;
+        state.sessionStable = false;
+        CrashFailureContext context = new CrashFailureContext(
+                System.currentTimeMillis(),
+                "CHAOS_TEST",
+                dev.nozh.core.bus.CapabilityId.RENDER_DISTANCE.name(),
+                dev.nozh.core.bus.CommandType.APPLY.name(),
+                "32",
+                "Simulated crash loop",
+                "SimulatedException");
+        state.setLastFailureContext(context);
+
+        long now = System.currentTimeMillis();
+        CrashRecoveryDecision decision = CrashLoopGuard.evaluateCrashRecovery(state, now);
+        if (decision.action() != CrashRecoveryAction.QUARANTINED_CAPABILITY) {
+            long duration = System.currentTimeMillis() - start;
+            return ChaosScenarioResult.fail(ChaosScenario.CRASH_LOOP_RECOVERY,
+                    "Expected capability quarantine recovery action", duration);
+        }
+
+        if (state.isSafeModeActive()) {
+            long duration = System.currentTimeMillis() - start;
+            return ChaosScenarioResult.fail(ChaosScenario.CRASH_LOOP_RECOVERY,
+                    "Safe mode activated instead of targeted quarantine", duration);
+        }
+
+        if (!state.isCapabilityQuarantined(dev.nozh.core.bus.CapabilityId.RENDER_DISTANCE, now)) {
+            long duration = System.currentTimeMillis() - start;
+            return ChaosScenarioResult.fail(ChaosScenario.CRASH_LOOP_RECOVERY,
+                    "Capability not quarantined after crash loop recovery", duration);
+        }
+
+        CrashRecoveryDecision escalated = CrashLoopGuard.evaluateCrashRecovery(state, now);
+        if (escalated.action() != CrashRecoveryAction.SAFE_MODE) {
+            long duration = System.currentTimeMillis() - start;
+            return ChaosScenarioResult.fail(ChaosScenario.CRASH_LOOP_RECOVERY,
+                    "Expected escalation to safe mode when quarantine already active", duration);
+        }
+
+        long afterRetry = decision.retryAtMillis() + 1;
+        if (state.isCapabilityQuarantined(dev.nozh.core.bus.CapabilityId.RENDER_DISTANCE, afterRetry)) {
+            long duration = System.currentTimeMillis() - start;
+            return ChaosScenarioResult.fail(ChaosScenario.CRASH_LOOP_RECOVERY,
+                    "Capability quarantine did not expire after retry window", duration);
+        }
+
+        long duration = System.currentTimeMillis() - start;
+        return ChaosScenarioResult.pass(ChaosScenario.CRASH_LOOP_RECOVERY, duration);
     }
 
     private ChaosTestRunner() {

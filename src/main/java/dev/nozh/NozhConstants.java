@@ -59,6 +59,7 @@ public final class NozhConstants {
     // Crash loop guard thresholds
     public static final int MAX_BOOT_ATTEMPTS_BEFORE_SAFE_MODE = 3;
     public static final int TICKS_BEFORE_STABLE = 200; // ~10 seconds
+    public static final long CRASH_RECOVERY_QUARANTINE_MILLIS = 600_000L; // 10 minutes
 
     // Profiler defaults
     public static final int DEFAULT_RING_BUFFER_SIZE = 300; // ~5 seconds at 60fps

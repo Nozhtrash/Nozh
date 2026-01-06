@@ -2,6 +2,7 @@ package dev.nozh.core.safety;
 
 import dev.nozh.NozhConstants;
 import dev.nozh.core.config.ConfigManager;
+import dev.nozh.core.telemetry.TelemetryManager;
 
 /**
  * Crash Loop Guard - Protects against repeated crashes by enabling safe mode.
@@ -18,6 +19,7 @@ public final class CrashLoopGuard {
     private static final Object LOCK = new Object();
     private static volatile int ticksSinceStart = 0;
     private static volatile boolean initialized = false;
+    private static volatile TelemetryManager telemetryManager = null;
 
     private CrashLoopGuard() {
         // Utility class
@@ -45,6 +47,8 @@ public final class CrashLoopGuard {
                 return;
             }
 
+            state.cleanupExpiredQuarantines(System.currentTimeMillis());
+
             // Increment boot attempts immediately
             state.incrementBootAttempts();
             StateManager.saveImmediately();
@@ -52,10 +56,18 @@ public final class CrashLoopGuard {
             NozhConstants.LOGGER.info("Boot attempt #{}", state.bootAttempts);
 
             // Check if we should enter safe mode due to crash loop
-            if (shouldEnterSafeMode(state)) {
-                state.activateSafeModeCrashLoop();
+            CrashRecoveryDecision decision = evaluateCrashRecovery(state, System.currentTimeMillis());
+            if (decision.action() != CrashRecoveryAction.NONE) {
                 StateManager.saveImmediately();
-                NozhConstants.LOGGER.warn("NOZH entering SAFE MODE after {} failed boots", state.bootAttempts);
+                if (decision.action() == CrashRecoveryAction.QUARANTINED_CAPABILITY) {
+                    NozhConstants.LOGGER.warn(
+                            "Crash loop detected, quarantining capability {} until {}",
+                            decision.capabilityId(),
+                            decision.retryAtMillis());
+                } else if (decision.action() == CrashRecoveryAction.SAFE_MODE) {
+                    NozhConstants.LOGGER.warn("NOZH entering SAFE MODE after {} failed boots", state.bootAttempts);
+                }
+                recordCrashRecoveryTelemetry(decision, state.lastFailureContext);
             }
 
             // Sync config force flag
@@ -119,6 +131,19 @@ public final class CrashLoopGuard {
             StateManager.saveImmediately();
             NozhConstants.LOGGER.debug("Clean shutdown recorded");
         }
+    }
+
+    /**
+     * Capture failure context to aid crash-loop recovery.
+     */
+    public static void recordFailureContext(CrashFailureContext context) {
+        if (context == null) {
+            return;
+        }
+        synchronized (LOCK) {
+            StateManager.recordFailureContext(context);
+        }
+        recordCrashContextTelemetry(context);
     }
 
     /**
@@ -209,6 +234,24 @@ public final class CrashLoopGuard {
     }
 
     /**
+     * Check if a capability is quarantined due to crash recovery.
+     */
+    public static boolean isCapabilityQuarantined(dev.nozh.core.bus.CapabilityId capabilityId) {
+        NozhState state = StateManager.getState();
+        if (state == null) {
+            return false;
+        }
+        return state.isCapabilityQuarantined(capabilityId, System.currentTimeMillis());
+    }
+
+    /**
+     * Provide a telemetry manager to emit crash events.
+     */
+    public static void setTelemetryManager(TelemetryManager manager) {
+        telemetryManager = manager;
+    }
+
+    /**
      * Get audit-friendly metrics for safe mode and crash-loop checks.
      */
     public static CrashLoopAuditMetrics getAuditMetrics() {
@@ -228,5 +271,50 @@ public final class CrashLoopGuard {
         // Enter safe mode if we've had too many failed boots
         return state.bootAttempts >= NozhConstants.MAX_BOOT_ATTEMPTS_BEFORE_SAFE_MODE
                 && !state.sessionStable;
+    }
+
+    /**
+     * Evaluate and apply crash-loop recovery actions.
+     */
+    public static CrashRecoveryDecision evaluateCrashRecovery(NozhState state, long nowMillis) {
+        if (!shouldEnterSafeMode(state)) {
+            return CrashRecoveryDecision.none();
+        }
+
+        if (state == null) {
+            return CrashRecoveryDecision.none();
+        }
+
+        state.cleanupExpiredQuarantines(nowMillis);
+
+        CrashFailureContext context = state.lastFailureContext;
+        if (context != null) {
+            var capability = context.resolveCapabilityId();
+            if (capability.isPresent()) {
+                dev.nozh.core.bus.CapabilityId capabilityId = capability.get();
+                if (!state.isCapabilityQuarantined(capabilityId, nowMillis)) {
+                    long retryAt = nowMillis + NozhConstants.CRASH_RECOVERY_QUARANTINE_MILLIS;
+                    state.quarantineCapability(capabilityId, retryAt);
+                    return CrashRecoveryDecision.quarantined(capabilityId.name(), retryAt, context.errorMessage());
+                }
+            }
+        }
+
+        state.activateSafeModeCrashLoop();
+        return CrashRecoveryDecision.safeMode(context != null ? context.errorMessage() : "");
+    }
+
+    private static void recordCrashContextTelemetry(CrashFailureContext context) {
+        TelemetryManager manager = telemetryManager;
+        if (manager != null) {
+            manager.recordCrashContext(context);
+        }
+    }
+
+    private static void recordCrashRecoveryTelemetry(CrashRecoveryDecision decision, CrashFailureContext context) {
+        TelemetryManager manager = telemetryManager;
+        if (manager != null) {
+            manager.recordCrashRecovery(decision, context);
+        }
     }
 }
