@@ -7,7 +7,6 @@
   "nozh.hud.scenario.exploring": "Cenário: EXPLORAÇÃO",
   "nozh.hud.scenario.menu": "Cenário: MENU",
   "nozh.hud.scenario.loading": "Cenário: CARREGANDO",
-  "nozh.hud.last_action": "✓ %s (+%d%% FPS)",
   "nozh.hud.suggestion": "⚡ Sugestão: %s (Pressione K)",
   "nozh.hud.director.title": "Modo Diretor",
   "nozh.hud.director.trace": "Diretor: %s → %s (%s)",
