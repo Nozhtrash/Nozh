@@ -135,6 +135,14 @@ public final class SessionLearning {
         return (double) predictionStats.correctPredictions / predictionStats.totalPredictions;
     }
 
+    public double getPredictionAvgConfidence() {
+        return predictionStats.avgConfidence;
+    }
+
+    public int getPredictionCount() {
+        return predictionStats.totalPredictions;
+    }
+
     /**
      * Get success rate for capability (0.0 to 1.0).
      * ZERO ALLOCATION.
