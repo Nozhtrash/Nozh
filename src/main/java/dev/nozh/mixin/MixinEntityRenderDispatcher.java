@@ -1,6 +1,6 @@
 package dev.nozh.mixin;
 
-import dev.nozh.core.settings.NozhRenderSettings;
+import dev.nozh.core.render.RenderVisibilityDecider;
 import net.minecraft.client.render.VertexConsumerProvider;
 import net.minecraft.client.render.entity.EntityRenderDispatcher;
 import net.minecraft.client.util.math.MatrixStack;
@@ -21,13 +21,13 @@ public class MixinEntityRenderDispatcher {
             CallbackInfo ci) {
 
         // Armor Stands
-        if (entity instanceof ArmorStandEntity && !NozhRenderSettings.isArmorStandsVisible()) {
+        if (entity instanceof ArmorStandEntity && !RenderVisibilityDecider.isArmorStandVisible()) {
             ci.cancel();
             return;
         }
 
         // Item Frames (and Glowing Item Frames which inherit)
-        if (entity instanceof ItemFrameEntity && !NozhRenderSettings.isItemFramesVisible()) {
+        if (entity instanceof ItemFrameEntity && !RenderVisibilityDecider.isItemFrameVisible()) {
             ci.cancel();
             return;
         }
