@@ -87,7 +87,6 @@ public final class GovernorRunner {
     private int lastSpikePredictionCount = -1;
     private boolean pendingFrametimePrediction = false;
     private double pendingFrametimeConfidence = 0.0;
-    private PredictiveAnalyzer.Window pendingFrametimeWindow = PredictiveAnalyzer.Window.NONE;
     private long lastFrametimePredictionMillis = 0L;
     private double lastFrametimePredictionAvgMs = Double.NaN;
     private double lastFrametimePredictionP95Ms = Double.NaN;
@@ -516,39 +515,42 @@ public final class GovernorRunner {
         }
 
         successTracker.recordDecision(decision);
+        ActionCandidate preventiveDecision = decision;
         String actionSummary = "preventive(" + prediction.window().name().toLowerCase(Locale.ROOT) + ") "
-                + formatActionSummary(decision);
+                + formatActionSummary(preventiveDecision);
 
-        logger.info("Preventive governor decision: " + decision.reason());
+        logger.info("Preventive governor decision: " + preventiveDecision.reason());
         try {
-            stateStore.update(currentState -> currentState.withDecision("preventive: " + decision.reason(), nowMillis));
+            stateStore.update(currentState -> currentState.withDecision(
+                    "preventive: " + preventiveDecision.reason(),
+                    nowMillis));
         } catch (Exception e) {
             logger.warn("Failed to update state decision: " + e.getMessage());
         }
 
-        if (policy.requiresUserConfirmation() && decision.targetValue() != null) {
+        if (policy.requiresUserConfirmation() && preventiveDecision.targetValue() != null) {
             if (state.suggestedActions() != null) {
                 for (PendingAction existing : state.suggestedActions()) {
-                    if (existing.capability() == decision.capabilityId()
-                            && existing.newValue().equals(decision.targetValue())) {
+                    if (existing.capability() == preventiveDecision.capabilityId()
+                            && existing.newValue().equals(preventiveDecision.targetValue())) {
                         logger.debug("Suggestion already queued, skipping duplicate preventive suggestion");
                         return true;
                     }
                 }
             }
             PerfSnapshot baselineSnapshot = captureSnapshot();
-            Optional<dev.nozh.core.bus.CapabilityValue> previousValue = providerRegistry.get(decision.capabilityId())
+            Optional<dev.nozh.core.bus.CapabilityValue> previousValue = providerRegistry.get(preventiveDecision.capabilityId())
                     .flatMap(provider -> provider.getCurrentValueSafe());
             Command cmd = new Command.ApplyCapability(
-                    decision.capabilityId(),
-                    decision.targetValue());
+                    preventiveDecision.capabilityId(),
+                    preventiveDecision.targetValue());
             PendingAction pending = new PendingAction(
                     nowMillis,
                     totalTicks,
-                    decision.capabilityId(),
+                    preventiveDecision.capabilityId(),
                     cmd,
                     previousValue,
-                    decision.targetValue(),
+                    preventiveDecision.targetValue(),
                     state.avgFrametimeMs(),
                     state.p95FrametimeMs(),
                     state.currentScenario(),
@@ -565,18 +567,18 @@ public final class GovernorRunner {
 
         PerfSnapshot baselineSnapshot = captureSnapshot();
         int observationWindowSeconds = resolveObservationWindowSeconds(config, baselineSnapshot);
-        Optional<dev.nozh.core.bus.CapabilityValue> previousValue = providerRegistry.get(decision.capabilityId())
+        Optional<dev.nozh.core.bus.CapabilityValue> previousValue = providerRegistry.get(preventiveDecision.capabilityId())
                 .flatMap(provider -> provider.getCurrentValueSafe());
         Command cmd = new Command.ApplyCapability(
-                decision.capabilityId(),
-                decision.targetValue());
+                preventiveDecision.capabilityId(),
+                preventiveDecision.targetValue());
         PendingAction pending = new PendingAction(
                 nowMillis,
                 totalTicks,
-                decision.capabilityId(),
+                preventiveDecision.capabilityId(),
                 cmd,
                 previousValue,
-                decision.targetValue(),
+                preventiveDecision.targetValue(),
                 state.avgFrametimeMs(),
                 state.p95FrametimeMs(),
                 state.currentScenario(),
@@ -1239,7 +1241,6 @@ public final class GovernorRunner {
         }
         pendingFrametimePrediction = true;
         pendingFrametimeConfidence = prediction.confidence();
-        pendingFrametimeWindow = prediction.window();
         lastFrametimePredictionMillis = nowMillis;
         lastFrametimePredictionAvgMs = state.avgFrametimeMs();
         lastFrametimePredictionP95Ms = state.p95FrametimeMs();
@@ -1280,7 +1281,6 @@ public final class GovernorRunner {
         boolean actualSpike = isPredictionSpike(state, config);
         sessionLearning.recordPredictionOutcome(true, actualSpike, pendingFrametimeConfidence);
         pendingFrametimePrediction = false;
-        pendingFrametimeWindow = PredictiveAnalyzer.Window.NONE;
     }
 
     private boolean isPredictionSpike(RuntimeState state, NozhConfig config) {
