@@ -21,7 +21,9 @@ public enum CapabilityId {
     ANISOTROPIC_FILTERING,
     GRASS_DETAIL,
     LEAF_QUALITY,
-    WATER_QUALITY;
+    WATER_QUALITY,
+    SHADER_QUALITY,
+    DYNAMIC_LIGHTING;
     
     public String getDisplayName() {
         return name().replace('_', ' ');
