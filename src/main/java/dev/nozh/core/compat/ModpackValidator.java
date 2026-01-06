@@ -63,17 +63,13 @@ public final class ModpackValidator {
     public NozhConfig getOptimalConfig(ModpackProfile profile) {
         var config = new NozhConfig();
         
-        // Apply profile-specific settings
-        config.optimizationProfile = profile.recommendedProfile();
+        // Apply profile-specific settings (convert enum to String)
+        config.optimizationProfile = profile.recommendedProfile().name();
         config.targetFps = profile.targetFps();
-        config.aggressivenessLevel = profile.aggressiveness();
         
-        // Set scenario thresholds based on modpack type
-        if (profile.type() == ModpackType.TECH) {
-            config.buildingScenarioThreshold = 0.3;
-        } else if (profile.type() == ModpackType.ADVENTURE) {
-            config.combatScenarioThreshold = 0.4;
-        }
+        // Note: NozhConfig doesn't have aggressivenessLevel, buildingScenarioThreshold, 
+        // or combatScenarioThreshold fields, so we skip those for now
+        // These would need to be added to NozhConfig if needed
         
         return config;
     }
