@@ -5,6 +5,7 @@ import dev.nozh.core.capability.ProviderMetadata;
 import dev.nozh.fabric.compat.CompatRegistry;
 import net.fabricmc.loader.api.FabricLoader;
 
+import java.util.List;
 import java.util.Set;
 
 /**
@@ -38,11 +39,11 @@ public final class CompatibilityMatrix {
     }
 
     public String getSteward(CapabilityId capability) {
-        String steward = compatRegistry.getSteward(capability);
-        if (steward != null) {
-            return steward;
+        StewardshipDecision decision = getStewardshipDecision(capability);
+        if (decision != null && decision.mode() != null) {
+            return decision.steward();
         }
-        return conflictDetector.getSteward(capability);
+        return "NOZH";
     }
 
     public boolean isBlockedByDependencies(ProviderMetadata metadata) {
@@ -74,5 +75,34 @@ public final class CompatibilityMatrix {
         } catch (Exception e) {
             return false;
         }
+    }
+
+    public StewardshipDecision getStewardshipDecision(CapabilityId capability) {
+        StewardshipDecision registryDecision = compatRegistry.getStewardshipDecision(capability);
+        if (registryDecision != null && registryDecision.mode() != null) {
+            return registryDecision;
+        }
+        return conflictDetector.getStewardshipDecision(capability);
+    }
+
+    public List<StewardshipDecision> getStewardshipTraces() {
+        List<StewardshipDecision> traces = StewardshipHandshakeRegistry.getTraces();
+        for (CapabilityId capability : CapabilityId.values()) {
+            StewardshipDecision decision = getStewardshipDecision(capability);
+            if (decision == null) {
+                continue;
+            }
+            boolean alreadyTracked = false;
+            for (StewardshipDecision existing : traces) {
+                if (existing.capability() == capability) {
+                    alreadyTracked = true;
+                    break;
+                }
+            }
+            if (!alreadyTracked && decision.mode() != null && !decision.steward().equals("NOZH")) {
+                traces.add(decision);
+            }
+        }
+        return traces;
     }
 }

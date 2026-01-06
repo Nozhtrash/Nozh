@@ -76,9 +76,20 @@ public record HudViewModel(
                 String benchmarkValidity, // "VALID" / "NOISY" / "INCONCLUSIVE" / "NONE"
 
                 // Detailed data (for respective sections)
+                List<DirectorTrace> stewardshipTraces,
                 List<ProviderViewModel> providers,
                 List<Issue> issues,
                 List<ActionHistoryEntryView> recentActions) {
+        /**
+         * Director mode trace (stewardship handoff).
+         */
+        public record DirectorTrace(
+                        String capabilityId,
+                        String steward,
+                        String modeKey,
+                        String reason) {
+        }
+
         /**
          * Provider view model (nested DTO).
          */
@@ -132,6 +143,7 @@ public record HudViewModel(
                         0.5,
                         false,
                         "NONE",
+                        List.of(),
                         List.of(),
                         List.of(),
                         List.of());
