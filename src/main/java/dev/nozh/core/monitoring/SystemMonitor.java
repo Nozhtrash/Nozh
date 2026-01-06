@@ -50,8 +50,7 @@ public final class SystemMonitor {
         }
 
         try {
-            com.sun.management.OperatingSystemMXBean sunBean = 
-                (com.sun.management.OperatingSystemMXBean) osMXBean;
+            com.sun.management.OperatingSystemMXBean sunBean = (com.sun.management.OperatingSystemMXBean) osMXBean;
             double load = sunBean.getCpuLoad();
             if (load >= 0) {
                 cachedCpuLoad = load;
@@ -76,8 +75,7 @@ public final class SystemMonitor {
         }
 
         try {
-            com.sun.management.OperatingSystemMXBean sunBean = 
-                (com.sun.management.OperatingSystemMXBean) osMXBean;
+            com.sun.management.OperatingSystemMXBean sunBean = (com.sun.management.OperatingSystemMXBean) osMXBean;
             return sunBean.getProcessCpuLoad();
         } catch (Exception e) {
             return -1.0;

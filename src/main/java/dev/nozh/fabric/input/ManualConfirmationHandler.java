@@ -238,8 +238,8 @@ public final class ManualConfirmationHandler {
                 net.minecraft.client.MinecraftClient.getInstance();
             
             if (client.player != null) {
-                String color = error ? "§c" : "§e";
-                Text text = Text.literal(color + "[NOZH] §r" + message);
+                String color = error ? "\u00a7c" : "\u00a7e";
+                Text text = Text.literal(color + "[NOZH] \u00a7r" + message);
                 client.player.sendMessage(text, true); // Actionbar
             }
         } catch (Exception e) {
