@@ -363,6 +363,7 @@ public final class ChaosTestRunner {
         HudViewModel viewModel = HudViewModelBuilder.build(
                 RuntimeState.defaults(),
                 null,
+                dev.nozh.core.profiler.PerfDiagnosticsSnapshot.empty(),
                 List.of(),
                 HardwareTier.MEDIUM,
                 new ProviderRegistry(new ProviderHealthTracker()));

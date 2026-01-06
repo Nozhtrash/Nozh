@@ -10,6 +10,7 @@ import dev.nozh.core.governor.ActionOutcome;
 import dev.nozh.core.issues.Issue;
 import dev.nozh.core.issues.IssueSeverity;
 import dev.nozh.core.preset.HardwareTier;
+import dev.nozh.core.profiler.PerfDiagnosticsSnapshot;
 import dev.nozh.core.state.RuntimeState;
 import dev.nozh.core.state.ActionHistoryEntry;
 import dev.nozh.core.telemetry.TelemetrySnapshot;
@@ -40,10 +41,11 @@ public final class HudViewModelBuilder {
     public static HudViewModel build(
             RuntimeState state,
             TelemetrySnapshot telemetry,
+            PerfDiagnosticsSnapshot diagnostics,
             List<Issue> issues,
             HardwareTier tier,
             ProviderRegistry registry) {
-        if (state == null || telemetry == null) {
+        if (state == null || telemetry == null || diagnostics == null) {
             return HudViewModel.EMPTY;
         }
 
@@ -142,6 +144,17 @@ public final class HudViewModelBuilder {
                 telemetry.sampleCount(),
                 telemetry.droppedSamples(),
                 telemetry.sufficientData(),
+
+                diagnostics.recentGcMs(),
+                diagnostics.gcPressureScore(),
+                diagnostics.pauseCount(),
+                diagnostics.pauseMaxMs(),
+                diagnostics.stutterCauseKey(),
+                diagnostics.stutterDetail(),
+                diagnostics.stutterConfidence(),
+                diagnostics.hottestRenderPhaseKey(),
+                diagnostics.hottestRenderPhaseMs(),
+                diagnostics.hottestRenderPhaseTicks(),
 
                 total,
                 healthy,

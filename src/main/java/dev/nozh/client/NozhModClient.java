@@ -119,6 +119,7 @@ public class NozhModClient implements ClientModInitializer {
         // Initialize PerfManager (collects FPS data)
         perfManager = new dev.nozh.core.profiler.PerfManager();
         tickTimeSampler = new dev.nozh.core.monitoring.TickTimeSampler();
+        perfManager.setTickSnapshotSupplier(() -> tickTimeSampler.getSnapshot());
 
         // 8. Create ActionProcessor bridge
         StandardActionProcessor actionProcessor = new StandardActionProcessor(
@@ -168,21 +169,41 @@ public class NozhModClient implements ClientModInitializer {
                 null);
 
         // Register Frametime Sampler (called every frame)
+        net.fabricmc.fabric.api.client.rendering.v1.WorldRenderEvents.START.register(context -> {
+            if (perfManager != null) {
+                perfManager.onRenderPhaseStart(dev.nozh.core.profiler.RenderPhase.WORLD);
+            }
+        });
+
         net.fabricmc.fabric.api.client.rendering.v1.WorldRenderEvents.END.register(context -> {
-            perfManager.onFrame();
+            if (perfManager != null) {
+                perfManager.onRenderPhaseEnd(dev.nozh.core.profiler.RenderPhase.WORLD);
+                perfManager.onFrame();
+            }
         });
 
         HudRenderCallback.EVENT.register(new NozhHudRenderer(
                 stateStore,
                 providerRegistry,
-                () -> perfManager != null ? perfManager.getSnapshot() : dev.nozh.api.PerfSnapshot.empty()));
+                () -> perfManager != null ? perfManager.getSnapshot() : dev.nozh.api.PerfSnapshot.empty(),
+                perfManager));
 
         // === TICK HANDLER SETUP ===
 
         // Register tick handler for ActionBus, telemetry updates, and governor
+        ClientTickEvents.START_CLIENT_TICK.register(clientInstance -> {
+            if (perfManager != null) {
+                perfManager.onRenderPhaseStart(dev.nozh.core.profiler.RenderPhase.CLIENT_TICK);
+            }
+        });
+
         ClientTickEvents.END_CLIENT_TICK.register(clientInstance -> {
-            if (!ConfigManager.getConfig().enabled)
+            if (!ConfigManager.getConfig().enabled) {
+                if (perfManager != null) {
+                    perfManager.onRenderPhaseEnd(dev.nozh.core.profiler.RenderPhase.CLIENT_TICK);
+                }
                 return;
+            }
 
             tickCounter++;
 
@@ -229,6 +250,10 @@ public class NozhModClient implements ClientModInitializer {
 
             if (tickCounter % SESSION_SAVE_INTERVAL == 0) {
                 sessionLearning.saveIfDue();
+            }
+
+            if (perfManager != null) {
+                perfManager.onRenderPhaseEnd(dev.nozh.core.profiler.RenderPhase.CLIENT_TICK);
             }
         });
 
