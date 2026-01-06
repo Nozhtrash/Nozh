@@ -1,0 +1,24 @@
+{
+  "nozh.hud.mode_auto": "NOZH: AUTO",
+  "nozh.hud.mode_manual": "NOZH: MANUELL",
+  "nozh.hud.scenario.combat": "Szenario: KAMPF",
+  "nozh.hud.scenario.building": "Szenario: BAUEN",
+  "nozh.hud.scenario.afk": "Szenario: ABWESEND",
+  "nozh.hud.scenario.exploring": "Szenario: ERKUNDEN",
+  "nozh.hud.scenario.menu": "Szenario: MENÜ",
+  "nozh.hud.scenario.loading": "Szenario: LÄDT",
+  "nozh.hud.last_action": "✓ %s (+%d%% FPS)",
+  "nozh.hud.suggestion": "⚡ Vorschlag: %s (Drücke K)",
+  "nozh.hud.mod_coordination": "Koordinierung mit: %s",
+  
+  "key.nozh.confirm_suggestion": "NOZH-Vorschlag Bestätigen",
+  "key.nozh.dismiss_suggestion": "NOZH-Vorschlag Ablehnen",
+  "category.nozh": "NOZH-Optimierung",
+  
+  "nozh.command.selfcheck": "Führe NOZH-Selbsttest durch...",
+  "nozh.command.status": "NOZH-Status",
+  "nozh.command.history": "Letzte 10 Gouverneur-Entscheidungen",
+  "nozh.command.perf": "Leistungsanalyse",
+  "nozh.command.safemode.reset": "Sicherheitsmodus zwangsweise zurückgesetzt",
+  "nozh.command.coordination": "Mod-Koordinationsbericht"
+}
