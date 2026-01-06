@@ -49,7 +49,7 @@ public final class FabricScenarioDetector implements ScenarioDetector {
     private int blocksBrokenRecent = 0;
     
     // Stability tracking
-    private Scenario lastScenario = Scenario.UNKNOWN;
+    private Scenario lastScenario = Scenario.STANDARD;
     private int stableCount = 0;
     private static final int STABILITY_THRESHOLD = 3; // 3 consecutive detections
 
@@ -61,7 +61,8 @@ public final class FabricScenarioDetector implements ScenarioDetector {
     public ScenarioSnapshot detect() {
         ClientPlayerEntity player = client.player;
         if (player == null || client.world == null) {
-            return new ScenarioSnapshot(Scenario.MENU, ScenarioConfidence.high());
+            // FIXED: Pass double directly instead of ScenarioConfidence object
+            return new ScenarioSnapshot(Scenario.MENU, 0.95);
         }
 
         long currentTick = client.world.getTime();
@@ -84,7 +85,9 @@ public final class FabricScenarioDetector implements ScenarioDetector {
         }
 
         double stability = Math.min(1.0, stableCount / (double) STABILITY_THRESHOLD);
-        ScenarioConfidence confidence = calculateConfidence(detected, stability);
+        
+        // FIXED: Return confidence value directly as double
+        double confidence = calculateConfidenceValue(detected, stability);
 
         return new ScenarioSnapshot(detected, confidence);
     }
@@ -198,7 +201,7 @@ public final class FabricScenarioDetector implements ScenarioDetector {
         }
 
         // Default
-        return Scenario.UNKNOWN;
+        return Scenario.STANDARD;
     }
 
     private int countNearbyHostileMobs(ClientPlayerEntity player, World world) {
@@ -211,7 +214,7 @@ public final class FabricScenarioDetector implements ScenarioDetector {
         return hostiles.size();
     }
 
-    private ScenarioConfidence calculateConfidence(Scenario scenario, double stability) {
+    private double calculateConfidenceValue(Scenario scenario, double stability) {
         // Base confidence based on scenario type
         double baseConfidence = switch (scenario) {
             case MENU, LOADING -> 0.95; // Very certain
@@ -224,7 +227,7 @@ public final class FabricScenarioDetector implements ScenarioDetector {
         // Adjust by stability
         double finalConfidence = baseConfidence * (0.5 + 0.5 * stability);
 
-        return new ScenarioConfidence(finalConfidence, stability);
+        return finalConfidence;
     }
 
     // === ACTION RECORDING ===
