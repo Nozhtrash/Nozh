@@ -38,6 +38,7 @@ public final class JsonMini {
                 "  \"allowGameplayImpactActions\": " + c.allowGameplayImpactActions + ",\n" +
                 "  \"safeModeForce\": " + c.safeModeForce + ",\n" +
                 "  \"rollbackEnabled\": " + c.rollbackEnabled + ",\n" +
+                "  \"hybridModelEnabled\": " + c.hybridModelEnabled + ",\n" +
 
                 "  \"rollbackWindowMillis\": " + c.rollbackWindowMillis + ",\n" +
                 "  \"improvementEpsilonAvgMs\": " + c.improvementEpsilonAvgMs + ",\n" +
@@ -45,6 +46,8 @@ public final class JsonMini {
                 "  \"rollbackEvaluationTicks\": " + c.rollbackEvaluationTicks + ",\n" +
                 "  \"rollbackCooldownMillis\": " + c.rollbackCooldownMillis + ",\n" +
                 "  \"observationWindowSeconds\": " + c.observationWindowSeconds + ",\n" +
+                "  \"hybridModelBlockConfidence\": " + c.hybridModelBlockConfidence + ",\n" +
+                "  \"governorDecisionBudgetMs\": " + c.governorDecisionBudgetMs + ",\n" +
 
                 "  \"historyMaxEntries\": " + c.historyMaxEntries + ",\n" +
                 "  \"historyCommandLimit\": " + c.historyCommandLimit + ",\n" +
@@ -131,6 +134,7 @@ public final class JsonMini {
             c.allowGameplayImpactActions = getBool(json, "allowGameplayImpactActions", c.allowGameplayImpactActions);
             c.safeModeForce = getBool(json, "safeModeForce", c.safeModeForce);
             c.rollbackEnabled = getBool(json, "rollbackEnabled", c.rollbackEnabled);
+            c.hybridModelEnabled = getBool(json, "hybridModelEnabled", c.hybridModelEnabled);
 
             // Rollback Tuning
             c.rollbackWindowMillis = getInt(json, "rollbackWindowMillis", c.rollbackWindowMillis);
@@ -139,6 +143,9 @@ public final class JsonMini {
             c.rollbackEvaluationTicks = getInt(json, "rollbackEvaluationTicks", c.rollbackEvaluationTicks);
             c.rollbackCooldownMillis = getInt(json, "rollbackCooldownMillis", c.rollbackCooldownMillis);
             c.observationWindowSeconds = getInt(json, "observationWindowSeconds", c.observationWindowSeconds);
+            c.hybridModelBlockConfidence = getDouble(json, "hybridModelBlockConfidence",
+                    c.hybridModelBlockConfidence);
+            c.governorDecisionBudgetMs = getInt(json, "governorDecisionBudgetMs", c.governorDecisionBudgetMs);
 
             // Limits
             c.historyMaxEntries = getInt(json, "historyMaxEntries", c.historyMaxEntries);

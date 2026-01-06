@@ -29,6 +29,7 @@ public class NozhConfig {
     public boolean allowGameplayImpactActions = false; // Phase 8: Level 2/3 actions
     public boolean safeModeForce = false;
     public boolean rollbackEnabled = true;
+    public boolean hybridModelEnabled = true;
 
     // Tuning Parameters (Rollback)
     public int rollbackWindowMillis = 45000;
@@ -37,6 +38,8 @@ public class NozhConfig {
     public int rollbackEvaluationTicks = 100;
     public int rollbackCooldownMillis = 60000;
     public int observationWindowSeconds = 5;
+    public double hybridModelBlockConfidence = 0.65;
+    public int governorDecisionBudgetMs = 8;
 
     // Performance Targets
     public int targetFps = 60;
@@ -136,6 +139,16 @@ public class NozhConfig {
         // observationWindowSeconds: 3-10
         if (observationWindowSeconds < 3 || observationWindowSeconds > 10) {
             observationWindowSeconds = clamp(observationWindowSeconds, 3, 10);
+            corrected = true;
+        }
+
+        if (hybridModelBlockConfidence < 0.0 || hybridModelBlockConfidence > 1.0) {
+            hybridModelBlockConfidence = clamp(hybridModelBlockConfidence, 0.0, 1.0);
+            corrected = true;
+        }
+
+        if (governorDecisionBudgetMs < 1 || governorDecisionBudgetMs > 50) {
+            governorDecisionBudgetMs = clamp(governorDecisionBudgetMs, 1, 50);
             corrected = true;
         }
 
