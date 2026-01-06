@@ -3,6 +3,7 @@ package dev.nozh.core.governor;
 import dev.nozh.core.NozhLogger;
 import dev.nozh.core.bus.ActionBus;
 import dev.nozh.core.bus.Command;
+import dev.nozh.core.bus.CapabilityId;
 import dev.nozh.core.capability.ProviderRegistry;
 import dev.nozh.core.config.ConfigManager;
 import dev.nozh.core.config.NozhConfig;
@@ -13,6 +14,7 @@ import dev.nozh.core.matrix.ActionMatrix;
 import dev.nozh.core.matrix.ActionSuccessTracker;
 import dev.nozh.core.matrix.ConfidenceCalculator;
 import dev.nozh.core.governor.OptimizationProfile;
+import dev.nozh.core.compat.IrisCompat;
 import dev.nozh.core.compatibility.CompatibilityMatrix;
 import dev.nozh.core.profiler.PerfManager;
 import dev.nozh.core.state.RuntimeState;
@@ -400,16 +402,82 @@ public final class GovernorRunner {
         double tickThresholdMs = 50.0;
         boolean tickHigh = tickAvgMs > tickThresholdMs || tickP95Ms > tickThresholdMs;
 
-        if (tickHigh) {
-            return "CPU";
-        }
-
         double frameThresholdMs = 16.67;
         boolean frameHigh = frameDataAvailable && (avgMs > frameThresholdMs || p95Ms > frameThresholdMs);
-        if (frameHigh) {
-            return "GPU";
+
+        String heuristicBound = "BALANCED";
+        if (tickHigh) {
+            heuristicBound = "CPU";
+        } else if (frameHigh) {
+            heuristicBound = "GPU";
         }
-        return "BALANCED";
+
+        double renderTimeMs = resolveRenderTimeMs(avgMs, p95Ms);
+        double tickTimeMs = resolveTickTimeMs(tickAvgMs, tickP95Ms);
+        boolean systemDataAvailable = renderTimeMs >= 0 && tickTimeMs >= 0;
+        if (!systemDataAvailable) {
+            return heuristicBound;
+        }
+
+        double resolutionScale = resolveResolutionScale(state);
+        boolean shadersActive = IrisCompat.areShadersLikelyActive();
+        String systemBound = systemMonitor.detectBottleneck(
+                tickTimeMs,
+                renderTimeMs,
+                -1,
+                shadersActive,
+                resolutionScale);
+
+        if (!systemBound.equals(heuristicBound)) {
+            logger.debug(String.format(
+                    "Bound telemetry mismatch: heuristic=%s system=%s (tick=%.2fms render=%.2fms cpu=%.1f%% scale=%.2f shaders=%s)",
+                    heuristicBound,
+                    systemBound,
+                    tickTimeMs,
+                    renderTimeMs,
+                    systemMonitor.getSystemCpuLoad() * 100,
+                    resolutionScale,
+                    shadersActive));
+        }
+
+        if (!"BALANCED".equals(systemBound) && !systemBound.equals(heuristicBound)) {
+            return systemBound;
+        }
+        return "BALANCED".equals(heuristicBound) ? systemBound : heuristicBound;
+    }
+
+    private double resolveRenderTimeMs(double avgMs, double p95Ms) {
+        if (avgMs >= 0) {
+            return avgMs;
+        }
+        if (p95Ms >= 0) {
+            return p95Ms;
+        }
+        return -1.0;
+    }
+
+    private double resolveTickTimeMs(double avgMs, double p95Ms) {
+        if (avgMs >= 0) {
+            return avgMs;
+        }
+        if (p95Ms >= 0) {
+            return p95Ms;
+        }
+        return -1.0;
+    }
+
+    private double resolveResolutionScale(RuntimeState state) {
+        if (state == null || state.currentSettings() == null) {
+            return 1.0;
+        }
+        CapabilityValue value = state.currentSettings().get(CapabilityId.RESOLUTION_SCALE);
+        if (value instanceof CapabilityValue.FloatValue floatValue) {
+            return floatValue.value();
+        }
+        if (value instanceof CapabilityValue.IntValue intValue) {
+            return intValue.value();
+        }
+        return 1.0;
     }
 
     private GovernorMode determineMode(RuntimeState state) {
