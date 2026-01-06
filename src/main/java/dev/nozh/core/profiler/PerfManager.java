@@ -30,6 +30,7 @@ public class PerfManager {
     private int windowSeconds;
     private final PerfWindowController windowController;
     private final SpikeTrendPredictor spikePredictor;
+    private final DecisionLatencyEvaluator decisionLatencyEvaluator;
     private long lastWindowAdjustMillis = 0L;
 
     public PerfManager() {
@@ -38,6 +39,7 @@ public class PerfManager {
         this.windowSeconds = 5; // Default window
         this.windowController = new PerfWindowController(3, 10);
         this.spikePredictor = new SpikeTrendPredictor();
+        this.decisionLatencyEvaluator = new DecisionLatencyEvaluator();
 
         int targetFps = Math.max(30, config.targetFps);
         int capacity = calculateCapacity(targetFps, windowSeconds);
@@ -105,6 +107,18 @@ public class PerfManager {
 
     public SpikePrediction getSpikePrediction() {
         return spikePredictor.getLastPrediction();
+    }
+
+    public long startDecisionTimer() {
+        return decisionLatencyEvaluator.startTimer();
+    }
+
+    public boolean isDecisionWithinBudget(long startNanos, int budgetMs) {
+        return decisionLatencyEvaluator.isWithinBudget(startNanos, budgetMs);
+    }
+
+    public long getLastDecisionLatencyMs() {
+        return decisionLatencyEvaluator.getLastDecisionLatencyMs();
     }
 
     private void adjustWindowIfNeeded(PerfSnapshot snapshot) {

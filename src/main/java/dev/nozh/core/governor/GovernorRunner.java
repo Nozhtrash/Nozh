@@ -44,7 +44,7 @@ public final class GovernorRunner {
     private static final int REVERSE_IMPROVEMENT_STREAK = 3;
     private static final long SPIKE_PREDICTION_MIN_WINDOW_MS = 5_000L;
 
-    private final SimulationGovernor governor;
+    private final HybridGovernor governor;
     private final ActionBus actionBus;
     private final NozhLogger logger;
     private final StateStore stateStore;
@@ -89,7 +89,7 @@ public final class GovernorRunner {
                 sessionLearning,
                 new CompatibilityMatrix());
 
-        this.governor = new SimulationGovernor(matrix);
+        this.governor = new HybridGovernor(matrix, logger);
         this.actionBus = actionBus;
         this.stateStore = stateStore;
         this.logger = logger;
@@ -196,6 +196,7 @@ public final class GovernorRunner {
             return;
         }
 
+        long decisionStartNanos = perfManager != null ? perfManager.startDecisionTimer() : System.nanoTime();
         Optional<ActionCandidate> decisionOpt = governor.decide(
                 state,
                 mode,
@@ -206,7 +207,16 @@ public final class GovernorRunner {
                 config.reverseEpsilonMs,
                 reverseReady,
                 state.baselineSnapshot(),
-                state.currentSettings());
+                state.currentSettings(),
+                config);
+
+        if (perfManager != null && !perfManager.isDecisionWithinBudget(decisionStartNanos,
+                config.governorDecisionBudgetMs)) {
+            logger.warn(String.format(
+                    "Governor decision aborted - latency budget exceeded (%dms)",
+                    perfManager.getLastDecisionLatencyMs()));
+            return;
+        }
 
         if (decisionOpt.isEmpty()) {
             return;
