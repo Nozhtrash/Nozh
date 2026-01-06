@@ -25,6 +25,7 @@ public final class JsonMini {
                 "  \"language\": \"" + (c.language == null ? "auto" : c.language) + "\",\n" +
                 "  \"showHud\": " + c.showHud + ",\n" +
                 "  \"showHudSuggestions\": " + c.showHudSuggestions + ",\n" +
+                "  \"hudMode\": \"" + (c.hudMode == null ? "ANALYST" : c.hudMode) + "\",\n" +
                 "  \"hudAnchor\": \"" + (c.hudAnchor == null ? "TOP_LEFT" : c.hudAnchor) + "\",\n" +
                 "  \"hudOffsetX\": " + c.hudOffsetX + ",\n" +
                 "  \"hudOffsetY\": " + c.hudOffsetY + ",\n" +
@@ -159,6 +160,7 @@ public final class JsonMini {
             c.language = getString(json, "language", c.language);
             c.showHud = getBool(json, "showHud", c.showHud);
             c.showHudSuggestions = getBool(json, "showHudSuggestions", c.showHudSuggestions);
+            c.hudMode = getString(json, "hudMode", c.hudMode);
             c.hudAnchor = getString(json, "hudAnchor", c.hudAnchor);
             c.hudOffsetX = getInt(json, "hudOffsetX", c.hudOffsetX);
             c.hudOffsetY = getInt(json, "hudOffsetY", c.hudOffsetY);

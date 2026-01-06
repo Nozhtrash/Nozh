@@ -25,7 +25,7 @@ public record HudViewModel(
                 ParanoiaLevel paranoiaLevel,
                 HardwareTier activeTier,
                 long uptimeSeconds,
-                String currentBound, // "CPU_BOUND" / "GPU_BOUND" / "BALANCED" / "UNKNOWN"
+                String currentBound, // Translation key for bound status
 
                 // Performance metrics
                 double avgFrametimeMs,

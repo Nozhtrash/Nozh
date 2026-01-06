@@ -315,6 +315,20 @@ public class NozhModMenuIntegration implements ModMenuApi {
             tooltipWidgets.add(hudSuggestionsButton);
             y += 25;
 
+            TooltipButton hudModeButton = new TooltipButton(
+                    centerX - 150, y, 300, 20,
+                    Text.translatable("nozh.config.hud.mode",
+                            Text.translatable("nozh.config.hud.mode." + formatHudModeKey(config.hudMode))),
+                    Text.translatable("nozh.config.hud.mode.tooltip"),
+                    button -> {
+                        config.hudMode = nextHudMode(config.hudMode);
+                        saveConfigAndSync();
+                        this.clearAndInit();
+                    });
+            addDrawableChild(hudModeButton);
+            tooltipWidgets.add(hudModeButton);
+            y += 25;
+
             TooltipButton hudAnchorButton = new TooltipButton(
                     centerX - 150, y, 300, 20,
                     Text.translatable("nozh.config.hud.anchor",
@@ -482,6 +496,27 @@ public class NozhModMenuIntegration implements ModMenuApi {
                 }
             }
             return 0;
+        }
+
+        private String nextHudMode(String current) {
+            if ("COMPACT".equalsIgnoreCase(current)) {
+                return "ANALYST";
+            }
+            if ("ANALYST".equalsIgnoreCase(current)) {
+                return "EXPERT";
+            }
+            return "COMPACT";
+        }
+
+        private String formatHudModeKey(String current) {
+            if (current == null) {
+                return "analyst";
+            }
+            String normalized = current.toLowerCase();
+            if ("compact".equals(normalized) || "expert".equals(normalized)) {
+                return normalized;
+            }
+            return "analyst";
         }
 
         private double cycleHudScale(double current) {
