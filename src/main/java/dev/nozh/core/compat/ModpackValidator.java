@@ -3,6 +3,7 @@ package dev.nozh.core.compat;
 import dev.nozh.core.config.NozhConfig;
 import dev.nozh.core.preset.ModpackProfile;
 import dev.nozh.core.preset.ModpackRegistry;
+import net.fabricmc.loader.api.FabricLoader;
 
 import java.util.ArrayList;
 import java.util.List;
