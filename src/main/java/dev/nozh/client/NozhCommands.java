@@ -94,11 +94,6 @@ public final class NozhCommands {
                                         runDisable(context.getSource());
                                         return 1;
                                     }))
-                            .then(ClientCommandManager.literal("apply")
-                                    .executes(context -> {
-                                        runApplySuggestion(context.getSource());
-                                        return 1;
-                                    }))
                             .then(ClientCommandManager.literal("safemode")
                                     .then(ClientCommandManager.literal("reset")
                                             .executes(context -> {
@@ -315,17 +310,12 @@ public final class NozhCommands {
         source.sendFeedback(Text.translatable("nozh.disable.success"));
     }
 
-    private static void runApply(FabricClientCommandSource source) {
-        runApplySuggestion(source);
-    }
-
     private static void runApplySuggestion(FabricClientCommandSource source) {
-        MinecraftClient client = MinecraftClient.getInstance();
-        if (client == null) {
+        if (MinecraftClient.getInstance() == null) {
             source.sendFeedback(Text.translatable("nozh.suggestion.apply.unavailable"));
             return;
         }
-        NozhModClient.requestSuggestedAction(client, NozhModClient.ApplyTrigger.COMMAND);
+        NozhModClient.requestSuggestedAction();
     }
 
     private static void runClearSuggestion(FabricClientCommandSource source) {

@@ -3,20 +3,15 @@ package dev.nozh.client;
 import dev.nozh.NozhConstants;
 import dev.nozh.core.NozhLogger;
 import dev.nozh.core.bus.ActionBus;
-import dev.nozh.core.bus.Command;
 import dev.nozh.core.bus.StandardActionProcessor;
 import dev.nozh.core.config.ConfigManager;
-import dev.nozh.core.config.NozhConfig;
 import dev.nozh.core.config.ConfigSyncService;
 import dev.nozh.core.capability.ProviderCoverage;
 import dev.nozh.core.capability.ProviderRegistry;
 import dev.nozh.core.governor.GovernorRunner;
-import dev.nozh.core.governor.ActionOutcome;
 import dev.nozh.core.matrix.ActionSuccessTracker;
 import dev.nozh.core.safety.CrashLoopGuard;
-import dev.nozh.core.state.PendingAction;
 import dev.nozh.core.state.RuntimeState;
-import dev.nozh.core.state.ActionHistoryEntry;
 import dev.nozh.core.state.StateStore;
 import dev.nozh.fabric.FabricNozhLogger;
 import dev.nozh.fabric.capability.CompatAwareMinecraftOptionsAdapter;
@@ -25,6 +20,7 @@ import dev.nozh.fabric.capability.ProductionMinecraftOptionsAdapter;
 import dev.nozh.fabric.capability.ProviderBootstrap;
 import dev.nozh.fabric.capability.StandardCapabilityExecutor;
 import dev.nozh.fabric.compat.CompatRegistry;
+import dev.nozh.fabric.input.ManualConfirmationHandler;
 import dev.nozh.client.hud.NozhHudRenderer;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.api.EnvType;
@@ -39,8 +35,6 @@ import net.minecraft.client.toast.SystemToast;
 import net.minecraft.client.util.InputUtil;
 import net.minecraft.text.Text;
 import org.lwjgl.glfw.GLFW;
-
-import java.util.function.Consumer;
 
 /**
  * NOZH Client-side initializer - FULL INTEGRATION.
@@ -62,11 +56,9 @@ public class NozhModClient implements ClientModInitializer {
     private static dev.nozh.fabric.context.FabricScenarioDetector scenarioDetector;
     private static KeyBinding toggleHudKey;
     private static KeyBinding applySuggestionKey;
+    private static ManualConfirmationHandler manualConfirmationHandler;
     private static boolean safeModeNotified = false;
     private static String lastSessionKey = null;
-    private static long applyConfirmUntil = 0L;
-    private static String applyConfirmSummary = "";
-    private static final long APPLY_CONFIRM_WINDOW_MILLIS = 10000;
 
     private static int tickCounter = 0;
     private static final int TELEMETRY_UPDATE_INTERVAL = 20; // Every second (20 ticks)
@@ -168,6 +160,13 @@ public class NozhModClient implements ClientModInitializer {
                 GLFW.GLFW_KEY_K,
                 "category.nozh"));
 
+        manualConfirmationHandler = new ManualConfirmationHandler(
+                stateStore,
+                actionBus,
+                null,
+                applySuggestionKey,
+                null);
+
         // Register Frametime Sampler (called every frame)
         net.fabricmc.fabric.api.client.rendering.v1.WorldRenderEvents.END.register(context -> {
             perfManager.onFrame();
@@ -205,12 +204,6 @@ public class NozhModClient implements ClientModInitializer {
                     var config = ConfigManager.getConfig();
                     config.showHud = !config.showHud;
                     ConfigManager.saveAndNotify();
-                }
-            }
-
-            if (applySuggestionKey != null) {
-                while (applySuggestionKey.wasPressed()) {
-                    requestSuggestedAction(clientInstance, ApplyTrigger.KEYBIND);
                 }
             }
 
@@ -321,108 +314,11 @@ public class NozhModClient implements ClientModInitializer {
         return scenarioDetector;
     }
 
-    public static KeyBinding getApplySuggestionKey() {
-        return applySuggestionKey;
-    }
-
-    public static void requestSuggestedAction(MinecraftClient client, ApplyTrigger trigger) {
-        if (client == null) {
+    public static void requestSuggestedAction() {
+        if (manualConfirmationHandler == null) {
             return;
         }
-        NozhConfig config = ConfigManager.getConfig();
-        boolean needsConfirmation = config != null && !config.allowAutoTuning;
-        if (!needsConfirmation) {
-            applySuggestedAction(client);
-            return;
-        }
-
-        RuntimeState state = StateStore.getInstance().snapshotSafe();
-        if (state.suggestedActions() == null || state.suggestedActions().isEmpty()) {
-            applySuggestedAction(client);
-            return;
-        }
-
-        PendingAction pending = state.suggestedActions().get(0);
-        String summary = pending.capability().name() + "=" + pending.newValue();
-        long now = System.currentTimeMillis();
-        if (now <= applyConfirmUntil && summary.equals(applyConfirmSummary)) {
-            applyConfirmUntil = 0L;
-            applyConfirmSummary = "";
-            applySuggestedAction(client);
-            return;
-        }
-
-        applyConfirmUntil = now + APPLY_CONFIRM_WINDOW_MILLIS;
-        applyConfirmSummary = summary;
-        Text keyHint = applySuggestionKey != null ? applySuggestionKey.getBoundKeyLocalizedText()
-                : Text.translatable("nozh.suggestion.apply.keybind_unknown");
-        String detailKey = trigger == ApplyTrigger.COMMAND
-                ? "nozh.suggestion.apply.confirm.detail.command"
-                : "nozh.suggestion.apply.confirm.detail.keybind";
-        Text detail = trigger == ApplyTrigger.COMMAND
-                ? Text.translatable(detailKey, summary, APPLY_CONFIRM_WINDOW_MILLIS / 1000)
-                : Text.translatable(detailKey, summary, keyHint, APPLY_CONFIRM_WINDOW_MILLIS / 1000);
-        notifyClient(client,
-                Text.translatable("nozh.suggestion.apply.confirm.title"),
-                detail);
-    }
-
-    public static void applySuggestedAction(MinecraftClient client) {
-        if (client == null) {
-            return;
-        }
-        applyConfirmUntil = 0L;
-        applyConfirmSummary = "";
-        var actionBus = getActionBus();
-        if (actionBus == null) {
-            notifyClient(client,
-                    Text.translatable("nozh.suggestion.apply.failed"),
-                    Text.translatable("nozh.suggestion.apply.unavailable"));
-            return;
-        }
-
-        RuntimeState state = StateStore.getInstance().snapshotSafe();
-        if (state.suggestedActions() == null || state.suggestedActions().isEmpty()) {
-            notifyClient(client,
-                    Text.translatable("nozh.suggestion.apply.none"),
-                    Text.translatable("nozh.suggestion.apply.none_detail"));
-            return;
-        }
-
-        PendingAction pending = state.suggestedActions().get(0);
-        var command = pending.command();
-        long now = System.currentTimeMillis();
-        int maxHistoryEntries = ConfigManager.getConfig() != null ? ConfigManager.getConfig().historyMaxEntries : 50;
-        ActionHistoryEntry actionEntry = new ActionHistoryEntry(
-                now,
-                pending.capability().name() + "=" + pending.newValue(),
-                pending.scenario(),
-                pending.scenarioConfidence(),
-                pending.baselineSnapshot(),
-                dev.nozh.api.PerfSnapshot.empty(),
-                0.0,
-                0,
-                0,
-                ActionOutcome.NEUTRAL,
-                false);
-
-        actionBus.dispatch(command, report -> {
-            if (report.succeeded()) {
-                notifyClient(client,
-                        Text.translatable("nozh.suggestion.apply.success"),
-                        Text.translatable("nozh.suggestion.apply.success_detail",
-                                pending.capability().name(), pending.newValue().toString()));
-            } else {
-                String reason = report.error().orElse("unknown");
-                notifyClient(client,
-                        Text.translatable("nozh.suggestion.apply.failed"),
-                        Text.translatable("nozh.suggestion.apply.failed_detail", reason));
-                StateStore.getInstance().update(RuntimeState::withPendingActionCleared);
-            }
-        });
-
-        StateStore.getInstance().update(currentState -> currentState
-                .withAppliedSuggestion(now, pending, actionEntry, maxHistoryEntries));
+        manualConfirmationHandler.requestApply();
     }
 
     private static void notifyClient(MinecraftClient client, Text title, Text message) {
@@ -454,8 +350,4 @@ public class NozhModClient implements ClientModInitializer {
         return "unknown";
     }
 
-    public enum ApplyTrigger {
-        COMMAND,
-        KEYBIND
-    }
 }

@@ -162,6 +162,10 @@ public class NozhHudRenderer implements HudRenderCallback {
         }
         var pending = state.suggestedActions().get(0);
         String summary = formatAction(pending.capability().name(), pending.newValue().toString());
+        String reason = state.lastDecisionReason();
+        if (reason != null && !reason.isBlank()) {
+            summary = summary + " (" + reason + ")";
+        }
         int remaining = state.suggestedActions().size() - 1;
         if (remaining > 0) {
             return Text.translatable("nozh.hud.suggestion.apply_hint_many", summary, remaining).getString();
