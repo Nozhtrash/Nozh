@@ -49,7 +49,7 @@ public final class FabricScenarioDetector implements ScenarioDetector {
     private int blocksBrokenRecent = 0;
     
     // Stability tracking
-    private Scenario lastScenario = Scenario.UNKNOWN;
+    private Scenario lastScenario = Scenario.STANDARD; // FIXED: Changed from UNKNOWN to STANDARD
     private int stableCount = 0;
     private static final int STABILITY_THRESHOLD = 3; // 3 consecutive detections
 
@@ -61,7 +61,8 @@ public final class FabricScenarioDetector implements ScenarioDetector {
     public ScenarioSnapshot detect() {
         ClientPlayerEntity player = client.player;
         if (player == null || client.world == null) {
-            return new ScenarioSnapshot(Scenario.MENU, ScenarioConfidence.high());
+            // FIXED: Use ScenarioConfidence.from() instead of high()
+            return new ScenarioSnapshot(Scenario.MENU, ScenarioConfidence.from(0.95, 1.0));
         }
 
         long currentTick = client.world.getTime();
@@ -84,7 +85,10 @@ public final class FabricScenarioDetector implements ScenarioDetector {
         }
 
         double stability = Math.min(1.0, stableCount / (double) STABILITY_THRESHOLD);
-        ScenarioConfidence confidence = calculateConfidence(detected, stability);
+        
+        // FIXED: Calculate confidence properly and use ScenarioConfidence.from()
+        double confidenceValue = calculateConfidenceValue(detected, stability);
+        ScenarioConfidence confidence = ScenarioConfidence.from(confidenceValue, stability);
 
         return new ScenarioSnapshot(detected, confidence);
     }
@@ -194,11 +198,11 @@ public final class FabricScenarioDetector implements ScenarioDetector {
             return Scenario.BUILDING;
         }
         if (maxScore == exploringScore && exploringScore >= 3) {
-            return Scenario.EXPLORING;
+            return Scenario.EXPLORING; // Now valid
         }
 
-        // Default
-        return Scenario.UNKNOWN;
+        // Default - FIXED: Changed from UNKNOWN to STANDARD
+        return Scenario.STANDARD;
     }
 
     private int countNearbyHostileMobs(ClientPlayerEntity player, World world) {
@@ -211,7 +215,8 @@ public final class FabricScenarioDetector implements ScenarioDetector {
         return hostiles.size();
     }
 
-    private ScenarioConfidence calculateConfidence(Scenario scenario, double stability) {
+    // FIXED: Renamed from calculateConfidence to calculateConfidenceValue to return double
+    private double calculateConfidenceValue(Scenario scenario, double stability) {
         // Base confidence based on scenario type
         double baseConfidence = switch (scenario) {
             case MENU, LOADING -> 0.95; // Very certain
@@ -224,7 +229,7 @@ public final class FabricScenarioDetector implements ScenarioDetector {
         // Adjust by stability
         double finalConfidence = baseConfidence * (0.5 + 0.5 * stability);
 
-        return new ScenarioConfidence(finalConfidence, stability);
+        return finalConfidence;
     }
 
     // === ACTION RECORDING ===
