@@ -531,12 +531,6 @@ public final class ActionMatrix {
                     break;
                 }
             }
-            case CHUNK_LOADING -> {
-                if (loading || cpuBound) {
-                    targetValue = new CapabilityValue.EnumValue(aggressive ? "AGGRESSIVE" : "BALANCED");
-                    break;
-                }
-            }
             default -> {
             }
         }
