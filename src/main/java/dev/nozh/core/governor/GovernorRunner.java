@@ -51,6 +51,8 @@ public final class GovernorRunner {
     private static final int MAX_SUGGESTED_QUEUE = 5;
     private static final int REVERSE_IMPROVEMENT_STREAK = 3;
     private static final long SPIKE_PREDICTION_MIN_WINDOW_MS = 5_000L;
+    private static final int PREDICTION_MIN_SAMPLES = 10;
+    private static final double PREDICTION_ACCURACY_THRESHOLD = 0.85;
 
     private final HybridGovernor governor;
     private final ActionMatrix actionMatrix;
@@ -189,7 +191,23 @@ public final class GovernorRunner {
 
         // Feed predictor
         if (state.avgFrametimeMs() > 0) {
-            predictiveAnalyzer.addSample(state.avgFrametimeMs());
+            predictiveAnalyzer.addSample(PredictiveAnalyzer.Feature.FRAME, state.avgFrametimeMs());
+        }
+        if (state.tickTimeAvg() > 0) {
+            predictiveAnalyzer.addSample(PredictiveAnalyzer.Feature.TICK, state.tickTimeAvg());
+        }
+        if (state.p95FrametimeMs() > 0) {
+            predictiveAnalyzer.addSample(PredictiveAnalyzer.Feature.RENDER, state.p95FrametimeMs());
+        }
+        double entityPressure = resolveEntityPressure(state);
+        if (entityPressure >= 0) {
+            predictiveAnalyzer.addSample(PredictiveAnalyzer.Feature.ENTITY, entityPressure);
+        }
+        if (perfManager != null) {
+            double gcPressure = perfManager.getDiagnosticsSnapshot().gcPressureScore();
+            if (gcPressure >= 0) {
+                predictiveAnalyzer.addSample(PredictiveAnalyzer.Feature.GC, gcPressure);
+            }
         }
 
         updateSpikePrediction(state, config, now);
@@ -473,10 +491,7 @@ public final class GovernorRunner {
             return false;
         }
 
-        int predictionCount = sessionLearning.getPredictionCount();
-        double predictionAccuracy = sessionLearning.getPredictionAccuracy();
-        if (predictionCount >= 5 && predictionAccuracy < 0.4) {
-            logger.debug("Skipping preventive action - prediction accuracy below threshold");
+        if (!validatePredictionQuality(state)) {
             return false;
         }
 
@@ -516,7 +531,8 @@ public final class GovernorRunner {
 
         successTracker.recordDecision(decision);
         ActionCandidate preventiveDecision = decision;
-        String actionSummary = "preventive(" + prediction.window().name().toLowerCase(Locale.ROOT) + ") "
+        String actionSummary = "preventive(" + prediction.feature().name().toLowerCase(Locale.ROOT) + ":"
+                + prediction.window().name().toLowerCase(Locale.ROOT) + ") "
                 + formatActionSummary(preventiveDecision);
 
         logger.info("Preventive governor decision: " + preventiveDecision.reason());
@@ -756,6 +772,42 @@ public final class GovernorRunner {
             return p95Ms;
         }
         return -1.0;
+    }
+
+    private double resolveEntityPressure(RuntimeState state) {
+        if (state == null) {
+            return -1.0;
+        }
+        double baseline;
+        switch (state.currentScenario()) {
+            case COMBAT -> baseline = 1.0;
+            case BUILDING -> baseline = 0.7;
+            case EXPLORING -> baseline = 0.6;
+            case MINING -> baseline = 0.5;
+            case LOADING -> baseline = 0.8;
+            default -> baseline = 0.4;
+        }
+
+        double tickAvg = state.tickTimeAvg();
+        if (tickAvg <= 0) {
+            return baseline;
+        }
+        double pressure = baseline + Math.min(tickAvg / 50.0, 1.0) * 0.5;
+        return Math.min(2.0, pressure);
+    }
+
+    private boolean validatePredictionQuality(RuntimeState state) {
+        int predictionCount = sessionLearning.getPredictionCount();
+        double predictionAccuracy = sessionLearning.getPredictionAccuracy();
+        if (predictionCount >= PREDICTION_MIN_SAMPLES && predictionAccuracy < PREDICTION_ACCURACY_THRESHOLD) {
+            logger.debug("Skipping preventive action - prediction accuracy below 85%");
+            return false;
+        }
+        if (state == null || state.p95FrametimeMs() <= 0) {
+            logger.debug("Skipping preventive action - P95 data unavailable");
+            return false;
+        }
+        return true;
     }
 
     private double resolveResolutionScale(RuntimeState state) {
