@@ -35,7 +35,7 @@ public final class IntegratedGovernor {
     // Core systems
     private final MinecraftClient client;
     private final IntegratedRingTelemetryBuffer telemetryBuffer;
-    private final FabricScenarioDetector scenarioDetector;
+    private final EnhancedFabricScenarioDetector scenarioDetector;
     private final TransactionalExecutor executor;
     
     // Context tracking
@@ -74,7 +74,7 @@ public final class IntegratedGovernor {
         
         // Initialize core systems
         this.telemetryBuffer = new IntegratedRingTelemetryBuffer(512);
-        this.scenarioDetector = new FabricScenarioDetector(client);
+        this.scenarioDetector = new EnhancedFabricScenarioDetector(client);
         this.executor = new TransactionalExecutor();
         
         // Initialize context
