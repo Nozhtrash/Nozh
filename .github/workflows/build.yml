@@ -55,3 +55,79 @@ jobs:
           build/reports/
           build/test-results/
         retention-days: 7
+
+  chaos-tests:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up JDK 17
+      uses: actions/setup-java@v4
+      with:
+        java-version: '17'
+        distribution: 'temurin'
+        cache: 'gradle'
+
+    - name: Setup Gradle
+      uses: gradle/gradle-build-action@v3
+      with:
+        gradle-home-cache-cleanup: true
+        cache-read-only: ${{ github.ref != 'refs/heads/main' && github.ref != 'refs/heads/master' }}
+
+    - name: Grant execute permission for gradlew
+      run: chmod +x gradlew
+
+    - name: Run chaos test suite
+      run: ./gradlew chaosTest --no-daemon --stacktrace -PoutputDir=build/reports/chaos -PfailOnChaosError=false
+      env:
+        GRADLE_OPTS: '-Dorg.gradle.daemon=false -Dorg.gradle.parallel=true -Dorg.gradle.caching=true'
+
+    - name: Write chaos summary
+      if: always()
+      run: |
+        python - <<'PY'
+        import json
+        import os
+        from pathlib import Path
+
+        report_path = Path("build/reports/chaos/chaos-test-report.json")
+        if not report_path.exists():
+            print("Chaos report missing.")
+            raise SystemExit(0)
+
+        data = json.loads(report_path.read_text())
+        summary = data.get("summary", {})
+        results = data.get("results", [])
+
+        def fmt(value):
+            return "n/a" if value is None else value
+
+        summary_path = Path(os.environ["GITHUB_STEP_SUMMARY"])
+        with summary_path.open("a", encoding="utf-8") as fh:
+            fh.write("## Chaos Test Summary\n\n")
+            fh.write("|Metric|Value|\n")
+            fh.write("|---|---|\n")
+            fh.write(f"|Total scenarios|{fmt(summary.get('total_scenarios'))}|\n")
+            fh.write(f"|Passed|{fmt(summary.get('passed'))}|\n")
+            fh.write(f"|Failed|{fmt(summary.get('failed'))}|\n")
+            fh.write(f"|Total duration (ms)|{fmt(summary.get('total_duration_ms'))}|\n")
+            fh.write(f"|P95 duration (ms)|{fmt(summary.get('p95_duration_ms'))}|\n")
+            fh.write(f"|P99 duration (ms)|{fmt(summary.get('p99_duration_ms'))}|\n\n")
+            fh.write("|Scenario|Passed|Duration (ms)|Failure reason|\n")
+            fh.write("|---|---|---|---|\n")
+            for result in results:
+                scenario = result.get("scenario", "unknown")
+                passed = result.get("passed", False)
+                duration = result.get("durationMs", "n/a")
+                failure = result.get("failureReason", "")
+                fh.write(f"|{scenario}|{passed}|{duration}|{failure}|\n")
+        PY
+
+    - name: Upload chaos reports
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: chaos-reports
+        path: build/reports/chaos/
+        retention-days: 14

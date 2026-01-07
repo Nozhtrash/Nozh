@@ -61,6 +61,7 @@ dependencies {
 	modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
 
 	modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_version}"
+	implementation 'com.google.code.gson:gson:2.10.1'
 
 	modCompileOnly("maven.modrinth:modmenu:7.2.2") {
 		transitive = false
@@ -102,6 +103,25 @@ tasks.register('quickTest', JavaExec) {
 	addArg('warmupSeconds', '--warmup')
 	addArg('measurementSeconds', '--measurement')
 	addArg('cooldownSeconds', '--cooldown')
+}
+
+tasks.register('chaosTest', JavaExec) {
+	group = 'verification'
+	description = 'Runs the chaos test suite and writes JSON/CSV results.'
+	classpath = sourceSets.main.runtimeClasspath
+	mainClass = 'dev.nozh.core.testing.ChaosTestCli'
+
+	dependsOn classes
+
+	if (project.hasProperty('outputDir')) {
+		args '--output', project.property('outputDir').toString()
+	}
+	if (project.hasProperty('failOnChaosError')) {
+		boolean failOnError = project.property('failOnChaosError').toString().toBoolean()
+		if (!failOnError) {
+			args '--no-fail'
+		}
+	}
 }
 
 java {
