@@ -51,7 +51,7 @@ The "Hands" of the system.
 If the mod crashes or fails strictly, it enters **Safe Mode**.
 
 * **Effect**: All Governor/Executor logic is strictly bypassed.
-* **Persistence**: Stored in `nozh-state.json`. Requires user intervention or strict stability check to reset.
+* **Persistence**: Stored in `config/nozh/state.json`. Requires user intervention or strict stability check to reset.
 
 ## Core Architecture Freeze
 
@@ -75,7 +75,7 @@ The following interfaces are considered stable and part of the frozen core contr
 
 * **APIs**: `SimulationGovernor`, `StandardActionExecutor`, `ExecutorGuard`, `FrameTimeSampler`, `RollingWindowStats`.
 * **Events**: `WorldRenderEvents.END` frametime sampling hook.
-* **Data Contracts**: `PerfSnapshot`, `Decision`, `ActionType`, and `nozh-state.json` persistence format.
+* **Data Contracts**: `PerfSnapshot`, `Decision`, `ActionType`, and `state.json` persistence format.
 
 ### Change Process (Deprecations & Versioning)
 
@@ -95,4 +95,4 @@ In NOZH, **Frametime** is the wall-clock time elapsed between two consecutive `W
 `UNKNOWN` is not an error state; it is a valid and important informational state. It means the profiler is warming up or data is insufficient.
 
 ---
-*Document updated for v0.1.0 Release.*
+*Document updated for v0.2.0-alpha.*
