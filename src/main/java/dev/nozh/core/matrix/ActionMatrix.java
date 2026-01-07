@@ -759,9 +759,9 @@ public final class ActionMatrix {
             return false;
         }
         return switch (id) {
-            case PARTICLES -> compareEnum(current, baseline, List.of("MINIMAL", "DECREASED", "ALL"));
-            case CLOUDS -> compareEnum(current, baseline, List.of("OFF", "FAST", "FANCY"));
-            case GRAPHICS_MODE -> compareEnum(current, baseline, List.of("FAST", "FANCY", "FABULOUS"));
+            case PARTICLES -> compareEnum(current, baseline, PARTICLE_ORDER);
+            case CLOUDS -> compareEnum(current, baseline, CLOUD_ORDER);
+            case GRAPHICS_MODE -> compareEnum(current, baseline, GRAPHICS_ORDER);
             case ENTITY_SHADOWS, ARMOR_STANDS, ITEM_FRAMES, BLOCK_ENTITIES, ANIMATIONS, VSYNC, DYNAMIC_LIGHTING ->
                     compareBool(current, baseline);
             case RENDER_DISTANCE, SIMULATION_DISTANCE, ENTITY_DISTANCE, BIOME_BLEND, MIPMAP_LEVEL, FOG ->
@@ -771,17 +771,26 @@ public final class ActionMatrix {
         };
     }
 
-    private boolean compareEnum(CapabilityValue current, CapabilityValue baseline, List<String> ordering) {
+    private boolean compareEnum(CapabilityValue current, CapabilityValue baseline, String[] ordering) {
         if (!(current instanceof CapabilityValue.EnumValue currentEnum)
                 || !(baseline instanceof CapabilityValue.EnumValue baselineEnum)) {
             return false;
         }
-        int currentIndex = ordering.indexOf(currentEnum.name());
-        int baselineIndex = ordering.indexOf(baselineEnum.name());
+        int currentIndex = indexOf(ordering, currentEnum.name());
+        int baselineIndex = indexOf(ordering, baselineEnum.name());
         if (currentIndex < 0 || baselineIndex < 0) {
             return false;
         }
         return baselineIndex > currentIndex;
+    }
+
+    private int indexOf(String[] ordering, String value) {
+        for (int i = 0; i < ordering.length; i++) {
+            if (ordering[i].equals(value)) {
+                return i;
+            }
+        }
+        return -1;
     }
 
     private boolean compareBool(CapabilityValue current, CapabilityValue baseline) {
