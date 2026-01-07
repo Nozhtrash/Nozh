@@ -63,6 +63,10 @@ public final class StewardshipHandshakeRegistry {
         return traces;
     }
 
+    public static List<StewardshipDeclaration> getDeclarations() {
+        return List.copyOf(DECLARATIONS.values());
+    }
+
     private static boolean isModLoaded(String modId) {
         try {
             return FabricLoader.getInstance().isModLoaded(modId);
