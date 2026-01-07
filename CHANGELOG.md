@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased (v0.2.0-alpha)
+
+### Added
+
+* Chaos test CI job with JSON/CSV reporting and report metadata exports.
+* New chaos stress scenarios (entity/chunk/shader) and benchmark scenario artifact recording.
+* Automated modpack quick-test runner and quick-test documentation.
+* Telemetry metrics checklist documentation and architecture freeze policy documentation.
+* First-run tutorial flow with expanded localization coverage.
+
+### Changed
+
+* Strengthened chaos test malicious thresholds and CI reporting behavior.
+
 ## v0.1.0 - "The Foundation" (Golden Master)
 
 **Release Type**: Initial Release

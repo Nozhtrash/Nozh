@@ -89,9 +89,8 @@ NOZH es exitoso si el juego se siente más fluido (menos spikes).
 Si NOZH introduce stutter, el diseño ha fallado.
 
 ---
-**ESTADO DEL PROYECTO: GOLDEN MASTER (v0.1.0)**
+**ESTADO DEL PROYECTO: BASE GOLDEN MASTER (v0.1.0) + v0.2.0-alpha en desarrollo**
 
-* Completo.
-* Coherente.
-* Profesional.
+* Base v0.1.0 completa y congelada.
+* Integraciones de v0.2.0-alpha en progreso (preparación beta).
 * Extensible (v0.2.0+) sin reescribir la base.
