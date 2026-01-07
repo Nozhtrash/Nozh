@@ -58,6 +58,25 @@ import java.util.concurrent.atomic.AtomicReference;
  * NEVER throws exceptions upward - all failures captured in results.
  */
 public final class ChaosTestRunner {
+    private static final int PROVIDER_INIT_ATTEMPTS = 40;
+    private static final int INVARIANT_VIOLATION_ATTEMPTS = 5000;
+    private static final int QUEUE_THREADS = 20;
+    private static final int QUEUE_COMMANDS_PER_THREAD = 2000;
+    private static final int QUEUE_MAX_ALLOWED_SIZE = 100;
+    private static final int TELEMETRY_BUFFER_SIZE = 1024;
+    private static final int TELEMETRY_SAMPLE_COUNT = 250_000;
+    private static final int ENTITY_COUNT = 700;
+    private static final int ENTITY_TICKS = 360;
+    private static final int CHUNK_REQUESTS = 12_000;
+    private static final int CHUNK_MIN_QUEUE = 1000;
+    private static final int SHADER_FRAMES = 360;
+    private static final long MAX_PROVIDER_INIT_DURATION_MS = 1500;
+    private static final long MAX_INVARIANT_DURATION_MS = 2000;
+    private static final long MAX_QUEUE_DURATION_MS = 10_000;
+    private static final long MAX_TELEMETRY_DURATION_MS = 5000;
+    private static final long MAX_ENTITY_DURATION_MS = 3000;
+    private static final long MAX_CHUNK_DURATION_MS = 2000;
+    private static final long MAX_SHADER_DURATION_MS = 2000;
 
     /**
      * Run all chaos scenarios.
@@ -76,6 +95,7 @@ public final class ChaosTestRunner {
 
         int passed = (int) results.stream().filter(ChaosScenarioResult::passed).count();
         int failed = results.size() - passed;
+        logLoad("CHAOS_SUMMARY", 0, results.size(), totalDuration, "passed", passed, "failed", failed);
 
         return new ChaosTestReport(results, results.size(), passed, failed, totalDuration, buildReportMetadata());
     }
@@ -117,6 +137,9 @@ public final class ChaosTestRunner {
                 default:
                     return ChaosScenarioResult.fail(scenario, "Unknown scenario", 0);
             }
+        } catch (OutOfMemoryError e) {
+            long duration = System.currentTimeMillis() - start;
+            return ChaosScenarioResult.fail(scenario, "OOM during chaos scenario", duration);
         } catch (Exception e) {
             long duration = System.currentTimeMillis() - start;
             return ChaosScenarioResult.fail(scenario, "Uncaught exception: " + e.getMessage(), duration);
@@ -131,7 +154,7 @@ public final class ChaosTestRunner {
         ProviderRegistry registry = new ProviderRegistry(healthTracker);
         int failures = 0;
 
-        for (int i = 0; i < 20; i++) {
+        for (int i = 0; i < PROVIDER_INIT_ATTEMPTS; i++) {
             boolean shouldThrow = i % 2 == 0;
             CapabilityProvider provider = new IntermittentChaosProvider(CapabilityId.PARTICLES, shouldThrow, i);
             registry.register(provider);
@@ -164,17 +187,22 @@ public final class ChaosTestRunner {
         }
 
         long duration = System.currentTimeMillis() - start;
+        if (duration > MAX_PROVIDER_INIT_DURATION_MS) {
+            return ChaosScenarioResult.fail(ChaosScenario.PROVIDER_INIT_FAILURE,
+                    "Provider init failure scenario exceeded latency threshold: " + duration + "ms", duration);
+        }
+        logLoad("PROVIDER_INIT_FAILURE", 1, PROVIDER_INIT_ATTEMPTS, duration, "failures", failures);
         return ChaosScenarioResult.pass(ChaosScenario.PROVIDER_INIT_FAILURE, duration);
     }
 
     private static ChaosScenarioResult testInvariantViolation(long start) {
-        // Malicious: 1000 invalid updates in rapid succession
+        // Malicious: thousands of invalid updates in rapid succession
         StateStore store = StateStore.getInstance();
         store.reset();
         RuntimeState baseline = store.snapshot();
         int rejected = 0;
 
-        for (int i = 0; i < 1000; i++) {
+        for (int i = 0; i < INVARIANT_VIOLATION_ATTEMPTS; i++) {
             try {
                 store.update(state -> violateInvariant(state));
             } catch (StateInvariantViolationException e) {
@@ -185,10 +213,10 @@ public final class ChaosTestRunner {
         RuntimeState after = store.snapshot();
         store.reset();
 
-        if (rejected != 1000) {
+        if (rejected != INVARIANT_VIOLATION_ATTEMPTS) {
             long duration = System.currentTimeMillis() - start;
             return ChaosScenarioResult.fail(ChaosScenario.INVARIANT_VIOLATION_ATTEMPT,
-                    "Expected 1000 rejected updates, got " + rejected, duration);
+                    "Expected " + INVARIANT_VIOLATION_ATTEMPTS + " rejected updates, got " + rejected, duration);
         }
 
         if (!baseline.equals(after)) {
@@ -198,21 +226,26 @@ public final class ChaosTestRunner {
         }
 
         long duration = System.currentTimeMillis() - start;
+        if (duration > MAX_INVARIANT_DURATION_MS) {
+            return ChaosScenarioResult.fail(ChaosScenario.INVARIANT_VIOLATION_ATTEMPT,
+                    "Invariant violation barrage exceeded latency threshold: " + duration + "ms", duration);
+        }
+        logLoad("INVARIANT_VIOLATION_ATTEMPT", 1, INVARIANT_VIOLATION_ATTEMPTS, duration, "rejected", rejected);
         return ChaosScenarioResult.pass(ChaosScenario.INVARIANT_VIOLATION_ATTEMPT, duration);
     }
 
     private static ChaosScenarioResult testQueueOverflow(long start) {
-        // Malicious: 10 threads hammering 1000 commands each
+        // Malicious: 20 threads hammering 2000 commands each
         RuntimeState autoState = copyState(RuntimeState.defaults(), null, true, null, null, null, null, null, null,
                 null, null);
         ActionBus bus = new ActionBus(new NoOpLogger(), () -> autoState);
-        ExecutorService executor = Executors.newFixedThreadPool(10);
-        CountDownLatch latch = new CountDownLatch(10);
+        ExecutorService executor = Executors.newFixedThreadPool(QUEUE_THREADS);
+        CountDownLatch latch = new CountDownLatch(QUEUE_THREADS);
         AtomicInteger rejected = new AtomicInteger();
 
-        for (int i = 0; i < 10; i++) {
+        for (int i = 0; i < QUEUE_THREADS; i++) {
             executor.execute(() -> {
-                for (int j = 0; j < 1000; j++) {
+                for (int j = 0; j < QUEUE_COMMANDS_PER_THREAD; j++) {
                     Command cmd = new Command.ApplyCapability(
                             CapabilityId.CLOUDS,
                             new CapabilityValue.EnumValue("OFF"));
@@ -228,7 +261,11 @@ public final class ChaosTestRunner {
         }
 
         try {
-            latch.await(5, TimeUnit.SECONDS);
+            if (!latch.await(10, TimeUnit.SECONDS)) {
+                long duration = System.currentTimeMillis() - start;
+                return ChaosScenarioResult.fail(ChaosScenario.QUEUE_OVERFLOW,
+                        "Queue hammer timed out (threads still running)", duration);
+            }
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         } finally {
@@ -236,7 +273,7 @@ public final class ChaosTestRunner {
         }
 
         int queueSize = bus.getQueueSize();
-        if (queueSize > 100) {
+        if (queueSize > QUEUE_MAX_ALLOWED_SIZE) {
             long duration = System.currentTimeMillis() - start;
             return ChaosScenarioResult.fail(ChaosScenario.QUEUE_OVERFLOW,
                     "Queue overflow exceeded cap: " + queueSize, duration);
@@ -249,13 +286,19 @@ public final class ChaosTestRunner {
         }
 
         long duration = System.currentTimeMillis() - start;
+        if (duration > MAX_QUEUE_DURATION_MS) {
+            return ChaosScenarioResult.fail(ChaosScenario.QUEUE_OVERFLOW,
+                    "Queue overflow hammer exceeded latency threshold: " + duration + "ms", duration);
+        }
+        logLoad("QUEUE_OVERFLOW", QUEUE_THREADS, QUEUE_THREADS * QUEUE_COMMANDS_PER_THREAD, duration,
+                "rejected", rejected.get(), "queueSize", queueSize);
         return ChaosScenarioResult.pass(ChaosScenario.QUEUE_OVERFLOW, duration);
     }
 
     private static ChaosScenarioResult testTelemetryStarvation(long start) {
-        // Malicious: 100k samples in a tight loop
-        RingTelemetryBuffer buffer = new RingTelemetryBuffer(512);
-        for (int i = 0; i < 100_000; i++) {
+        // Malicious: 250k samples in a tight loop
+        RingTelemetryBuffer buffer = new RingTelemetryBuffer(TELEMETRY_BUFFER_SIZE);
+        for (int i = 0; i < TELEMETRY_SAMPLE_COUNT; i++) {
             buffer.add(new TelemetrySample(
                     System.currentTimeMillis(),
                     14.0 + (i % 8),
@@ -281,6 +324,13 @@ public final class ChaosTestRunner {
         }
 
         long duration = System.currentTimeMillis() - start;
+        if (duration > MAX_TELEMETRY_DURATION_MS) {
+            return ChaosScenarioResult.fail(ChaosScenario.TELEMETRY_STARVATION,
+                    "Telemetry starvation exceeded latency threshold: " + duration + "ms", duration);
+        }
+        logLoad("TELEMETRY_STARVATION", 1, TELEMETRY_SAMPLE_COUNT, duration,
+                "bufferSize", TELEMETRY_BUFFER_SIZE, "dropped", buffer.getDroppedCount(),
+                "retained", snapshot.sampleCount());
         return ChaosScenarioResult.pass(ChaosScenario.TELEMETRY_STARVATION, duration);
     }
 
@@ -314,6 +364,8 @@ public final class ChaosTestRunner {
         }
 
         long duration = System.currentTimeMillis() - start;
+        logLoad("GOVERNOR_FLAPPING", 1, 2, duration,
+                "allowedTooSoon", allowedTooSoon, "allowedAfterWindow", allowedAfterWindow);
         return ChaosScenarioResult.pass(ChaosScenario.GOVERNOR_FLAPPING, duration);
     }
 
@@ -333,6 +385,8 @@ public final class ChaosTestRunner {
         }
 
         long duration = System.currentTimeMillis() - start;
+        logLoad("PRESET_VIOLATION", 1, 1, duration,
+                "allowed", allowed, "violatesBound", violatesBound);
         return ChaosScenarioResult.pass(ChaosScenario.PRESET_VIOLATION, duration);
     }
 
@@ -368,6 +422,7 @@ public final class ChaosTestRunner {
         }
 
         long duration = System.currentTimeMillis() - start;
+        logLoad("SAFEMODE_DISPATCH", 1, 1, duration, "finalState", report.finalState());
         return ChaosScenarioResult.pass(ChaosScenario.SAFEMODE_DISPATCH, duration);
     }
 
@@ -388,6 +443,7 @@ public final class ChaosTestRunner {
         }
 
         long duration = System.currentTimeMillis() - start;
+        logLoad("HUD_SNAPSHOT_CORRUPTION", 1, 1, duration, "viewModelEmpty", viewModel == HudViewModel.EMPTY);
         return ChaosScenarioResult.pass(ChaosScenario.HUD_SNAPSHOT_CORRUPTION, duration);
     }
 
@@ -440,12 +496,14 @@ public final class ChaosTestRunner {
         }
 
         long duration = System.currentTimeMillis() - start;
+        logLoad("CRASH_LOOP_RECOVERY", 1, 2, duration,
+                "action", decision.action(), "escalated", escalated.action());
         return ChaosScenarioResult.pass(ChaosScenario.CRASH_LOOP_RECOVERY, duration);
     }
 
     private static ChaosScenarioResult testEntitySwarm(long start) {
-        int entityCount = 350;
-        int ticks = 240;
+        int entityCount = ENTITY_COUNT;
+        int ticks = ENTITY_TICKS;
         List<SimulatedEntity> entities = new ArrayList<>(entityCount);
         for (int i = 0; i < entityCount; i++) {
             entities.add(new SimulatedEntity(i, i % 23, i % 17));
@@ -474,11 +532,16 @@ public final class ChaosTestRunner {
         }
 
         long duration = System.currentTimeMillis() - start;
+        if (duration > MAX_ENTITY_DURATION_MS) {
+            return ChaosScenarioResult.fail(ChaosScenario.ENTITY_SWARM,
+                    "Entity swarm exceeded latency threshold: " + duration + "ms", duration);
+        }
+        logLoad("ENTITY_SWARM", 1, updates, duration, "entities", entityCount, "ticks", ticks);
         return ChaosScenarioResult.pass(ChaosScenario.ENTITY_SWARM, duration);
     }
 
     private static ChaosScenarioResult testChunkSpam(long start) {
-        int requests = 5000;
+        int requests = CHUNK_REQUESTS;
         int processed = 0;
         int maxQueue = 0;
         java.util.ArrayDeque<ChunkRequest> queue = new java.util.ArrayDeque<>();
@@ -499,13 +562,18 @@ public final class ChaosTestRunner {
                     "Chunk requests processed mismatch: " + processed, duration);
         }
 
-        if (maxQueue < 500) {
+        if (maxQueue < CHUNK_MIN_QUEUE) {
             long duration = System.currentTimeMillis() - start;
             return ChaosScenarioResult.fail(ChaosScenario.CHUNK_SPAM,
                     "Chunk spam did not reach stress threshold", duration);
         }
 
         long duration = System.currentTimeMillis() - start;
+        if (duration > MAX_CHUNK_DURATION_MS) {
+            return ChaosScenarioResult.fail(ChaosScenario.CHUNK_SPAM,
+                    "Chunk spam exceeded latency threshold: " + duration + "ms", duration);
+        }
+        logLoad("CHUNK_SPAM", 1, requests, duration, "maxQueue", maxQueue);
         return ChaosScenarioResult.pass(ChaosScenario.CHUNK_SPAM, duration);
     }
 
@@ -515,7 +583,7 @@ public final class ChaosTestRunner {
         int toggles = 0;
         double shaderCost = 0.0;
 
-        for (int i = 0; i < 240; i++) {
+        for (int i = 0; i < SHADER_FRAMES; i++) {
             String next = shaderPacks[i % shaderPacks.length];
             if (!next.equals(current)) {
                 toggles++;
@@ -537,6 +605,11 @@ public final class ChaosTestRunner {
         }
 
         long duration = System.currentTimeMillis() - start;
+        if (duration > MAX_SHADER_DURATION_MS) {
+            return ChaosScenarioResult.fail(ChaosScenario.SHADER_LOAD,
+                    "Shader load exceeded latency threshold: " + duration + "ms", duration);
+        }
+        logLoad("SHADER_LOAD", 1, SHADER_FRAMES, duration, "toggles", toggles);
         return ChaosScenarioResult.pass(ChaosScenario.SHADER_LOAD, duration);
     }
 
@@ -637,6 +710,18 @@ public final class ChaosTestRunner {
             default -> 1.0;
         };
         return base * packMultiplier + (frame % 7) * 0.1;
+    }
+
+    private static void logLoad(String scenario, int threads, int commands, long durationMs, Object... extras) {
+        StringBuilder builder = new StringBuilder("CHAOS_LOAD");
+        builder.append(" scenario=").append(scenario);
+        builder.append(" threads=").append(threads);
+        builder.append(" commands=").append(commands);
+        builder.append(" durationMs=").append(durationMs);
+        for (int i = 0; i + 1 < extras.length; i += 2) {
+            builder.append(" ").append(extras[i]).append("=").append(extras[i + 1]);
+        }
+        System.out.println(builder);
     }
 
     private static final class SimulatedEntity {
