@@ -128,7 +128,7 @@ public final class EnhancedFabricScenarioDetector implements ScenarioDetector {
 
         // === ENVIRONMENTAL SIGNALS ===
         EnvironmentContext.DimensionType dimension = environmentContext.getDimension();
-        boolean dangerous Biome = environmentContext.isDangerousBiome();
+        boolean dangerousBiome = environmentContext.isDangerousBiome();
         double weatherSeverity = environmentContext.getWeatherSeverity();
         boolean isNight = environmentContext.isNight();
         
