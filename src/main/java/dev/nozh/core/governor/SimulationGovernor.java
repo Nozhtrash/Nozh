@@ -88,7 +88,8 @@ public final class SimulationGovernor {
                         boolean reverseReady,
                         dev.nozh.core.state.BaselineSnapshot baselineSnapshot,
                         Map<dev.nozh.core.bus.CapabilityId, dev.nozh.core.bus.CapabilityValue> currentSettings,
-                        ActionMatrixTuning tuning) {
+                        ActionMatrixTuning tuning,
+                        DecisionBudget budget) {
                 // OFF mode → no decisions
                 if (mode == GovernorMode.OFF) {
                         return Optional.empty();
@@ -107,7 +108,8 @@ public final class SimulationGovernor {
                                         profile,
                                         baselineSnapshot,
                                         currentSettings,
-                                        tuning);
+                                        tuning,
+                                        budget);
                         if (!reverseCandidates.isEmpty()) {
                                 return Optional.of(reverseCandidates.get(0));
                         }
@@ -120,7 +122,8 @@ public final class SimulationGovernor {
                                 profile,
                                 state.p95FrametimeMs(),
                                 state.spikeCount(),
-                                tuning);
+                                tuning,
+                                budget);
 
                 if (candidates.isEmpty()) {
                         return Optional.empty();
@@ -128,6 +131,22 @@ public final class SimulationGovernor {
 
                 // Return best candidate (already sorted by ActionMatrix)
                 return Optional.of(candidates.get(0));
+        }
+
+        public Optional<ActionCandidate> decide(
+                        RuntimeState state,
+                        GovernorMode mode,
+                        String currentBound,
+                        long nowMillis,
+                        OptimizationProfile profile,
+                        int targetFps,
+                        double reverseEpsilonMs,
+                        boolean reverseReady,
+                        dev.nozh.core.state.BaselineSnapshot baselineSnapshot,
+                        Map<dev.nozh.core.bus.CapabilityId, dev.nozh.core.bus.CapabilityValue> currentSettings,
+                        ActionMatrixTuning tuning) {
+                return decide(state, mode, currentBound, nowMillis, profile, targetFps, reverseEpsilonMs, reverseReady,
+                                baselineSnapshot, currentSettings, tuning, null);
         }
 
         private boolean shouldReverseOptimize(
