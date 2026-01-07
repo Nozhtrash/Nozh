@@ -90,8 +90,17 @@ public final class IntegratedRingTelemetryBuffer implements TelemetryBuffer {
             // Step 3: Record to warmup tracker
             warmupTracker.recordSample(filteredFrametime);
             
-            // Replace sample with filtered version
-            sample = TelemetrySample.of(filteredFrametime);
+            // Replace sample with filtered version (preserve all other fields)
+            sample = new TelemetrySample(
+                sample.timestampMillis(),
+                filteredFrametime,
+                sample.tickMs(),
+                sample.fps(),
+                sample.entities(),
+                sample.chunks(),
+                sample.drawCalls(),
+                sample.droppedSamples()
+            );
         }
 
         // === ADAPTIVE SAMPLING (original logic) ===
