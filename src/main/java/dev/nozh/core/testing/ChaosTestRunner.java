@@ -77,6 +77,7 @@ public final class ChaosTestRunner {
     private static final long MAX_ENTITY_DURATION_MS = 3000;
     private static final long MAX_CHUNK_DURATION_MS = 2000;
     private static final long MAX_SHADER_DURATION_MS = 2000;
+    private static final long MAX_EXTREME_DURATION_MS = 8000;
 
     /**
      * Run all chaos scenarios.
@@ -134,6 +135,8 @@ public final class ChaosTestRunner {
                     return testChunkSpam(start);
                 case SHADER_LOAD:
                     return testShaderLoad(start);
+                case EXTREME_WORLD_LOAD:
+                    return testExtremeWorldLoad(start);
                 default:
                     return ChaosScenarioResult.fail(scenario, "Unknown scenario", 0);
             }
@@ -611,6 +614,99 @@ public final class ChaosTestRunner {
         }
         logLoad("SHADER_LOAD", 1, SHADER_FRAMES, duration, "toggles", toggles);
         return ChaosScenarioResult.pass(ChaosScenario.SHADER_LOAD, duration);
+    }
+
+    private static ChaosScenarioResult testExtremeWorldLoad(long start) {
+        int entityCount = ENTITY_COUNT;
+        int ticks = ENTITY_TICKS;
+        List<SimulatedEntity> entities = new ArrayList<>(entityCount);
+        for (int i = 0; i < entityCount; i++) {
+            entities.add(new SimulatedEntity(i, i % 23, i % 17));
+        }
+
+        int updates = 0;
+        double accumulatedMotion = 0.0;
+        for (int tick = 0; tick < ticks; tick++) {
+            for (SimulatedEntity entity : entities) {
+                entity.step(tick);
+                accumulatedMotion += entity.energy();
+                updates++;
+            }
+        }
+
+        if (updates != entityCount * ticks) {
+            long duration = System.currentTimeMillis() - start;
+            return ChaosScenarioResult.fail(ChaosScenario.EXTREME_WORLD_LOAD,
+                    "Entity updates mismatch: " + updates, duration);
+        }
+
+        if (!Double.isFinite(accumulatedMotion) || accumulatedMotion <= 0.0) {
+            long duration = System.currentTimeMillis() - start;
+            return ChaosScenarioResult.fail(ChaosScenario.EXTREME_WORLD_LOAD,
+                    "Entity simulation produced invalid motion", duration);
+        }
+
+        int requests = CHUNK_REQUESTS;
+        int processed = 0;
+        int maxQueue = 0;
+        java.util.ArrayDeque<ChunkRequest> queue = new java.util.ArrayDeque<>();
+
+        for (int i = 0; i < requests; i++) {
+            queue.add(new ChunkRequest(i, i % 2 == 0));
+            maxQueue = Math.max(maxQueue, queue.size());
+            if (i % 3 == 0) {
+                processed += drainQueue(queue, 5);
+            }
+        }
+
+        processed += drainQueue(queue, queue.size());
+
+        if (processed != requests) {
+            long duration = System.currentTimeMillis() - start;
+            return ChaosScenarioResult.fail(ChaosScenario.EXTREME_WORLD_LOAD,
+                    "Chunk requests processed mismatch: " + processed, duration);
+        }
+
+        if (maxQueue < CHUNK_MIN_QUEUE) {
+            long duration = System.currentTimeMillis() - start;
+            return ChaosScenarioResult.fail(ChaosScenario.EXTREME_WORLD_LOAD,
+                    "Chunk spam did not reach stress threshold", duration);
+        }
+
+        String[] shaderPacks = {"OFF", "RAIN_STORM", "CINEMATIC", "PERFORMANCE"};
+        String current = shaderPacks[0];
+        int toggles = 0;
+        double shaderCost = 0.0;
+
+        for (int i = 0; i < SHADER_FRAMES; i++) {
+            String next = shaderPacks[i % shaderPacks.length];
+            if (!next.equals(current)) {
+                toggles++;
+                current = next;
+            }
+            shaderCost += simulateShaderFrameCost(current, i);
+        }
+
+        if (toggles < 100) {
+            long duration = System.currentTimeMillis() - start;
+            return ChaosScenarioResult.fail(ChaosScenario.EXTREME_WORLD_LOAD,
+                    "Shader toggling did not occur frequently enough", duration);
+        }
+
+        if (!Double.isFinite(shaderCost) || shaderCost <= 0.0) {
+            long duration = System.currentTimeMillis() - start;
+            return ChaosScenarioResult.fail(ChaosScenario.EXTREME_WORLD_LOAD,
+                    "Shader load simulation produced invalid cost", duration);
+        }
+
+        long duration = System.currentTimeMillis() - start;
+        if (duration > MAX_EXTREME_DURATION_MS) {
+            return ChaosScenarioResult.fail(ChaosScenario.EXTREME_WORLD_LOAD,
+                    "Extreme world load exceeded latency threshold: " + duration + "ms", duration);
+        }
+        logLoad("EXTREME_WORLD_LOAD", 3, updates + requests + SHADER_FRAMES, duration,
+                "entities", entityCount, "chunks", requests, "shaderFrames", SHADER_FRAMES);
+        return ChaosScenarioResult.pass(ChaosScenario.EXTREME_WORLD_LOAD, duration);
     }
 
     private ChaosTestRunner() {

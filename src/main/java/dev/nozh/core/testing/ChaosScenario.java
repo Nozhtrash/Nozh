@@ -53,5 +53,9 @@ public enum ChaosScenario {
     /**
      * Shader load toggling under rain-like pressure.
      */
-    SHADER_LOAD
+    SHADER_LOAD,
+    /**
+     * Combined stress: shaders + entity swarm + chunk spam.
+     */
+    EXTREME_WORLD_LOAD
 }
