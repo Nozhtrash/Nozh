@@ -34,7 +34,8 @@ public final class HybridGovernor {
             dev.nozh.core.state.BaselineSnapshot baselineSnapshot,
             Map<dev.nozh.core.bus.CapabilityId, dev.nozh.core.bus.CapabilityValue> currentSettings,
             NozhConfig config,
-            ActionMatrixTuning tuning) {
+            ActionMatrixTuning tuning,
+            dev.nozh.core.profiler.SpikeCausalityReport spikeCausality) {
         Optional<ActionCandidate> candidate = rulesGovernor.decide(
                 state,
                 mode,
@@ -46,7 +47,8 @@ public final class HybridGovernor {
                 reverseReady,
                 baselineSnapshot,
                 currentSettings,
-                tuning);
+                tuning,
+                spikeCausality);
         if (candidate.isEmpty()) {
             return candidate;
         }
