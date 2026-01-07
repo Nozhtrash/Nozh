@@ -4,16 +4,16 @@ import dev.nozh.NozhConstants;
 import dev.nozh.core.context.*;
 import dev.nozh.core.learning.*;
 import dev.nozh.core.monitoring.*;
-import dev.nozh.core.prediction.*;  // NEW: Use prediction package
+import dev.nozh.core.prediction.PerformancePredictor;  // Specific import to resolve ambiguity
 import dev.nozh.core.safety.*;
 import dev.nozh.core.telemetry.*;
-import dev.nozh.core.intelligence.*;
 import dev.nozh.core.state.PerformanceSnapshot;
 import dev.nozh.core.config.AdaptiveConfigManager;
 import dev.nozh.fabric.context.EnhancedFabricScenarioDetector;
 import net.minecraft.client.MinecraftClient;
+
 import java.nio.file.Path;
-import java.util.Arrays;
+import java.util.*;
 
 /**
  * Integrated Governor - The main orchestration brain.
@@ -35,13 +35,15 @@ import java.util.Arrays;
  */
 public final class IntegratedGovernor {
 
-    // Core systems
+    // Core components
     private final MinecraftClient client;
-    private final IntegratedRingTelemetryBuffer telemetryBuffer;
-    private final EnhancedFabricScenarioDetector scenarioDetector;
-    private final TransactionalExecutor executor;
+    private final AdaptiveConfigManager configManager;
     
-    // Context tracking
+    // Telemetry
+    private final TelemetryBuffer telemetryBuffer;
+    
+    // Context
+    private final EnhancedFabricScenarioDetector scenarioDetector;
     private final EnvironmentContext environmentContext;
     private final CameraActivityTracker cameraTracker;
     private final ScenarioConfidenceCalculator confidenceCalculator;
@@ -60,27 +62,25 @@ public final class IntegratedGovernor {
     private final PerformanceEventLogger eventLogger;
     private final MetricsCollector metricsCollector;
     
-    // Configuration
-    private final AdaptiveConfigManager configManager;
-    
     // Safety
-    private final ProviderBlacklist blacklist;
+    private final ActionBlacklist blacklist;
     
     // State
-    private Scenario currentScenario = Scenario.STANDARD;
-    private double lastDecisionTime = 0;
-    private int tickCounter = 0;
-    private boolean initialized = false;
+    private Scenario currentScenario = Scenario.NEUTRAL;
+    private volatile boolean initialized = false;
 
+    /**
+     * Create integrated governor.
+     */
     public IntegratedGovernor(MinecraftClient client, Path logPath) {
         this.client = client;
+        this.configManager = new AdaptiveConfigManager();
         
-        // Initialize core systems
-        this.telemetryBuffer = new IntegratedRingTelemetryBuffer(512);
-        this.scenarioDetector = new EnhancedFabricScenarioDetector(client);
-        this.executor = new TransactionalExecutor();
+        // Initialize telemetry
+        this.telemetryBuffer = new TelemetryBuffer(100, 10); // 100 samples, 10-tick warmup
         
         // Initialize context
+        this.scenarioDetector = new EnhancedFabricScenarioDetector(client);
         this.environmentContext = new EnvironmentContext(client);
         this.cameraTracker = new CameraActivityTracker(client);
         this.confidenceCalculator = new ScenarioConfidenceCalculator();
@@ -99,11 +99,8 @@ public final class IntegratedGovernor {
         this.eventLogger = new PerformanceEventLogger(logPath);
         this.metricsCollector = new MetricsCollector();
         
-        // Initialize configuration
-        this.configManager = new AdaptiveConfigManager();
-        
         // Initialize safety
-        this.blacklist = new ProviderBlacklist();
+        this.blacklist = new ActionBlacklist();
         this.blacklist.initializeDefaults();
         
         this.initialized = true;
@@ -111,17 +108,16 @@ public final class IntegratedGovernor {
     }
 
     /**
-     * Main update tick - called every game tick.
+     * Tick the governor - called every game tick.
      */
     public void tick() {
-        if (!initialized || client.world == null) {
+        if (!initialized) {
             return;
         }
-
+        
         try {
-            tickCounter++;
-            
             // Update context trackers
+            environmentContext.tick();
             cameraTracker.tick();
             
             // Collect telemetry
@@ -143,20 +139,11 @@ public final class IntegratedGovernor {
             healthMonitor.updateFromTelemetry(snapshot);
             
             // Record metrics
-            metricsCollector.recordTelemetry(snapshot);
+            metricsCollector.recordFrame(snapshot.avgFps());
             
-            // Log metrics periodically (every 5 seconds)
-            if (tickCounter % 100 == 0) {
-                double avgFps = 1000.0 / snapshot.avgFrametimeMs();
-                eventLogger.logMetrics(avgFps, snapshot.p95FrametimeMs(), snapshot.spikeCount());
-            }
-            
-            // Check if we should make a decision
-            double decisionInterval = configManager.getValue("decision_interval_ms", 2000.0);
-            double now = System.currentTimeMillis();
-            if (now - lastDecisionTime >= decisionInterval) {
+            // Decision cycle (rate-limited)
+            if (shouldMakeDecision()) {
                 makeDecision(snapshot);
-                lastDecisionTime = now;
             }
             
         } catch (Exception e) {
@@ -191,14 +178,14 @@ public final class IntegratedGovernor {
         Scenario detectedScenario = scenarioSnapshot.scenario();
         double scenarioConfidence = scenarioSnapshot.confidence();
         
-        // Log scenario change
-        if (detectedScenario != currentScenario && scenarioConfidence > 0.7) {
-            eventLogger.logScenarioChange(currentScenario, detectedScenario, scenarioConfidence);
-            currentScenario = detectedScenario;
+        if (scenarioConfidence < 0.5) {
+            return; // Low confidence, skip
         }
         
-        // Calculate current FPS
-        double currentFps = 1000.0 / snapshot.avgFrametimeMs();
+        currentScenario = detectedScenario;
+        
+        // Check if action needed
+        double currentFps = snapshot.avgFps();
         double targetFps = configManager.getValue("target_fps", 60.0);
         double minFps = configManager.getValue("min_fps", 30.0);
         
@@ -252,17 +239,16 @@ public final class IntegratedGovernor {
                 .build();
         
         // Log decision
-        eventLogger.logDecision(reasoning, currentScenario, scenarioConfidence);
+        eventLogger.logDecision(selectedAction, reasoning);
         
         // Execute action
-        executeAction(selectedAction, reasoning, snapshot, state, currentFps);
+        executeAction(selectedAction, reasoning, state, currentFps);
     }
 
     /**
-     * Execute action with learning feedback.
+     * Execute an action and measure its outcome.
      */
-    private void executeAction(String actionId, DecisionReasoning reasoning, 
-                              TelemetrySnapshot beforeSnapshot, 
+    private void executeAction(String actionId, DecisionReasoning reasoning,
                               PerformanceLearningEngine.GameState state,
                               double fpsBefore) {
         long startTime = System.currentTimeMillis();
@@ -275,18 +261,17 @@ public final class IntegratedGovernor {
             boolean executionSuccess = true;
             
             // Wait for effect to stabilize
-            Thread.sleep(1000);
+            waitForStabilization(100); // 100ms
             
-            // Measure results
-            TelemetrySnapshot afterSnapshot = telemetryBuffer.snapshot();
-            double fpsAfter = 1000.0 / afterSnapshot.avgFrametimeMs();
-            double actualFpsDelta = fpsAfter - fpsBefore;
-            
+            // Measure outcome
+            double fpsAfter = telemetryBuffer.snapshot().avgFps();
+            double fpsDelta = fpsAfter - fpsBefore;
             long duration = System.currentTimeMillis() - startTime;
-            boolean success = executionSuccess && actualFpsDelta > 0;
+            
+            boolean success = fpsDelta > 0;
             
             // Record results
-            effectivenessTracker.recordActionResult(actionId, actualFpsDelta, success);
+            effectivenessTracker.recordActionResult(actionId, fpsDelta, success);
             eventLogger.logActionExecution(actionId, success, duration);
             metricsCollector.recordAction(actionId, success, duration);
             
@@ -302,17 +287,14 @@ public final class IntegratedGovernor {
                     fpsBefore, fpsAfter, visualImpact, gameplayImpact
             );
             
-            // Update learning
+            // Update Q-learning
             PerformanceLearningEngine.GameState newState = new PerformanceLearningEngine.GameState(
-                    currentScenario, fpsAfter, determineHardwareProfile(fpsAfter)
+currentScenario, fpsAfter, determineHardwareProfile(fpsAfter)
             );
-            learningEngine.updateFromExperience(state, actionId, reward, newState);
+            learningEngine.updateQValue(state, actionId, reward, newState);
             
             // Adapt weights
-            weightTuner.adaptWeights(currentScenario, actionId, actualFpsDelta, visualImpact, gameplayImpact);
-            
-            // Adapt config
-            configManager.adaptValue("target_fps", fpsAfter, configManager.getValue("target_fps", 60.0));
+            weightTuner.onActionOutcome(actionId, fpsDelta, visualImpact, gameplayImpact);
             
         } catch (Exception e) {
             NozhConstants.LOGGER.error("Action execution failed: " + actionId, e);
@@ -336,41 +318,58 @@ public final class IntegratedGovernor {
     }
 
     /**
-     * Get available actions (not blacklisted).
+     * Get available actions for current scenario.
      */
     private String[] getAvailableActions() {
-        String[] allActions = {
-                "reduce_render_distance",
-                "lower_particles",
-                "disable_clouds",
-                "reduce_shadows",
-                "lower_entity_distance"
-        };
-        
-        return Arrays.stream(allActions)
-                .filter(action -> !blacklist.isBlacklisted(action))
-                .toArray(String[]::new);
+        // TODO: Get from provider registry
+        return new String[]{"reduce_render_distance", "disable_particles", "lower_entity_distance"};
     }
 
     /**
-     * Determine hardware profile from FPS.
+     * Determine hardware profile based on FPS.
      */
     private String determineHardwareProfile(double fps) {
-        if (fps >= 120) return "high";
-        if (fps >= 60) return "medium";
-        return "low";
+        if (fps >= 60) return "high_end";
+        if (fps >= 30) return "mid_range";
+        return "low_end";
     }
 
     /**
-     * Collect telemetry sample.
+     * Rate limiter for decision making.
+     */
+    private long lastDecisionTime = 0;
+    private static final long DECISION_INTERVAL_MS = 5000; // 5 seconds
+
+    private boolean shouldMakeDecision() {
+        long now = System.currentTimeMillis();
+        if (now - lastDecisionTime >= DECISION_INTERVAL_MS) {
+            lastDecisionTime = now;
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * Wait for action effects to stabilize.
+     */
+    private void waitForStabilization(long millis) {
+        try {
+            Thread.sleep(millis);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+    }
+
+    /**
+     * Collect current telemetry sample.
      */
     private TelemetrySample collectTelemetry() {
         if (client.world == null) {
             return null;
         }
         
-        double frametime = client.getLastFrameDuration();
-        int fps = client.getCurrentFps();
+        double fps = client.getCurrentFps();
+        double frametime = fps > 0 ? (1000.0 / fps) : 0;
         
         return new TelemetrySample(
                 System.currentTimeMillis(),
@@ -415,24 +414,31 @@ public final class IntegratedGovernor {
     }
 
     /**
+     * Check if governor is initialized.
+     */
+    public boolean isInitialized() {
+        return initialized;
+    }
+
+    /**
      * Get learning statistics.
      */
-    public java.util.Map<String, Object> getLearningStats() {
-        return learningEngine.getStatistics();
+    public Map<String, Object> getLearningStats() {
+        return effectivenessTracker.getStats();
     }
 
     /**
      * Get metrics summary.
      */
-    public java.util.Map<String, Object> getMetricsSummary() {
+    public Map<String, Object> getMetricsSummary() {
         return metricsCollector.getSummary();
     }
 
     /**
-     * Get action effectiveness score.
+     * Get action effectiveness.
      */
     public double getActionEffectiveness(String actionId) {
-        return effectivenessTracker.getEffectivenessScore(actionId);
+        return effectivenessTracker.getEffectiveness(actionId);
     }
 
     /**
@@ -446,18 +452,17 @@ public final class IntegratedGovernor {
     }
 
     /**
-     * Shutdown governor.
+     * Get health report.
      */
-    public void shutdown() {
-        eventLogger.shutdown();
-        initialized = false;
-        NozhConstants.LOGGER.info("IntegratedGovernor shutdown complete");
-    }
-
-    /**
-     * Check if governor is initialized.
-     */
-    public boolean isInitialized() {
-        return initialized;
+    public String getHealthReport() {
+        StringBuilder report = new StringBuilder();
+        report.append("=== SYSTEM HEALTH REPORT ===\n");
+        report.append("Status: ").append(healthMonitor.getHealthStatus()).append("\n");
+        report.append(String.format("Health Score: %.2f\n", healthMonitor.getHealthScore()));
+        report.append(String.format("Memory Usage: %.1f%%\n", healthMonitor.getMemoryUsagePercent() * 100));
+        report.append(String.format("GC Count: %d\n", healthMonitor.getGCCount()));
+        report.append(String.format("Avg GC Pause: %.1fms\n", healthMonitor.getAverageGCPause()));
+        report.append(String.format("Prediction Confidence: %.2f\n", predictor.getPredictionConfidence()));
+        return report.toString();
     }
 }
