@@ -36,7 +36,7 @@ public class PerfManager implements CriticalEventSink {
     private final FramePauseTracker pauseTracker;
     private final RenderPipelineTracer renderPipelineTracer;
     private final StutterCauseAnalyzer stutterCauseAnalyzer;
-    private final SpikeCausalityAnalyzer spikeCausalityAnalyzer;
+    private final CausalAnalyzer causalAnalyzer;
     private final PerfTraceBuffer traceBuffer;
     private long lastWindowAdjustMillis = 0L;
     private Supplier<PerfSnapshot> tickSnapshotSupplier = null;
@@ -52,7 +52,7 @@ public class PerfManager implements CriticalEventSink {
         this.pauseTracker = new FramePauseTracker();
         this.renderPipelineTracer = new RenderPipelineTracer();
         this.stutterCauseAnalyzer = new StutterCauseAnalyzer();
-        this.spikeCausalityAnalyzer = new SpikeCausalityAnalyzer();
+        this.causalAnalyzer = new CausalAnalyzer();
         this.traceBuffer = new PerfTraceBuffer();
 
         int targetFps = Math.max(30, config.targetFps);
@@ -78,10 +78,13 @@ public class PerfManager implements CriticalEventSink {
             // Correcting logic:
             sampler.onFrame();
         }
-        gcPauseWatcher.update().ifPresent(event -> traceBuffer.record(PerfTraceEvent.gc(
-                event.timestampMillis(),
-                event.pauseMs(),
-                String.format("GC %.0fms", event.pauseMs()))));
+        GcPauseEvent event = gcPauseWatcher.update();
+        if (event != null) {
+            traceBuffer.record(PerfTraceEvent.gc(
+                    event.timestampMillis(),
+                    event.pauseMs(),
+                    String.format("GC %.0fms", event.pauseMs())));
+        }
     }
 
     public PerfSnapshot getSnapshot() {
@@ -115,7 +118,7 @@ public class PerfManager implements CriticalEventSink {
         FramePauseSnapshot pauses = pauseTracker.snapshot();
         RenderPipelineSnapshot renderSnapshot = renderPipelineTracer.snapshot();
         PerfTraceSnapshot traceSnapshot = traceBuffer.snapshot(windowSeconds * 1000L);
-        SpikeCausalityReport spikeCausality = spikeCausalityAnalyzer.analyze(snapshot, tickSnapshot, gcSnapshot,
+        SpikeCausalityReport spikeCausality = causalAnalyzer.analyze(snapshot, tickSnapshot, gcSnapshot,
                 pauses, renderSnapshot, traceSnapshot);
         PerfReport report = new PerfReport(
                 snapshot,
@@ -140,6 +143,7 @@ public class PerfManager implements CriticalEventSink {
         sampler.reset();
         spikePredictor.reset();
         traceBuffer.reset();
+        causalAnalyzer.reset();
     }
 
     public SpikePrediction getSpikePrediction() {
@@ -215,7 +219,7 @@ public class PerfManager implements CriticalEventSink {
         FramePauseSnapshot pauses = pauseTracker.snapshot();
         RenderPipelineSnapshot renderSnapshot = renderPipelineTracer.snapshot();
         PerfTraceSnapshot traceSnapshot = traceBuffer.snapshot(windowSeconds * 1000L);
-        return spikeCausalityAnalyzer.analyze(stats.snapshot(), tickSnapshot, gcSnapshot, pauses, renderSnapshot,
+        return causalAnalyzer.analyze(stats.snapshot(), tickSnapshot, gcSnapshot, pauses, renderSnapshot,
                 traceSnapshot);
     }
 
