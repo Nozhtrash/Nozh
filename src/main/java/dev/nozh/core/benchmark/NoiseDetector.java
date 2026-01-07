@@ -25,6 +25,10 @@ public final class NoiseDetector {
             return BenchmarkValidity.INCONCLUSIVE;
         }
 
+        if (isConfidenceIntervalTooWide(snapshot)) {
+            return BenchmarkValidity.INCONCLUSIVE;
+        }
+
         double cv = calculateCV(snapshot);
 
         if (cv < CV_THRESHOLD_VALID) {
@@ -56,6 +60,15 @@ public final class NoiseDetector {
         double cv = Math.abs(spread / avg);
 
         return cv;
+    }
+
+    private static boolean isConfidenceIntervalTooWide(TelemetrySnapshot snapshot) {
+        double avg = snapshot.avgFrametimeMs();
+        if (avg <= 0) {
+            return true;
+        }
+        double relativeCi = snapshot.avgConfidenceIntervalMs() / avg;
+        return relativeCi > 0.1;
     }
 
     private NoiseDetector() {
