@@ -88,6 +88,7 @@ public final class InitialBenchmarkRunner {
         TelemetrySnapshot telemetry = TelemetrySnapshot.of(
                 snapshot.avgFrametimeMs(),
                 snapshot.p95FrametimeMs(),
+                snapshot.frametimeStddevMs(),
                 snapshot.spikeCount(),
                 snapshot.sampleCount(),
                 0);
