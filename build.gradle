@@ -113,6 +113,12 @@ tasks.register('chaosTest', JavaExec) {
 
 	dependsOn classes
 
+	if (project.hasProperty('chaosSlowFactor')) {
+		systemProperty 'nozh.chaos.slowFactor', project.property('chaosSlowFactor').toString()
+	} else if (System.getenv('NOZH_CHAOS_SLOW_FACTOR')) {
+		systemProperty 'nozh.chaos.slowFactor', System.getenv('NOZH_CHAOS_SLOW_FACTOR')
+	}
+
 	if (project.hasProperty('outputDir')) {
 		args '--output', project.property('outputDir').toString()
 	}

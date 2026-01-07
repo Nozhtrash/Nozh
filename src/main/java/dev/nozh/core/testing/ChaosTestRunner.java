@@ -78,6 +78,8 @@ public final class ChaosTestRunner {
     private static final long MAX_CHUNK_DURATION_MS = 2000;
     private static final long MAX_SHADER_DURATION_MS = 2000;
     private static final long MAX_EXTREME_DURATION_MS = 8000;
+    private static final long MAX_QUEUE_AWAIT_MS = 10_000;
+    private static final double SLOW_FACTOR = resolveSlowFactor();
 
     /**
      * Run all chaos scenarios.
@@ -190,7 +192,7 @@ public final class ChaosTestRunner {
         }
 
         long duration = System.currentTimeMillis() - start;
-        if (duration > MAX_PROVIDER_INIT_DURATION_MS) {
+        if (duration > scaledDuration(MAX_PROVIDER_INIT_DURATION_MS)) {
             return ChaosScenarioResult.fail(ChaosScenario.PROVIDER_INIT_FAILURE,
                     "Provider init failure scenario exceeded latency threshold: " + duration + "ms", duration);
         }
@@ -229,7 +231,7 @@ public final class ChaosTestRunner {
         }
 
         long duration = System.currentTimeMillis() - start;
-        if (duration > MAX_INVARIANT_DURATION_MS) {
+        if (duration > scaledDuration(MAX_INVARIANT_DURATION_MS)) {
             return ChaosScenarioResult.fail(ChaosScenario.INVARIANT_VIOLATION_ATTEMPT,
                     "Invariant violation barrage exceeded latency threshold: " + duration + "ms", duration);
         }
@@ -264,7 +266,7 @@ public final class ChaosTestRunner {
         }
 
         try {
-            if (!latch.await(10, TimeUnit.SECONDS)) {
+            if (!latch.await(scaledDuration(MAX_QUEUE_AWAIT_MS), TimeUnit.MILLISECONDS)) {
                 long duration = System.currentTimeMillis() - start;
                 return ChaosScenarioResult.fail(ChaosScenario.QUEUE_OVERFLOW,
                         "Queue hammer timed out (threads still running)", duration);
@@ -289,7 +291,7 @@ public final class ChaosTestRunner {
         }
 
         long duration = System.currentTimeMillis() - start;
-        if (duration > MAX_QUEUE_DURATION_MS) {
+        if (duration > scaledDuration(MAX_QUEUE_DURATION_MS)) {
             return ChaosScenarioResult.fail(ChaosScenario.QUEUE_OVERFLOW,
                     "Queue overflow hammer exceeded latency threshold: " + duration + "ms", duration);
         }
@@ -327,7 +329,7 @@ public final class ChaosTestRunner {
         }
 
         long duration = System.currentTimeMillis() - start;
-        if (duration > MAX_TELEMETRY_DURATION_MS) {
+        if (duration > scaledDuration(MAX_TELEMETRY_DURATION_MS)) {
             return ChaosScenarioResult.fail(ChaosScenario.TELEMETRY_STARVATION,
                     "Telemetry starvation exceeded latency threshold: " + duration + "ms", duration);
         }
@@ -535,7 +537,7 @@ public final class ChaosTestRunner {
         }
 
         long duration = System.currentTimeMillis() - start;
-        if (duration > MAX_ENTITY_DURATION_MS) {
+        if (duration > scaledDuration(MAX_ENTITY_DURATION_MS)) {
             return ChaosScenarioResult.fail(ChaosScenario.ENTITY_SWARM,
                     "Entity swarm exceeded latency threshold: " + duration + "ms", duration);
         }
@@ -572,7 +574,7 @@ public final class ChaosTestRunner {
         }
 
         long duration = System.currentTimeMillis() - start;
-        if (duration > MAX_CHUNK_DURATION_MS) {
+        if (duration > scaledDuration(MAX_CHUNK_DURATION_MS)) {
             return ChaosScenarioResult.fail(ChaosScenario.CHUNK_SPAM,
                     "Chunk spam exceeded latency threshold: " + duration + "ms", duration);
         }
@@ -608,7 +610,7 @@ public final class ChaosTestRunner {
         }
 
         long duration = System.currentTimeMillis() - start;
-        if (duration > MAX_SHADER_DURATION_MS) {
+        if (duration > scaledDuration(MAX_SHADER_DURATION_MS)) {
             return ChaosScenarioResult.fail(ChaosScenario.SHADER_LOAD,
                     "Shader load exceeded latency threshold: " + duration + "ms", duration);
         }
@@ -700,7 +702,7 @@ public final class ChaosTestRunner {
         }
 
         long duration = System.currentTimeMillis() - start;
-        if (duration > MAX_EXTREME_DURATION_MS) {
+        if (duration > scaledDuration(MAX_EXTREME_DURATION_MS)) {
             return ChaosScenarioResult.fail(ChaosScenario.EXTREME_WORLD_LOAD,
                     "Extreme world load exceeded latency threshold: " + duration + "ms", duration);
         }
@@ -858,6 +860,29 @@ public final class ChaosTestRunner {
 
         private int id() {
             return id;
+        }
+    }
+
+    private static long scaledDuration(long baseMs) {
+        return Math.round(baseMs * SLOW_FACTOR);
+    }
+
+    private static double resolveSlowFactor() {
+        double configured = getDoubleProperty("nozh.chaos.slowFactor", 1.0);
+        int cores = Runtime.getRuntime().availableProcessors();
+        double hardwareFactor = cores <= 2 ? 2.0 : (cores <= 4 ? 1.5 : 1.0);
+        return Math.max(configured, hardwareFactor);
+    }
+
+    private static double getDoubleProperty(String key, double fallback) {
+        String value = System.getProperty(key);
+        if (value == null || value.isBlank()) {
+            return fallback;
+        }
+        try {
+            return Double.parseDouble(value.trim());
+        } catch (NumberFormatException ignored) {
+            return fallback;
         }
     }
 
