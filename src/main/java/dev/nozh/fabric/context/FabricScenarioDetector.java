@@ -4,6 +4,7 @@ import dev.nozh.core.context.Scenario;
 import dev.nozh.core.context.ScenarioConfidence;
 import dev.nozh.core.context.ScenarioDetector;
 import dev.nozh.core.context.ScenarioSnapshot;
+import dev.nozh.core.input.InputActivityTracker;
 import dev.nozh.core.util.DebugLogger;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.network.ClientPlayerEntity;
@@ -35,6 +36,8 @@ public final class FabricScenarioDetector implements ScenarioDetector {
     private static final int HOSTILE_MOB_RANGE = 32;
     private static final int COMBAT_COOLDOWN_TICKS = 100; // 5s
     private static final int AFK_THRESHOLD_TICKS = 2400; // 120s
+    private static final long AFK_INPUT_THRESHOLD_MS = 120_000; // 120s
+    private static final double MOVEMENT_EPSILON_SQUARED = 0.0004;
 
     private final MinecraftClient client;
     
@@ -48,6 +51,10 @@ public final class FabricScenarioDetector implements ScenarioDetector {
     private long lastInventoryOpenTick = 0;
     private int blocksPlacedRecent = 0;
     private int blocksBrokenRecent = 0;
+    private boolean positionInitialized = false;
+    private double lastX = 0.0;
+    private double lastY = 0.0;
+    private double lastZ = 0.0;
     
     // Stability tracking
     private Scenario lastScenario = Scenario.STANDARD;
@@ -111,11 +118,18 @@ public final class FabricScenarioDetector implements ScenarioDetector {
 
         // === AFK DETECTION ===
         long ticksSinceMovement = currentTick - lastMovementTick;
-        if (ticksSinceMovement > AFK_THRESHOLD_TICKS) {
+        long inputAgeMs = InputActivityTracker.getLastInputAgeMs();
+        boolean noRecentInput = inputAgeMs > AFK_INPUT_THRESHOLD_MS;
+        if (ticksSinceMovement > AFK_THRESHOLD_TICKS && noRecentInput) {
             afkScore += 8;
+        } else if (ticksSinceMovement > AFK_THRESHOLD_TICKS) {
+            afkScore += 4;
+        }
+        if (noRecentInput) {
+            afkScore += 2;
         }
         if (player.getVelocity().lengthSquared() < 0.001) {
-            afkScore += 2;
+            afkScore += 1;
         }
 
         // === COMBAT DETECTION ===
@@ -275,6 +289,28 @@ public final class FabricScenarioDetector implements ScenarioDetector {
 
     // Decay counters periodically
     public void tick() {
+        if (client.player != null && client.world != null) {
+            double currentX = client.player.getX();
+            double currentY = client.player.getY();
+            double currentZ = client.player.getZ();
+            if (!positionInitialized) {
+                positionInitialized = true;
+                lastX = currentX;
+                lastY = currentY;
+                lastZ = currentZ;
+                lastMovementTick = client.world.getTime();
+            } else {
+                double dx = currentX - lastX;
+                double dy = currentY - lastY;
+                double dz = currentZ - lastZ;
+                if ((dx * dx + dy * dy + dz * dz) > MOVEMENT_EPSILON_SQUARED) {
+                    lastMovementTick = client.world.getTime();
+                }
+                lastX = currentX;
+                lastY = currentY;
+                lastZ = currentZ;
+            }
+        }
         if (blocksPlacedRecent > 0) blocksPlacedRecent--;
         if (blocksBrokenRecent > 0) blocksBrokenRecent--;
     }
