@@ -3,6 +3,7 @@ package dev.nozh.core.intelligence;
 import dev.nozh.core.bus.CapabilityId;
 import dev.nozh.NozhConstants;
 import dev.nozh.core.governor.ActionOutcome;
+import dev.nozh.core.profiler.SpikeCauseType;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonElement;
@@ -436,6 +437,9 @@ public final class SessionLearning {
                         if (data.causalityHistory != null) {
                             causalityHistory.putAll(data.causalityHistory);
                         }
+                        if (data.causalityHistory != null) {
+                            causalityHistory.putAll(data.causalityHistory);
+                        }
                     }
                 } else {
                     java.lang.reflect.Type type = new com.google.gson.reflect.TypeToken<Map<String, ActionStats>>() {
@@ -555,6 +559,7 @@ public final class SessionLearning {
         public Map<String, PredictionStats> predictionStatsByHardware;
         public Map<dev.nozh.core.profiler.SpikeCauseType, CausalityStats> causalityHistory;
         public PredictionStats predictionStats;
+        public Map<SpikeCauseType, CausalityStats> causalityHistory;
 
         private SessionData(String sessionKey,
                 String hardwareKey,
