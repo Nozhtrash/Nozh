@@ -3,6 +3,7 @@ package dev.nozh.core.intelligence;
 import dev.nozh.core.bus.CapabilityId;
 import dev.nozh.NozhConstants;
 import dev.nozh.core.governor.ActionOutcome;
+import dev.nozh.core.profiler.SpikeCauseType;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonElement;
@@ -17,6 +18,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
+import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -167,6 +169,23 @@ public final class SessionLearning {
 
     public int getPredictionCount() {
         return predictionStats.totalPredictions;
+    }
+
+    public void recordCausality(SpikeCauseType cause, double confidence) {
+        if (cause == null || cause == SpikeCauseType.UNKNOWN) {
+            return;
+        }
+        CausalityStats stats = causalityHistory.computeIfAbsent(cause, key -> new CausalityStats());
+        stats.totalCount++;
+        stats.totalConfidence += Math.max(0.0, confidence);
+        stats.avgConfidence = stats.totalCount > 0 ? stats.totalConfidence / stats.totalCount : 0.0;
+        stats.lastObservedMillis = System.currentTimeMillis();
+        dirty = true;
+    }
+
+    public double getCausalityConfidence(SpikeCauseType cause) {
+        CausalityStats stats = causalityHistory.get(cause);
+        return stats != null ? stats.avgConfidence : 0.0;
     }
 
     /**
@@ -401,6 +420,9 @@ public final class SessionLearning {
                         } else if (data.predictionStats != null) {
                             predictionStatsByHardwareKey.put(DEFAULT_HARDWARE_KEY, data.predictionStats);
                         }
+                        if (data.causalityHistory != null) {
+                            causalityHistory.putAll(data.causalityHistory);
+                        }
                     }
                 } else {
                     java.lang.reflect.Type type = new com.google.gson.reflect.TypeToken<Map<String, ActionStats>>() {
@@ -502,6 +524,13 @@ public final class SessionLearning {
         }
     }
 
+    public static class CausalityStats {
+        public int totalCount = 0;
+        public double totalConfidence = 0.0;
+        public double avgConfidence = 0.0;
+        public long lastObservedMillis = 0;
+    }
+
     private static final class SessionData {
         public String sessionKey;
         public String hardwareKey;
@@ -509,6 +538,7 @@ public final class SessionLearning {
         public Map<String, Map<String, ActionStats>> hardwareHistory;
         public Map<String, PredictionStats> predictionStatsByHardware;
         public PredictionStats predictionStats;
+        public Map<SpikeCauseType, CausalityStats> causalityHistory;
 
         private SessionData(String sessionKey,
                 String hardwareKey,
