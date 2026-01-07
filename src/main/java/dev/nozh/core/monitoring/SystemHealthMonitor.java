@@ -1,5 +1,6 @@
 package dev.nozh.core.monitoring;
 
+import dev.nozh.core.telemetry.TelemetrySnapshot;
 import net.minecraft.client.MinecraftClient;
 import java.lang.management.ManagementFactory;
 import java.lang.management.MemoryMXBean;
@@ -49,6 +50,21 @@ public class SystemHealthMonitor {
         this.gcCount = 0;
         this.lastHealthScore = 1.0;
         this.lastHealthCheckTime = 0;
+    }
+    
+    /**
+     * Updates health monitor from telemetry snapshot.
+     * This method is called periodically by IntegratedGovernor.
+     * 
+     * @param snapshot telemetry snapshot to process
+     */
+    public void updateFromTelemetry(TelemetrySnapshot snapshot) {
+        // Trigger health recalculation by calling getHealthScore
+        // This will update cached values if enough time has passed
+        getHealthScore();
+        
+        // Future: Could extract GC info from telemetry if available
+        // For now, health calculation uses direct JVM metrics
     }
     
     /**
