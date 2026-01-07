@@ -123,6 +123,7 @@ public class NozhHudRenderer implements HudRenderCallback {
         return TelemetrySnapshot.of(
                 snapshot.avgFrametimeMs(),
                 snapshot.p95FrametimeMs(),
+                snapshot.frametimeStddevMs(),
                 snapshot.spikeCount(),
                 snapshot.sampleCount(),
                 0);
