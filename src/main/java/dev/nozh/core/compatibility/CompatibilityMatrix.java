@@ -1,12 +1,20 @@
 package dev.nozh.core.compatibility;
 
 import dev.nozh.core.bus.CapabilityId;
+import dev.nozh.api.capability.CapabilityContract;
+import dev.nozh.api.capability.CapabilityContractDeclaration;
+import dev.nozh.api.compat.StewardshipDeclaration;
+import dev.nozh.api.compat.StewardshipMode;
+import dev.nozh.api.metrics.ModMetricsDeclaration;
 import dev.nozh.core.capability.ProviderMetadata;
 import dev.nozh.fabric.compat.CompatRegistry;
-import dev.nozh.api.compat.StewardshipMode;
 import net.fabricmc.loader.api.FabricLoader;
 
+import java.util.ArrayList;
+import java.util.EnumSet;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -124,5 +132,73 @@ public final class CompatibilityMatrix {
             }
         }
         return traces;
+    }
+
+    public List<CompatibilityAgreement> getAgreements() {
+        Map<String, AgreementBuilder> builders = new HashMap<>();
+
+        for (StewardshipDeclaration declaration : StewardshipHandshakeRegistry.getDeclarations()) {
+            AgreementBuilder builder = builders.computeIfAbsent(
+                    declaration.modId(),
+                    key -> new AgreementBuilder(declaration.modId(), declaration.displayName()));
+            builder.stewardshipReason = declaration.reason();
+            builder.sharedCapabilities.addAll(declaration.sharedCapabilities());
+            builder.exclusiveCapabilities.addAll(declaration.exclusiveCapabilities());
+        }
+
+        for (CapabilityContractDeclaration declaration : CapabilityContractRegistry.getDeclarations()) {
+            AgreementBuilder builder = builders.computeIfAbsent(
+                    declaration.modId(),
+                    key -> new AgreementBuilder(declaration.modId(), declaration.displayName()));
+            builder.contractNotes = declaration.notes();
+            builder.contracts.addAll(declaration.contracts());
+        }
+
+        for (ModMetricsDeclaration declaration : ModMetricsRegistry.getDeclarations()) {
+            AgreementBuilder builder = builders.computeIfAbsent(
+                    declaration.modId(),
+                    key -> new AgreementBuilder(declaration.modId(), declaration.displayName()));
+            builder.metricsNotes = declaration.notes();
+            builder.metrics.addAll(declaration.metrics());
+            builder.metricCapabilities.addAll(declaration.capabilities());
+        }
+
+        List<CompatibilityAgreement> agreements = new ArrayList<>();
+        for (AgreementBuilder builder : builders.values()) {
+            agreements.add(builder.build());
+        }
+        return agreements;
+    }
+
+    private static final class AgreementBuilder {
+        private final String modId;
+        private final String displayName;
+        private final EnumSet<CapabilityId> exclusiveCapabilities = EnumSet.noneOf(CapabilityId.class);
+        private final EnumSet<CapabilityId> sharedCapabilities = EnumSet.noneOf(CapabilityId.class);
+        private String stewardshipReason = "";
+        private final List<CapabilityContract> contracts = new ArrayList<>();
+        private String contractNotes = "";
+        private final EnumSet<CapabilityId> metricCapabilities = EnumSet.noneOf(CapabilityId.class);
+        private final List<ModMetricsDeclaration.MetricDefinition> metrics = new ArrayList<>();
+        private String metricsNotes = "";
+
+        private AgreementBuilder(String modId, String displayName) {
+            this.modId = modId;
+            this.displayName = displayName;
+        }
+
+        private CompatibilityAgreement build() {
+            return new CompatibilityAgreement(
+                    modId,
+                    displayName,
+                    EnumSet.copyOf(exclusiveCapabilities),
+                    EnumSet.copyOf(sharedCapabilities),
+                    stewardshipReason,
+                    List.copyOf(contracts),
+                    contractNotes,
+                    EnumSet.copyOf(metricCapabilities),
+                    List.copyOf(metrics),
+                    metricsNotes);
+        }
     }
 }

@@ -21,6 +21,7 @@
 - `docs/critical-notes-for-beta.md` — Notas críticas para la integración beta.
 - `docs/manual-validation.md` — Validación manual.
 - `docs/modpack-quick-test.md` — Quick test para modpacks.
+- `docs/nozh-api.md` — API pública para modders (contratos, stewardship y métricas).
 - `docs/technical-debt-audit.md` — Auditoría de deuda técnica.
 - `docs/telemetry-metrics.md` — Checklist de métricas de telemetría.
 - `docs/v0.2-alpha.md` — Documento de referencia de v0.2-alpha.
