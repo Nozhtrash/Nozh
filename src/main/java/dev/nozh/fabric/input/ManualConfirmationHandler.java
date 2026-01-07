@@ -202,6 +202,7 @@ public final class ManualConfirmationHandler {
             currentState.tickTimeAvg(),
             currentState.tickTimeP95(),
             currentState.spikeCount(),
+            currentState.stabilityStats(),
             currentState.lastDecisionReason(),
             currentState.lastDecisionTimestamp(),
             currentState.lastImpactMs(),

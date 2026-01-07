@@ -23,10 +23,11 @@ import java.util.Optional;
  * - Version 7 (adds scenario change metrics): Migrator adds scenario counters
  * - Version 8 (adds outcome traceability): Migrator adds outcome tracking fields
  * - Version 9 (adds scenario history): Migrator adds scenario history list
+ * - Version 10 (adds stability stats): Migrator adds stability tracking fields
  */
 public final class StateMigrationRegistry {
 
-    private static final int CURRENT_VERSION = 9; // Current state version
+    private static final int CURRENT_VERSION = 10; // Current state version
 
     private final Map<Integer, StateMigrator> migrators = new HashMap<>();
 
@@ -75,12 +76,13 @@ public final class StateMigrationRegistry {
                     oldState.tickTimeAvg(),
                     oldState.tickTimeP95(),
                     oldState.spikeCount(),
+                resolveStabilityStats(oldState),
                     "", 0L, // lastDecisionReason, lastDecisionTimestamp default
                     0.0,
                     ActionOutcome.NEUTRAL,
                     true,
                     oldState.sessionStartTime(),
-                    9, // Target version is 9
+                    10, // Target version is 10
                     dev.nozh.core.context.Scenario.STANDARD,
                     0.5,
                     0L,
@@ -117,13 +119,14 @@ public final class StateMigrationRegistry {
                 oldState.tickTimeAvg(),
                 oldState.tickTimeP95(),
                 oldState.spikeCount(),
+                resolveStabilityStats(oldState),
                 oldState.lastDecisionReason(),
                 oldState.lastDecisionTimestamp(),
                 0.0,
                 ActionOutcome.NEUTRAL,
                 true,
                 oldState.sessionStartTime(),
-                9,
+                10,
                 oldState.currentScenario(),
                 oldState.scenarioConfidence(),
                 0L,
@@ -159,13 +162,14 @@ public final class StateMigrationRegistry {
                 oldState.tickTimeAvg(),
                 oldState.tickTimeP95(),
                 oldState.spikeCount(),
+                resolveStabilityStats(oldState),
                 oldState.lastDecisionReason(),
                 oldState.lastDecisionTimestamp(),
                 0.0,
                 ActionOutcome.NEUTRAL,
                 true,
                 oldState.sessionStartTime(),
-                9,
+                10,
                 oldState.currentScenario(),
                 oldState.scenarioConfidence(),
                 0L,
@@ -201,13 +205,14 @@ public final class StateMigrationRegistry {
                 oldState.tickTimeAvg(),
                 oldState.tickTimeP95(),
                 oldState.spikeCount(),
+                resolveStabilityStats(oldState),
                 oldState.lastDecisionReason(),
                 oldState.lastDecisionTimestamp(),
                 0.0,
                 ActionOutcome.NEUTRAL,
                 true,
                 oldState.sessionStartTime(),
-                9,
+                10,
                 oldState.currentScenario(),
                 oldState.scenarioConfidence(),
                 0L,
@@ -243,13 +248,14 @@ public final class StateMigrationRegistry {
                 oldState.tickTimeAvg(),
                 oldState.tickTimeP95(),
                 oldState.spikeCount(),
+                resolveStabilityStats(oldState),
                 oldState.lastDecisionReason(),
                 oldState.lastDecisionTimestamp(),
                 0.0,
                 ActionOutcome.NEUTRAL,
                 true,
                 oldState.sessionStartTime(),
-                9,
+                10,
                 oldState.currentScenario(),
                 oldState.scenarioConfidence(),
                 0L,
@@ -285,13 +291,100 @@ public final class StateMigrationRegistry {
                 oldState.tickTimeAvg(),
                 oldState.tickTimeP95(),
                 oldState.spikeCount(),
+                resolveStabilityStats(oldState),
                 oldState.lastDecisionReason(),
                 oldState.lastDecisionTimestamp(),
                 0.0,
                 ActionOutcome.NEUTRAL,
                 true,
                 oldState.sessionStartTime(),
-                9,
+                10,
+                oldState.currentScenario(),
+                oldState.scenarioConfidence(),
+                oldState.lastScenarioChangeTimestamp(),
+                oldState.scenarioChangeCount(),
+                oldState.rapidScenarioChangeCount(),
+                oldState.combatAfkFlipCount(),
+                oldState.scenarioHistory(),
+                oldState.baselineSettings(),
+                oldState.currentSettings()));
+
+        registerMigrator(8, oldState -> new RuntimeState(
+                oldState.enabled(),
+                oldState.safeMode(),
+                oldState.autoTuning(),
+                oldState.debugLogs(),
+                oldState.governorDisabled(),
+                oldState.governorCooldownActive(),
+                oldState.governorLastActionTimestamp(),
+                oldState.benchmarkRunning(),
+                oldState.benchmarkValidity(),
+                oldState.benchmarkStartTimestamp(),
+                oldState.pendingAction(),
+                oldState.suggestedActions(),
+                oldState.pendingActionsCount(),
+                oldState.executionHistorySize(),
+                oldState.lastSnapshotHistorySize(),
+                oldState.actionHistory(),
+                oldState.sessionChangesCount(),
+                oldState.avgFrametimeMs(),
+                oldState.p95FrametimeMs(),
+                oldState.p99FrametimeMs(),
+                oldState.frametimeStddevMs(),
+                oldState.tickTimeAvg(),
+                oldState.tickTimeP95(),
+                oldState.spikeCount(),
+                resolveStabilityStats(oldState),
+                oldState.lastDecisionReason(),
+                oldState.lastDecisionTimestamp(),
+                oldState.lastImpactMs(),
+                oldState.lastOutcome(),
+                oldState.lastDecisionAccepted(),
+                oldState.sessionStartTime(),
+                10,
+                oldState.currentScenario(),
+                oldState.scenarioConfidence(),
+                oldState.lastScenarioChangeTimestamp(),
+                oldState.scenarioChangeCount(),
+                oldState.rapidScenarioChangeCount(),
+                oldState.combatAfkFlipCount(),
+                oldState.scenarioHistory(),
+                oldState.baselineSettings(),
+                oldState.currentSettings()));
+
+        registerMigrator(9, oldState -> new RuntimeState(
+                oldState.enabled(),
+                oldState.safeMode(),
+                oldState.autoTuning(),
+                oldState.debugLogs(),
+                oldState.governorDisabled(),
+                oldState.governorCooldownActive(),
+                oldState.governorLastActionTimestamp(),
+                oldState.benchmarkRunning(),
+                oldState.benchmarkValidity(),
+                oldState.benchmarkStartTimestamp(),
+                oldState.pendingAction(),
+                oldState.suggestedActions(),
+                oldState.pendingActionsCount(),
+                oldState.executionHistorySize(),
+                oldState.lastSnapshotHistorySize(),
+                oldState.actionHistory(),
+                oldState.sessionChangesCount(),
+                oldState.avgFrametimeMs(),
+                oldState.p95FrametimeMs(),
+                oldState.p99FrametimeMs(),
+                oldState.frametimeStddevMs(),
+                oldState.tickTimeAvg(),
+                oldState.tickTimeP95(),
+                oldState.spikeCount(),
+                resolveStabilityStats(oldState),
+                oldState.lastDecisionReason(),
+                oldState.lastDecisionTimestamp(),
+                oldState.lastImpactMs(),
+                oldState.lastOutcome(),
+                oldState.lastDecisionAccepted(),
+                oldState.sessionStartTime(),
+                10,
                 oldState.currentScenario(),
                 oldState.scenarioConfidence(),
                 oldState.lastScenarioChangeTimestamp(),
@@ -360,5 +453,12 @@ public final class StateMigrationRegistry {
      */
     public static int getCurrentVersion() {
         return CURRENT_VERSION;
+    }
+
+    private static StabilityStats resolveStabilityStats(RuntimeState state) {
+        if (state == null || state.stabilityStats() == null) {
+            return StabilityStats.defaults();
+        }
+        return state.stabilityStats();
     }
 }

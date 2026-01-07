@@ -754,6 +754,7 @@ public final class ChaosTestRunner {
                 state.tickTimeAvg(),
                 state.tickTimeP95(),
                 state.spikeCount(),
+                state.stabilityStats(),
                 state.lastDecisionReason(),
                 state.lastDecisionTimestamp(),
                 state.lastImpactMs(),

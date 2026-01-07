@@ -108,6 +108,12 @@ public final class ActionBus {
         dispatch(command, callback, true);
     }
 
+    public boolean hasPendingCommands() {
+        synchronized (commandQueue) {
+            return !commandQueue.isEmpty() || currentlyExecuting.isPresent();
+        }
+    }
+
     private void dispatch(Command command, Consumer<CommandExecutionReport> callback, boolean userInitiated) {
         long queuedAt = System.currentTimeMillis();
 
