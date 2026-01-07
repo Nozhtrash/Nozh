@@ -14,7 +14,8 @@ public record BenchmarkArtifactMetadata(
         Path telemetryCsv,
         Path telemetryJson,
         Path snapshotsJson,
-        Path initialBenchmarkSnapshotJson) {
+        Path initialBenchmarkSnapshotJson,
+        Path decisionLatencyJson) {
 
     public String toJson() {
         StringBuilder sb = new StringBuilder();
@@ -26,7 +27,8 @@ public record BenchmarkArtifactMetadata(
         sb.append("  \"telemetryCsv\": ").append(formatPath(telemetryCsv)).append(",\n");
         sb.append("  \"telemetryJson\": ").append(formatPath(telemetryJson)).append(",\n");
         sb.append("  \"snapshotsJson\": ").append(formatPath(snapshotsJson)).append(",\n");
-        sb.append("  \"initialBenchmarkSnapshotJson\": ").append(formatPath(initialBenchmarkSnapshotJson)).append("\n");
+        sb.append("  \"initialBenchmarkSnapshotJson\": ").append(formatPath(initialBenchmarkSnapshotJson)).append(",\n");
+        sb.append("  \"decisionLatencyJson\": ").append(formatPath(decisionLatencyJson)).append("\n");
         sb.append("}\n");
         return sb.toString();
     }

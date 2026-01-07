@@ -137,12 +137,20 @@ public class PerfManager {
         return decisionLatencyEvaluator.startTimer();
     }
 
+    public void recordDecisionLatency(long startNanos) {
+        decisionLatencyEvaluator.recordLatency(startNanos);
+    }
+
     public boolean isDecisionWithinBudget(long startNanos, int budgetMs) {
         return decisionLatencyEvaluator.isWithinBudget(startNanos, budgetMs);
     }
 
     public long getLastDecisionLatencyMs() {
         return decisionLatencyEvaluator.getLastDecisionLatencyMs();
+    }
+
+    public DecisionLatencyStats getDecisionLatencyStats() {
+        return decisionLatencyEvaluator.snapshot();
     }
 
     public void onRenderPhaseStart(RenderPhase phase) {

@@ -51,6 +51,7 @@ public final class GovernorRunner {
     private static final int MAX_SUGGESTED_QUEUE = 5;
     private static final int REVERSE_IMPROVEMENT_STREAK = 3;
     private static final long SPIKE_PREDICTION_MIN_WINDOW_MS = 5_000L;
+    private static final int DECISION_LATENCY_TARGET_MS = 2;
 
     private final HybridGovernor governor;
     private final ActionMatrix actionMatrix;
@@ -237,6 +238,8 @@ public final class GovernorRunner {
             return;
         }
 
+        int decisionBudgetMs = Math.min(config.governorDecisionBudgetMs, DECISION_LATENCY_TARGET_MS);
+        DecisionBudget decisionBudget = new DecisionBudget(decisionBudgetMs);
         long decisionStartNanos = perfManager != null ? perfManager.startDecisionTimer() : System.nanoTime();
         Optional<ActionCandidate> decisionOpt = governor.decide(
                 state,
@@ -250,10 +253,20 @@ public final class GovernorRunner {
                 state.baselineSnapshot(),
                 state.currentSettings(),
                 config,
-                actionMatrixTuning);
+                actionMatrixTuning,
+                decisionBudget);
 
-        if (perfManager != null && !perfManager.isDecisionWithinBudget(decisionStartNanos,
-                config.governorDecisionBudgetMs)) {
+        if (decisionBudget.isOverBudget()) {
+            if (perfManager != null) {
+                perfManager.recordDecisionLatency(decisionStartNanos);
+            }
+            logger.warn(String.format(
+                    "Governor decision aborted - internal budget exceeded (%dms)",
+                    decisionBudget.elapsedMs()));
+            return;
+        }
+
+        if (perfManager != null && !perfManager.isDecisionWithinBudget(decisionStartNanos, decisionBudgetMs)) {
             logger.warn(String.format(
                     "Governor decision aborted - latency budget exceeded (%dms)",
                     perfManager.getLastDecisionLatencyMs()));
@@ -808,7 +821,7 @@ public final class GovernorRunner {
                             logger.warn("Safe fallback rollback failed");
                         }
                     }), () -> logger.warn("Safe fallback rollback unavailable"));
-            sessionLearning.recordOutcome(pending.capability(), pending.scenario(), ActionOutcome.NEGATIVE, 0.0);
+            sessionLearning.recordOutcome(pending.capability(), pending.scenario(), ActionOutcome.NEGATIVE, 0.0, 0.0, 0);
             successTracker.recordFailure(pending.capability());
             try {
                 stateStore.update(RuntimeState::withPendingActionCleared);
@@ -857,16 +870,18 @@ public final class GovernorRunner {
                 logger.info("Rollback disabled in config, keeping ineffective action.");
             }
 
-            sessionLearning.recordOutcome(pending.capability(), pending.scenario(), ActionOutcome.NEGATIVE, 0.0);
+            sessionLearning.recordOutcome(pending.capability(), pending.scenario(), ActionOutcome.NEGATIVE, 0.0,
+                    p95Delta, spikeDelta);
             successTracker.recordFailure(pending.capability());
         } else if (outcome == ActionOutcome.POSITIVE) {
             double gainAvg = resolveGain(pending.baselineAvgMs(), currentSnapshot != null ? currentSnapshot.avgFrametimeMs() : Double.NaN);
             double gainP95 = resolveGain(pending.baselineP95Ms(), currentSnapshot != null ? currentSnapshot.p95FrametimeMs() : Double.NaN);
             sessionLearning.recordOutcome(pending.capability(), pending.scenario(), ActionOutcome.POSITIVE,
-                    Math.max(gainAvg, gainP95));
+                    Math.max(gainAvg, gainP95), p95Delta, spikeDelta);
             successTracker.recordSuccess(pending.capability());
         } else {
-            sessionLearning.recordOutcome(pending.capability(), pending.scenario(), ActionOutcome.NEUTRAL, 0.0);
+            sessionLearning.recordOutcome(pending.capability(), pending.scenario(), ActionOutcome.NEUTRAL, 0.0,
+                    p95Delta, spikeDelta);
         }
 
         logger.debug(String.format(

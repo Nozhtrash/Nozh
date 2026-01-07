@@ -3,6 +3,7 @@ package dev.nozh.core.benchmark;
 import dev.nozh.NozhConstants;
 import dev.nozh.api.PerfSnapshot;
 import dev.nozh.core.context.Scenario;
+import dev.nozh.core.profiler.DecisionLatencyStats;
 import dev.nozh.core.profiler.PerfManager;
 import dev.nozh.core.telemetry.TelemetryExportFormat;
 
@@ -108,6 +109,7 @@ public final class BenchmarkScenarioRecorder {
             TelemetryExportFormat[] formats = {TelemetryExportFormat.CSV, TelemetryExportFormat.JSON};
             Path csv = null;
             Path json = null;
+            Path decisionLatencyJson = null;
             for (TelemetryExportFormat format : formats) {
                 Path export = perfManager != null ? perfManager.exportTelemetry(sessionDir, format) : null;
                 if (format == TelemetryExportFormat.CSV) {
@@ -123,6 +125,12 @@ public final class BenchmarkScenarioRecorder {
                         + "_" + timestamp + ".json");
                 snapshotSeries.writeJson(snapshotsJson);
             }
+            if (perfManager != null) {
+                DecisionLatencyStats stats = perfManager.getDecisionLatencyStats();
+                String timestamp = TIMESTAMP_FORMAT.format(Instant.ofEpochMilli(now));
+                decisionLatencyJson = sessionDir.resolve("decision_latency_" + timestamp + ".json");
+                Files.writeString(decisionLatencyJson, stats.toJson(), StandardCharsets.UTF_8);
+            }
             BenchmarkArtifactMetadata metadata = new BenchmarkArtifactMetadata(
                     environment,
                     activeScenario.name(),
@@ -131,7 +139,8 @@ public final class BenchmarkScenarioRecorder {
                     csv,
                     json,
                     snapshotsJson,
-                    initialBenchmarkSnapshotJson);
+                    initialBenchmarkSnapshotJson,
+                    decisionLatencyJson);
             writeMetadata(metadata, now);
         } catch (Exception e) {
             NozhConstants.LOGGER.warn("Failed to export benchmark artifacts: {}", e.getMessage());
