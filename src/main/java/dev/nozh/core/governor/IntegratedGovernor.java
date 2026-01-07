@@ -160,7 +160,7 @@ public final class IntegratedGovernor {
             
         } catch (Exception e) {
             NozhConstants.LOGGER.error("Governor tick error", e);
-            healthMonitor.recordActionFailure("tick", e.getMessage());
+            healthMonitor.recordError("tick_error");
         }
     }
 
@@ -174,8 +174,8 @@ public final class IntegratedGovernor {
         }
         
         // Skip if unhealthy
-        if (!healthMonitor.isHealthy()) {
-            NozhConstants.LOGGER.warn("Skipping decision - system unhealthy: " + healthMonitor.getStatus());
+        if (!isHealthy()) {
+            NozhConstants.LOGGER.warn("Skipping decision - system unhealthy: " + healthMonitor.getHealthStatus());
             return;
         }
         
@@ -276,10 +276,8 @@ public final class IntegratedGovernor {
             eventLogger.logActionExecution(actionId, success, duration);
             metricsCollector.recordAction(actionId, success, duration);
             
-            if (success) {
-                healthMonitor.recordActionSuccess(actionId);
-            } else {
-                healthMonitor.recordActionFailure(actionId, "No FPS improvement");
+            if (!success) {
+                healthMonitor.recordError("action_failed: " + actionId);
             }
             
             // Calculate reward for learning
@@ -303,7 +301,7 @@ public final class IntegratedGovernor {
             
         } catch (Exception e) {
             NozhConstants.LOGGER.error("Action execution failed: " + actionId, e);
-            healthMonitor.recordActionFailure(actionId, e.getMessage());
+            healthMonitor.recordError("execution_error: " + e.getMessage());
             effectivenessTracker.recordActionResult(actionId, 0.0, false);
             metricsCollector.recordAction(actionId, false, System.currentTimeMillis() - startTime);
         }
@@ -381,17 +379,31 @@ public final class IntegratedGovernor {
     }
 
     /**
+     * Check if system is healthy enough to make decisions.
+     */
+    public boolean isHealthy() {
+        return !healthMonitor.isCritical();
+    }
+
+    /**
      * Get health status.
      */
-    public SystemHealthMonitor.HealthStatus getHealthStatus() {
-        return healthMonitor.getStatus();
+    public String getHealthStatus() {
+        return healthMonitor.getHealthStatus();
     }
 
     /**
      * Get health report.
      */
     public String getHealthReport() {
-        return healthMonitor.generateHealthReport();
+        return String.format(
+                "Health: %s (%.2f) | Memory: %.1f%% | GC: %d pauses (%.1fms avg)",
+                healthMonitor.getHealthStatus(),
+                healthMonitor.getHealthScore(),
+                healthMonitor.getMemoryUsagePercent() * 100,
+                healthMonitor.getGCCount(),
+                healthMonitor.getAverageGCPause()
+        );
     }
 
     /**
