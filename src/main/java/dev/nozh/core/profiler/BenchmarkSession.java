@@ -82,8 +82,12 @@ public final class BenchmarkSession {
                 .withZone(ZoneOffset.UTC)
                 .format(Instant.ofEpochMilli(snapshot.timestampMillis()));
         String sanitizedLabel = label != null && !label.isBlank() ? label.trim().replaceAll("\\s+", "_") : "session";
-        String extension = format == TelemetryExportFormat.CSV ? "csv" : "json";
-        Path outputFile = outputDir.resolve("benchmark_" + sanitizedLabel + "_" + timestamp + "." + extension);
+        String suffix = format.fileSuffix();
+        String extension = format.fileExtension();
+        String name = suffix.isEmpty()
+                ? "benchmark_" + sanitizedLabel + "_" + timestamp
+                : "benchmark_" + sanitizedLabel + "_" + timestamp + "_" + suffix;
+        Path outputFile = outputDir.resolve(name + "." + extension);
         TelemetryExportWriter.write(snapshot, samples, outputFile, format);
         return new BenchmarkSessionReport(snapshot, samples, outputFile, format, windowSeconds, capacity, startedAtMillis);
     }

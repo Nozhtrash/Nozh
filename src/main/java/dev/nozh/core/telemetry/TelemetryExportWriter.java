@@ -29,6 +29,10 @@ public final class TelemetryExportWriter {
     public static Path write(PerfReport report, Path outputFile, TelemetryExportFormat format) throws Exception {
         if (format == TelemetryExportFormat.CSV) {
             Files.writeString(outputFile, toCsv(report), StandardCharsets.UTF_8);
+        } else if (format == TelemetryExportFormat.COMPACT_CSV) {
+            Files.writeString(outputFile, toCompactCsv(report), StandardCharsets.UTF_8);
+        } else if (format == TelemetryExportFormat.COMPACT_JSON) {
+            Files.writeString(outputFile, toCompactJson(report), StandardCharsets.UTF_8);
         } else {
             Files.writeString(outputFile, toJson(report), StandardCharsets.UTF_8);
         }
@@ -94,6 +98,87 @@ public final class TelemetryExportWriter {
         appendTraceJson(sb, report);
         sb.append("}\n");
         return sb.toString();
+    }
+
+    private static String toCompactCsv(PerfReport report) {
+        PerfSnapshot snapshot = report.frameSnapshot();
+        PerfSnapshot tickSnapshot = report.tickSnapshot();
+        long[] samplesNanos = report.frameSamplesNanos();
+        DeltaSamples delta = DeltaSamples.from(samplesNanos);
+        StringBuilder sb = new StringBuilder();
+        sb.append("samples_base_us,").append(delta.baseMicros()).append('\n');
+        sb.append("index,delta_us\n");
+        for (int i = 0; i < delta.deltaMicros().length; i++) {
+            sb.append(i + 1).append(',').append(delta.deltaMicros()[i]).append('\n');
+        }
+        sb.append("\n");
+        sb.append("avg_ms,").append(formatMetricForCsv(snapshot.avgFrametimeMs())).append('\n');
+        sb.append("p95_ms,").append(formatMetricForCsv(snapshot.p95FrametimeMs())).append('\n');
+        sb.append("spikes,").append(snapshot.spikeCount()).append('\n');
+        sb.append("samples,").append(snapshot.sampleCount()).append('\n');
+        sb.append("window_seconds,").append(snapshot.windowSeconds()).append('\n');
+        sb.append("timestamp_ms,").append(snapshot.timestampMillis()).append('\n');
+        sb.append("\n");
+        sb.append("tick_avg_ms,").append(formatMetricForCsv(tickSnapshot.avgFrametimeMs())).append('\n');
+        sb.append("tick_p95_ms,").append(formatMetricForCsv(tickSnapshot.p95FrametimeMs())).append('\n');
+        sb.append("tick_samples,").append(tickSnapshot.sampleCount()).append('\n');
+        sb.append("tick_window_seconds,").append(tickSnapshot.windowSeconds()).append('\n');
+        appendDiagnosticsCsv(sb, report);
+        appendTraceCsv(sb, report);
+        return sb.toString();
+    }
+
+    private static String toCompactJson(PerfReport report) {
+        PerfSnapshot snapshot = report.frameSnapshot();
+        PerfSnapshot tickSnapshot = report.tickSnapshot();
+        long[] samplesNanos = report.frameSamplesNanos();
+        DeltaSamples delta = DeltaSamples.from(samplesNanos);
+        StringBuilder sb = new StringBuilder();
+        sb.append("{\n");
+        sb.append("  \"frame\": {\n");
+        sb.append("    \"avgFrametimeMs\": ").append(formatMetricForJson(snapshot.avgFrametimeMs())).append(",\n");
+        sb.append("    \"p95FrametimeMs\": ").append(formatMetricForJson(snapshot.p95FrametimeMs())).append(",\n");
+        sb.append("    \"spikeCount\": ").append(snapshot.spikeCount()).append(",\n");
+        sb.append("    \"sampleCount\": ").append(snapshot.sampleCount()).append(",\n");
+        sb.append("    \"windowSeconds\": ").append(snapshot.windowSeconds()).append(",\n");
+        sb.append("    \"timestampMillis\": ").append(snapshot.timestampMillis()).append("\n");
+        sb.append("  },\n");
+        sb.append("  \"tick\": {\n");
+        sb.append("    \"avgTickMs\": ").append(formatMetricForJson(tickSnapshot.avgFrametimeMs())).append(",\n");
+        sb.append("    \"p95TickMs\": ").append(formatMetricForJson(tickSnapshot.p95FrametimeMs())).append(",\n");
+        sb.append("    \"sampleCount\": ").append(tickSnapshot.sampleCount()).append(",\n");
+        sb.append("    \"windowSeconds\": ").append(tickSnapshot.windowSeconds()).append("\n");
+        sb.append("  },\n");
+        sb.append("  \"samplesBaseUs\": ").append(delta.baseMicros()).append(",\n");
+        sb.append("  \"samplesDeltaUs\": [");
+        for (int i = 0; i < delta.deltaMicros().length; i++) {
+            if (i > 0) {
+                sb.append(", ");
+            }
+            sb.append(delta.deltaMicros()[i]);
+        }
+        sb.append("],\n");
+        appendDiagnosticsJson(sb, report);
+        appendTraceJson(sb, report);
+        sb.append("}\n");
+        return sb.toString();
+    }
+
+    private record DeltaSamples(long baseMicros, long[] deltaMicros) {
+        private static DeltaSamples from(long[] samplesNanos) {
+            if (samplesNanos == null || samplesNanos.length == 0) {
+                return new DeltaSamples(0, new long[0]);
+            }
+            long baseMicros = nanosToMicros(samplesNanos[0]);
+            long[] deltaMicros = new long[Math.max(0, samplesNanos.length - 1)];
+            long previous = samplesNanos[0];
+            for (int i = 1; i < samplesNanos.length; i++) {
+                long current = samplesNanos[i];
+                deltaMicros[i - 1] = nanosToMicros(current - previous);
+                previous = current;
+            }
+            return new DeltaSamples(baseMicros, deltaMicros);
+        }
     }
 
     private static void appendDiagnosticsCsv(StringBuilder sb, PerfReport report) {
@@ -246,5 +331,9 @@ public final class TelemetryExportWriter {
             return "\"--\"";
         }
         return String.format("%.3f", value);
+    }
+
+    private static long nanosToMicros(long nanos) {
+        return Math.round(nanos / 1000.0);
     }
 }

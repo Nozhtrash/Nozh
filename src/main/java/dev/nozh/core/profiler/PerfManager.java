@@ -134,8 +134,10 @@ public class PerfManager implements CriticalEventSink {
         String timestamp = DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss")
                 .withZone(ZoneOffset.UTC)
                 .format(Instant.ofEpochMilli(snapshot.timestampMillis()));
-        String extension = format == TelemetryExportFormat.CSV ? "csv" : "json";
-        Path outputFile = outputDir.resolve("telemetry_" + timestamp + "." + extension);
+        String suffix = format.fileSuffix();
+        String extension = format.fileExtension();
+        String name = suffix.isEmpty() ? "telemetry_" + timestamp : "telemetry_" + timestamp + "_" + suffix;
+        Path outputFile = outputDir.resolve(name + "." + extension);
         return TelemetryExportWriter.write(report, outputFile, format);
     }
 
