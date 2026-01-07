@@ -24,6 +24,7 @@ public final class TelemetryManager {
     private final EventTimeline timeline;
     private final TelemetryDashboard dashboard;
     private final TelemetryReportGenerator reportGenerator;
+    private dev.nozh.core.profiler.CriticalEventSink criticalEventSink;
     
     public TelemetryManager() {
         this.aggregator = new TelemetryAggregator();
@@ -92,6 +93,7 @@ public final class TelemetryManager {
         String message
     ) {
         timeline.recordEvent(severity, category, message);
+        forwardCriticalEvent(severity, category, message);
     }
 
     public void recordCrashContext(CrashFailureContext context) {
@@ -111,6 +113,8 @@ public final class TelemetryManager {
             "Crash context captured",
             details
         );
+        forwardCriticalEvent(EventTimeline.EventSeverity.ERROR, EventTimeline.EventCategory.CRASH_LOOP,
+                "Crash context captured");
     }
 
     public void recordCrashRecovery(CrashRecoveryDecision decision, CrashFailureContext context) {
@@ -137,6 +141,12 @@ public final class TelemetryManager {
             "Crash recovery applied: " + decision.action(),
             details
         );
+        forwardCriticalEvent(severity, EventTimeline.EventCategory.CRASH_LOOP,
+                "Crash recovery applied: " + decision.action());
+    }
+
+    public void setCriticalEventSink(dev.nozh.core.profiler.CriticalEventSink sink) {
+        this.criticalEventSink = sink;
     }
     
     public TelemetryDashboard.DashboardSnapshot getDashboardSnapshot() {
@@ -164,5 +174,21 @@ public final class TelemetryManager {
         decisionTracker.reset();
         effectivenessTracker.reset();
         timeline.reset();
+    }
+
+    private void forwardCriticalEvent(
+            EventTimeline.EventSeverity severity,
+            EventTimeline.EventCategory category,
+            String message) {
+        if (criticalEventSink == null) {
+            return;
+        }
+        if (severity != EventTimeline.EventSeverity.ERROR && severity != EventTimeline.EventSeverity.CRITICAL) {
+            return;
+        }
+        criticalEventSink.recordCriticalEvent(
+                severity.name(),
+                category != null ? category.name() : "",
+                message);
     }
 }

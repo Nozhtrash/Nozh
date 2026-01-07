@@ -29,13 +29,13 @@ public class RenderPipelineTracer {
         phaseStartNanos.put(phase, System.nanoTime());
     }
 
-    public synchronized void endPhase(RenderPhase phase) {
+    public synchronized long endPhase(RenderPhase phase) {
         if (phase == null) {
-            return;
+            return 0L;
         }
         Long start = phaseStartNanos.remove(phase);
         if (start == null) {
-            return;
+            return 0L;
         }
         long duration = System.nanoTime() - start;
         PhaseAccumulator accumulator = accumulators.get(phase);
@@ -43,6 +43,7 @@ public class RenderPipelineTracer {
             accumulator.addSample(duration);
         }
         rollWindowIfNeeded(System.currentTimeMillis());
+        return duration;
     }
 
     public synchronized void onFrameStart() {
