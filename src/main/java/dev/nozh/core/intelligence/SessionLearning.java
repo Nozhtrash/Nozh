@@ -38,8 +38,16 @@ public final class SessionLearning {
     private static final long SAVE_INTERVAL_MILLIS = 60000;
 
     private static final String DEFAULT_SESSION_KEY = "DEFAULT";
-    private final Map<String, ActionStats> history = new HashMap<>();
-    private final PredictionStats predictionStats = new PredictionStats();
+    private static final String DEFAULT_HARDWARE_KEY = "UNKNOWN";
+    private static final int PERSISTENT_MIN_ATTEMPTS = 5;
+    private static final double PERSISTENT_LOW_SUCCESS = 0.35;
+    private static final double PERSISTENT_LOW_GAIN_MS = 0.2;
+    private final Map<String, Map<String, ActionStats>> sessionHistoryByKey = new HashMap<>();
+    private final Map<String, Map<String, ActionStats>> hardwareHistoryByKey = new HashMap<>();
+    private final Map<String, PredictionStats> predictionStatsByHardwareKey = new HashMap<>();
+    private Map<String, ActionStats> sessionHistory = new HashMap<>();
+    private Map<String, ActionStats> hardwareHistory = new HashMap<>();
+    private PredictionStats predictionStats = new PredictionStats();
     private final File statsFile;
     private final Path statsPath;
     private final Path tmpPath;
@@ -47,26 +55,35 @@ public final class SessionLearning {
     private long lastSaveMillis = 0;
     private boolean dirty = false;
     private String sessionKey = DEFAULT_SESSION_KEY;
+    private String hardwareKey = DEFAULT_HARDWARE_KEY;
 
     public SessionLearning(File configDir) {
         this.statsFile = new File(configDir, STATS_FILE);
         this.statsPath = statsFile.toPath();
         this.tmpPath = new File(configDir, STATS_TMP_FILE).toPath();
         load();
+        activateContext();
     }
 
     public void resetForSession(String newSessionKey) {
-        String normalizedKey = normalizeSessionKey(newSessionKey);
-        if (normalizedKey.equals(sessionKey)) {
+        resetForSession(newSessionKey, hardwareKey);
+    }
+
+    public void resetForSession(String newSessionKey, String newHardwareKey) {
+        String normalizedSessionKey = normalizeSessionKey(newSessionKey);
+        String normalizedHardwareKey = normalizeHardwareKey(newHardwareKey);
+        if (normalizedSessionKey.equals(sessionKey) && normalizedHardwareKey.equals(hardwareKey)) {
             return;
         }
-        sessionKey = normalizedKey;
-        history.clear();
-        predictionStats.reset();
-        lastSavedHash = 0;
-        lastSaveMillis = 0;
+        sessionKey = normalizedSessionKey;
+        hardwareKey = normalizedHardwareKey;
+        activateContext();
         dirty = true;
-        safeLog("Session learning reset for new session ({})", sessionKey);
+        safeLog("Session learning context updated (session={}, hardware={})", sessionKey, hardwareKey);
+    }
+
+    public void updateHardwareProfile(String newHardwareKey) {
+        resetForSession(sessionKey, newHardwareKey);
     }
 
     private String normalizeSessionKey(String newSessionKey) {
@@ -74,6 +91,19 @@ public final class SessionLearning {
             return DEFAULT_SESSION_KEY;
         }
         return newSessionKey.trim();
+    }
+
+    private String normalizeHardwareKey(String newHardwareKey) {
+        if (newHardwareKey == null || newHardwareKey.isBlank()) {
+            return DEFAULT_HARDWARE_KEY;
+        }
+        return newHardwareKey.trim();
+    }
+
+    private void activateContext() {
+        sessionHistory = sessionHistoryByKey.computeIfAbsent(sessionKey, k -> new HashMap<>());
+        hardwareHistory = hardwareHistoryByKey.computeIfAbsent(hardwareKey, k -> new HashMap<>());
+        predictionStats = predictionStatsByHardwareKey.computeIfAbsent(hardwareKey, k -> new PredictionStats());
     }
 
     /**
@@ -100,24 +130,11 @@ public final class SessionLearning {
     public void recordOutcome(CapabilityId id, dev.nozh.core.context.Scenario scenario, ActionOutcome outcome,
             double fpsGainMs, double p95DeltaMs, int spikeDelta) {
         String key = buildKey(id, scenario);
-        ActionStats stats = history.computeIfAbsent(key, k -> new ActionStats());
+        ActionStats stats = sessionHistory.computeIfAbsent(key, k -> new ActionStats());
+        ActionStats hardwareStats = hardwareHistory.computeIfAbsent(key, k -> new ActionStats());
 
-        stats.totalAttempts++;
-        if (outcome == ActionOutcome.POSITIVE) {
-            stats.successCount++;
-            stats.lastSuccessTime = System.currentTimeMillis();
-            stats.totalFpsGain += Math.max(0.0, fpsGainMs);
-            stats.avgFpsGain = stats.totalFpsGain / stats.successCount;
-        } else if (outcome == ActionOutcome.NEGATIVE) {
-            stats.failureCount++;
-            stats.lastFailureTime = System.currentTimeMillis();
-        } else {
-            stats.neutralCount++;
-        }
-        stats.totalP95DeltaMs += p95DeltaMs;
-        stats.avgP95DeltaMs = stats.totalP95DeltaMs / stats.totalAttempts;
-        stats.totalSpikeDelta += spikeDelta;
-        stats.avgSpikeDelta = (double) stats.totalSpikeDelta / stats.totalAttempts;
+        applyOutcome(stats, outcome, fpsGainMs, p95DeltaMs, spikeDelta);
+        applyOutcome(hardwareStats, outcome, fpsGainMs, p95DeltaMs, spikeDelta);
         dirty = true;
     }
 
@@ -161,7 +178,7 @@ public final class SessionLearning {
     }
 
     public double getSuccessRate(CapabilityId id, dev.nozh.core.context.Scenario scenario) {
-        ActionStats stats = history.get(buildKey(id, scenario));
+        ActionStats stats = resolveStats(buildKey(id, scenario));
         if (stats == null || stats.totalAttempts == 0) {
             return 0.5; // Default 50% confidence for unknowns
         }
@@ -177,12 +194,12 @@ public final class SessionLearning {
     }
 
     public double getAvgFpsGain(CapabilityId id, dev.nozh.core.context.Scenario scenario) {
-        ActionStats stats = history.get(buildKey(id, scenario));
+        ActionStats stats = resolveStats(buildKey(id, scenario));
         return stats != null ? stats.avgFpsGain : 0.0;
     }
 
     public double getAvgP95Gain(CapabilityId id, dev.nozh.core.context.Scenario scenario) {
-        ActionStats stats = history.get(buildKey(id, scenario));
+        ActionStats stats = resolveStats(buildKey(id, scenario));
         if (stats == null) {
             return 0.0;
         }
@@ -190,7 +207,7 @@ public final class SessionLearning {
     }
 
     public double getAvgSpikeDelta(CapabilityId id, dev.nozh.core.context.Scenario scenario) {
-        ActionStats stats = history.get(buildKey(id, scenario));
+        ActionStats stats = resolveStats(buildKey(id, scenario));
         return stats != null ? stats.avgSpikeDelta : 0.0;
     }
 
@@ -199,7 +216,7 @@ public final class SessionLearning {
      * ZERO ALLOCATION.
      */
     public boolean shouldAvoid(CapabilityId id) {
-        ActionStats stats = history.get(buildKey(id, null));
+        ActionStats stats = resolveStats(buildKey(id, null));
         if (stats == null || stats.totalAttempts < 3) {
             return false; // Need at least 3 attempts to judge
         }
@@ -230,7 +247,12 @@ public final class SessionLearning {
      * Get total attempts for this capability.
      */
     public int getTotalAttempts(CapabilityId id) {
-        ActionStats stats = history.get(buildKey(id, null));
+        ActionStats stats = resolveStats(buildKey(id, null));
+        return stats != null ? stats.totalAttempts : 0;
+    }
+
+    public int getTotalAttempts(CapabilityId id, dev.nozh.core.context.Scenario scenario) {
+        ActionStats stats = resolveStats(buildKey(id, scenario));
         return stats != null ? stats.totalAttempts : 0;
     }
 
@@ -243,7 +265,7 @@ public final class SessionLearning {
     }
 
     public boolean shouldAvoid(CapabilityId id, dev.nozh.core.context.Scenario scenario) {
-        ActionStats stats = history.get(buildKey(id, scenario));
+        ActionStats stats = resolveStats(buildKey(id, scenario));
         if (stats == null || stats.totalAttempts < 3) {
             if (scenario != null) {
                 return shouldAvoid(id);
@@ -257,6 +279,20 @@ public final class SessionLearning {
     private String buildKey(CapabilityId id, dev.nozh.core.context.Scenario scenario) {
         String scenarioKey = scenario != null ? scenario.name() : "GLOBAL";
         return id.name() + "|" + scenarioKey;
+    }
+
+    public double getPersistentPenalty(CapabilityId id, dev.nozh.core.context.Scenario scenario) {
+        ActionStats stats = resolveStats(buildKey(id, scenario));
+        if (stats == null || stats.totalAttempts < PERSISTENT_MIN_ATTEMPTS) {
+            return 0.0;
+        }
+        double successRate = (double) stats.successCount / stats.totalAttempts;
+        double successPenalty = Math.max(0.0, (PERSISTENT_LOW_SUCCESS - successRate) / PERSISTENT_LOW_SUCCESS);
+        double gainPenalty = PERSISTENT_LOW_GAIN_MS > 0.0
+                ? Math.max(0.0, (PERSISTENT_LOW_GAIN_MS - stats.avgFpsGain) / PERSISTENT_LOW_GAIN_MS)
+                : 0.0;
+        double persistence = Math.min(1.0, (stats.totalAttempts - PERSISTENT_MIN_ATTEMPTS + 1) / 6.0);
+        return Math.min(1.0, (successPenalty + gainPenalty) / 2.0) * persistence;
     }
 
     /**
@@ -288,7 +324,8 @@ public final class SessionLearning {
                 parent.mkdirs();
             }
 
-            String json = GSON.toJson(new SessionData(sessionKey, history, predictionStats));
+            String json = GSON.toJson(new SessionData(sessionKey, hardwareKey,
+                    sessionHistoryByKey, hardwareHistoryByKey, predictionStatsByHardwareKey));
             int currentHash = json.hashCode();
             if (!force && currentHash == lastSavedHash) {
                 dirty = false;
@@ -314,7 +351,7 @@ public final class SessionLearning {
             lastSaveMillis = now;
             dirty = false;
 
-            safeLog("Session learning stats saved ({} entries)", history.size());
+            safeLog("Session learning stats saved (session={}, hardware={})", sessionKey, hardwareKey);
         } catch (IOException e) {
             safeWarn("Failed to save session stats: {}", e.getMessage());
 
@@ -324,7 +361,8 @@ public final class SessionLearning {
             }
 
             try {
-                String json = GSON.toJson(new SessionData(sessionKey, history, predictionStats));
+                String json = GSON.toJson(new SessionData(sessionKey, hardwareKey,
+                        sessionHistoryByKey, hardwareHistoryByKey, predictionStatsByHardwareKey));
                 Files.writeString(statsPath, json, StandardCharsets.UTF_8,
                         StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.WRITE);
             } catch (IOException ignored) {
@@ -346,15 +384,22 @@ public final class SessionLearning {
             JsonElement element = JsonParser.parseReader(reader);
             if (element != null && element.isJsonObject()) {
                 JsonObject object = element.getAsJsonObject();
-                if (object.has("history")) {
+                if (object.has("sessionHistory") || object.has("hardwareHistory")
+                        || object.has("predictionStatsByHardware") || object.has("history")) {
                     SessionData data = GSON.fromJson(object, SessionData.class);
                     if (data != null) {
                         sessionKey = normalizeSessionKey(data.sessionKey);
-                        if (data.history != null) {
-                            history.putAll(data.history);
+                        hardwareKey = normalizeHardwareKey(data.hardwareKey);
+                        if (data.sessionHistory != null) {
+                            sessionHistoryByKey.putAll(data.sessionHistory);
                         }
-                        if (data.predictionStats != null) {
-                            predictionStats.copyFrom(data.predictionStats);
+                        if (data.hardwareHistory != null) {
+                            hardwareHistoryByKey.putAll(data.hardwareHistory);
+                        }
+                        if (data.predictionStatsByHardware != null) {
+                            predictionStatsByHardwareKey.putAll(data.predictionStatsByHardware);
+                        } else if (data.predictionStats != null) {
+                            predictionStatsByHardwareKey.put(DEFAULT_HARDWARE_KEY, data.predictionStats);
                         }
                     }
                 } else {
@@ -362,7 +407,8 @@ public final class SessionLearning {
                     }.getType();
                     Map<String, ActionStats> loaded = GSON.fromJson(object, type);
                     if (loaded != null) {
-                        history.putAll(loaded);
+                        sessionHistoryByKey.put(DEFAULT_SESSION_KEY, loaded);
+                        hardwareHistoryByKey.put(DEFAULT_HARDWARE_KEY, new HashMap<>(loaded));
                     }
                 }
             } else {
@@ -370,13 +416,16 @@ public final class SessionLearning {
                 }.getType();
                 Map<String, ActionStats> loaded = GSON.fromJson(element, type);
                 if (loaded != null) {
-                    history.putAll(loaded);
+                    sessionHistoryByKey.put(DEFAULT_SESSION_KEY, loaded);
+                    hardwareHistoryByKey.put(DEFAULT_HARDWARE_KEY, new HashMap<>(loaded));
                 }
             }
 
-            lastSavedHash = GSON.toJson(new SessionData(sessionKey, history, predictionStats)).hashCode();
+            activateContext();
+            lastSavedHash = GSON.toJson(new SessionData(sessionKey, hardwareKey,
+                    sessionHistoryByKey, hardwareHistoryByKey, predictionStatsByHardwareKey)).hashCode();
             lastSaveMillis = System.currentTimeMillis();
-            safeLog("Session learning loaded ({} entries)", history.size());
+            safeLog("Session learning loaded (session={}, hardware={})", sessionKey, hardwareKey);
         } catch (Exception e) {
             safeWarn("Failed to load session stats: {}", e.getMessage());
         }
@@ -455,13 +504,51 @@ public final class SessionLearning {
 
     private static final class SessionData {
         public String sessionKey;
-        public Map<String, ActionStats> history;
+        public String hardwareKey;
+        public Map<String, Map<String, ActionStats>> sessionHistory;
+        public Map<String, Map<String, ActionStats>> hardwareHistory;
+        public Map<String, PredictionStats> predictionStatsByHardware;
         public PredictionStats predictionStats;
 
-        private SessionData(String sessionKey, Map<String, ActionStats> history, PredictionStats predictionStats) {
+        private SessionData(String sessionKey,
+                String hardwareKey,
+                Map<String, Map<String, ActionStats>> sessionHistory,
+                Map<String, Map<String, ActionStats>> hardwareHistory,
+                Map<String, PredictionStats> predictionStatsByHardware) {
             this.sessionKey = sessionKey;
-            this.history = history;
-            this.predictionStats = predictionStats;
+            this.hardwareKey = hardwareKey;
+            this.sessionHistory = sessionHistory;
+            this.hardwareHistory = hardwareHistory;
+            this.predictionStatsByHardware = predictionStatsByHardware;
         }
+    }
+
+    private void applyOutcome(ActionStats stats, ActionOutcome outcome, double fpsGainMs, double p95DeltaMs,
+            int spikeDelta) {
+        stats.totalAttempts++;
+        if (outcome == ActionOutcome.POSITIVE) {
+            stats.successCount++;
+            stats.lastSuccessTime = System.currentTimeMillis();
+            stats.totalFpsGain += Math.max(0.0, fpsGainMs);
+            stats.avgFpsGain = stats.totalFpsGain / stats.successCount;
+        } else if (outcome == ActionOutcome.NEGATIVE) {
+            stats.failureCount++;
+            stats.lastFailureTime = System.currentTimeMillis();
+        } else {
+            stats.neutralCount++;
+        }
+        stats.totalP95DeltaMs += p95DeltaMs;
+        stats.avgP95DeltaMs = stats.totalP95DeltaMs / stats.totalAttempts;
+        stats.totalSpikeDelta += spikeDelta;
+        stats.avgSpikeDelta = (double) stats.totalSpikeDelta / stats.totalAttempts;
+    }
+
+    private ActionStats resolveStats(String key) {
+        ActionStats stats = hardwareHistory.get(key);
+        if (stats != null && stats.totalAttempts > 0) {
+            return stats;
+        }
+        stats = sessionHistory.get(key);
+        return stats;
     }
 }

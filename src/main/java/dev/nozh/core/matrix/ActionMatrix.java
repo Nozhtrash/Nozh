@@ -39,6 +39,7 @@ public final class ActionMatrix {
     private static final double LEARNED_GAIN_WEIGHT = 0.1;
     private static final double REAL_GAIN_WEIGHT = 0.15;
     private static final double SPIKE_PENALTY_WEIGHT = 0.2;
+    private static final double PERSISTENT_PENALTY_WEIGHT = 0.25;
     private static final double SCENARIO_PRIORITY_WEIGHT = 0.15;
     private static final double PERFORMANCE_PRESSURE_WEIGHT = 0.25;
     private static final double BASELINE_FRAME_MS = 16.67;
@@ -637,6 +638,7 @@ public final class ActionMatrix {
         double normalizedP95Gain = maxP95Gain > 0 ? p95Gain / maxP95Gain : 0.0;
         double spikePenalty = Math.max(0.0, sessionLearning.getAvgSpikeDelta(candidate.capabilityId(), context.scenario()));
         double normalizedSpikePenalty = maxSpikePenalty > 0 ? spikePenalty / maxSpikePenalty : 0.0;
+        double persistentPenalty = sessionLearning.getPersistentPenalty(candidate.capabilityId(), context.scenario());
         double scenarioBoost = scenarioRules.ruleWeight(candidate.capabilityId(), context.scenario(),
                 context.profile()) * context.tuning().scenarioWeightMultiplier();
         double pressure = calculatePerformancePressure(context.p95FrametimeMs(), context.spikeCount())
@@ -654,7 +656,39 @@ public final class ActionMatrix {
                 + (scenarioBoost * SCENARIO_PRIORITY_WEIGHT);
 
         double score = baseScore + (pressure * profilePressureWeight * (normalizedGain + scenarioBoost) / 2.0);
-        return score - (normalizedSpikePenalty * SPIKE_PENALTY_WEIGHT);
+        return score - (normalizedSpikePenalty * SPIKE_PENALTY_WEIGHT)
+                - (persistentPenalty * PERSISTENT_PENALTY_WEIGHT);
+    }
+
+    public ActionCandidate selectCandidateBandit(List<ActionCandidate> candidates, Scenario scenario,
+            double explorationRate) {
+        if (candidates == null || candidates.isEmpty()) {
+            return null;
+        }
+        if (explorationRate <= 0.0) {
+            return candidates.get(0);
+        }
+        double roll = java.util.concurrent.ThreadLocalRandom.current().nextDouble();
+        if (roll >= explorationRate) {
+            return candidates.get(0);
+        }
+        return pickExplorationCandidate(candidates, scenario);
+    }
+
+    private ActionCandidate pickExplorationCandidate(List<ActionCandidate> candidates, Scenario scenario) {
+        ActionCandidate bestCandidate = candidates.get(0);
+        double bestScore = Double.NEGATIVE_INFINITY;
+        for (ActionCandidate candidate : candidates) {
+            int attempts = sessionLearning.getTotalAttempts(candidate.capabilityId(), scenario);
+            double penalty = sessionLearning.getPersistentPenalty(candidate.capabilityId(), scenario);
+            double explorationScore = (1.0 / (1.0 + Math.max(0, attempts))) * (1.0 - penalty);
+            explorationScore += java.util.concurrent.ThreadLocalRandom.current().nextDouble() * 0.01;
+            if (explorationScore > bestScore) {
+                bestScore = explorationScore;
+                bestCandidate = candidate;
+            }
+        }
+        return bestCandidate;
     }
 
     private double blendConfidence(double baseConfidence, double learnedConfidence) {

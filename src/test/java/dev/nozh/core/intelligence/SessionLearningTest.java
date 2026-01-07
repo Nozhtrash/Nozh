@@ -66,6 +66,7 @@ class SessionLearningTest {
     void resetForSessionClearsScenarioHistory() {
         SessionLearning learning = new SessionLearning(tempDir.toFile());
 
+        learning.resetForSession("session-a", "gpu-a");
         learning.recordSuccess(CapabilityId.PARTICLES, Scenario.COMBAT, 1.0);
         learning.recordFailure(CapabilityId.CLOUDS);
         learning.recordFailure(CapabilityId.CLOUDS);
@@ -74,10 +75,26 @@ class SessionLearningTest {
         assertTrue(learning.shouldAvoid(CapabilityId.CLOUDS, Scenario.COMBAT));
         assertTrue(learning.getSuccessRate(CapabilityId.PARTICLES, Scenario.COMBAT) > 0.5);
 
-        learning.resetForSession("new-session");
+        learning.resetForSession("new-session", "gpu-a");
 
-        assertEquals(0.5, learning.getSuccessRate(CapabilityId.PARTICLES, Scenario.COMBAT), 1e-6);
-        assertFalse(learning.shouldAvoid(CapabilityId.CLOUDS, Scenario.COMBAT));
+        assertTrue(learning.getSuccessRate(CapabilityId.PARTICLES, Scenario.COMBAT) > 0.5);
+        assertTrue(learning.shouldAvoid(CapabilityId.CLOUDS, Scenario.COMBAT));
+    }
+
+    @Test
+    void changingHardwareStartsFreshHistory() {
+        SessionLearning learning = new SessionLearning(tempDir.toFile());
+
+        learning.resetForSession("session-a", "gpu-a");
+        learning.recordFailure(CapabilityId.CLOUDS);
+        learning.recordFailure(CapabilityId.CLOUDS);
+        learning.recordFailure(CapabilityId.CLOUDS);
+
+        assertTrue(learning.shouldAvoid(CapabilityId.CLOUDS));
+
+        learning.resetForSession("session-b", "gpu-b");
+
+        assertFalse(learning.shouldAvoid(CapabilityId.CLOUDS));
     }
 
     @Test

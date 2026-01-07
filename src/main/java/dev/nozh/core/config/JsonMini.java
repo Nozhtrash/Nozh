@@ -51,6 +51,7 @@ public final class JsonMini {
                 "  \"observationWindowSeconds\": " + c.observationWindowSeconds + ",\n" +
                 "  \"hybridModelBlockConfidence\": " + c.hybridModelBlockConfidence + ",\n" +
                 "  \"governorDecisionBudgetMs\": " + c.governorDecisionBudgetMs + ",\n" +
+                "  \"banditExplorationRate\": " + c.banditExplorationRate + ",\n" +
 
                 "  \"historyMaxEntries\": " + c.historyMaxEntries + ",\n" +
                 "  \"historyCommandLimit\": " + c.historyCommandLimit + ",\n" +
@@ -190,6 +191,7 @@ public final class JsonMini {
             c.hybridModelBlockConfidence = getDouble(json, "hybridModelBlockConfidence",
                     c.hybridModelBlockConfidence);
             c.governorDecisionBudgetMs = getInt(json, "governorDecisionBudgetMs", c.governorDecisionBudgetMs);
+            c.banditExplorationRate = getDouble(json, "banditExplorationRate", c.banditExplorationRate);
 
             // Limits
             c.historyMaxEntries = getInt(json, "historyMaxEntries", c.historyMaxEntries);
