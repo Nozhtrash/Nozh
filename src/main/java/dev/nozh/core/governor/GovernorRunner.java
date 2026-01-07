@@ -265,6 +265,10 @@ public final class GovernorRunner {
         }
 
         ActionCandidate decision = decisionOpt.get();
+        if (decision.targetValue() == null) {
+            logger.info("Governor idle: stewardship active (" + decision.reason() + ")");
+            return;
+        }
         successTracker.recordDecision(decision);
         // REMOVED: withDecision() tracking no longer available
         String actionSummary = formatActionSummary(decision);
