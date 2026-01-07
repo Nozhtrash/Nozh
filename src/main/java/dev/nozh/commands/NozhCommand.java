@@ -87,10 +87,11 @@ public class NozhCommand {
         if (!checkGovernor(context.getSource())) return 0;
         
         FabricClientCommandSource source = context.getSource();
+        String healthStatus = governor.getHealthStatus();
         
         sendMessage(source, "=== Governor Status ===", Formatting.GOLD);
         sendMessage(source, "Initialized: " + governor.isInitialized(), Formatting.GREEN);
-        sendMessage(source, "Health: " + governor.getHealthStatus(), getHealthColor(governor.getHealthStatus()));
+        sendMessage(source, "Health: " + healthStatus, getHealthColor(healthStatus));
         
         return 1;
     }
@@ -237,12 +238,18 @@ public class NozhCommand {
         source.sendFeedback(Text.literal(message).formatted(formatting));
     }
 
-    private static Formatting getHealthColor(dev.nozh.core.monitoring.SystemHealthMonitor.HealthStatus status) {
-        return switch (status) {
-            case HEALTHY -> Formatting.GREEN;
-            case DEGRADED -> Formatting.YELLOW;
-            case UNHEALTHY -> Formatting.RED;
-            case CRITICAL -> Formatting.DARK_RED;
+    /**
+     * Get color formatting based on health status string.
+     * Replaced enum-based version to work with new SystemHealthMonitor API.
+     */
+    private static Formatting getHealthColor(String status) {
+        return switch (status.toUpperCase()) {
+            case "HEALTHY" -> Formatting.GREEN;
+            case "GOOD" -> Formatting.DARK_GREEN;
+            case "WARNING" -> Formatting.YELLOW;
+            case "POOR" -> Formatting.RED;
+            case "CRITICAL" -> Formatting.DARK_RED;
+            default -> Formatting.GRAY;
         };
     }
 }

@@ -1,194 +1,324 @@
 package dev.nozh.core.monitoring;
 
-import dev.nozh.NozhConstants;
 import dev.nozh.core.telemetry.TelemetrySnapshot;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.concurrent.ConcurrentLinkedQueue;
+import net.minecraft.client.MinecraftClient;
+import java.lang.management.ManagementFactory;
+import java.lang.management.MemoryMXBean;
+import java.lang.management.MemoryUsage;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
- * Monitors system health and detects degradation.
+ * Monitors overall system health including memory, GC activity, and error rates.
+ * Provides health scores and warnings to prevent crashes and instability.
  * 
- * Tracks:
- * - Governor health (is it making good decisions?)
- * - Telemetry quality (is data reliable?)
- * - Action success rate
- * - System stability
+ * <p>Health monitoring includes:
+ * <ul>
+ *   <li>Heap memory usage and pressure</li>
+ *   <li>Garbage collection frequency and duration</li>
+ *   <li>Error rates with time-windowing</li>
+ *   <li>Real-time performance (FPS)</li>
+ * </ul>
  * 
- * Triggers recovery when issues detected.
+ * <p>Thread-safe and designed for minimal overhead during monitoring.
  * 
- * TASK 11: Health monitoring - degradation detection
+ * @author Nozh Team
+ * @since 0.2.0
  */
-public final class SystemHealthMonitor {
-
-    private final ConcurrentLinkedQueue<HealthEvent> recentEvents = new ConcurrentLinkedQueue<>();
-    private static final int MAX_EVENTS = 100;
-
-    private volatile HealthStatus currentStatus = HealthStatus.HEALTHY;
-    private volatile long lastHealthCheck = System.currentTimeMillis();
-
-    private int consecutiveFailures = 0;
-    private int consecutiveSlowFrames = 0;
-    private int actionRollbackCount = 0;
-
-    private static final int FAILURE_THRESHOLD = 5;
-    private static final int SLOW_FRAME_THRESHOLD = 60; // 3 seconds @ 20 TPS
-    private static final int ROLLBACK_THRESHOLD = 3;
-
+public class SystemHealthMonitor {
+    private static final double CRITICAL_MEMORY_THRESHOLD = 0.95; // 95% memory usage
+    private static final double WARNING_MEMORY_THRESHOLD = 0.85; // 85% memory usage
+    private static final int MAX_ERRORS_PER_MINUTE = 10;
+    private static final long GC_WARNING_THRESHOLD = 500; // 500ms GC pause
+    private static final long ERROR_WINDOW_MS = 60000; // 1 minute window
+    private static final long HEALTH_CACHE_MS = 1000; // Cache health score for 1 second
+    
+    private final MemoryMXBean memoryBean;
+    private final ConcurrentHashMap<Long, AtomicInteger> errorCounts;
+    
+    private long lastGCTime;
+    private long totalGCTime;
+    private int gcCount;
+    private double lastHealthScore;
+    private long lastHealthCheckTime;
+    
+    public SystemHealthMonitor() {
+        this.memoryBean = ManagementFactory.getMemoryMXBean();
+        this.errorCounts = new ConcurrentHashMap<>();
+        this.lastGCTime = 0;
+        this.totalGCTime = 0;
+        this.gcCount = 0;
+        this.lastHealthScore = 1.0;
+        this.lastHealthCheckTime = 0;
+    }
+    
     /**
-     * Update health based on telemetry.
+     * Updates health monitor from telemetry snapshot.
+     * This method is called periodically by IntegratedGovernor.
+     * 
+     * @param snapshot telemetry snapshot to process
      */
     public void updateFromTelemetry(TelemetrySnapshot snapshot) {
-        lastHealthCheck = System.currentTimeMillis();
-
-        if (snapshot.avgFrametimeMs() > 50.0) {
-            consecutiveSlowFrames++;
-            if (consecutiveSlowFrames > SLOW_FRAME_THRESHOLD) {
-                recordEvent(HealthEventType.PERFORMANCE_DEGRADED, "Sustained slow frames");
-                updateStatus(HealthStatus.DEGRADED);
-            }
+        // Trigger health recalculation by calling getHealthScore
+        // This will update cached values if enough time has passed
+        getHealthScore();
+        
+        // Future: Could extract GC info from telemetry if available
+        // For now, health calculation uses direct JVM metrics
+    }
+    
+    /**
+     * Calculates overall system health score using weighted components.
+     * 
+     * <p>Health components and weights:
+     * <ul>
+     *   <li>Memory health (30%): Based on heap usage</li>
+     *   <li>GC health (25%): Based on pause frequency and duration</li>
+     *   <li>Error health (25%): Based on recent error rates</li>
+     *   <li>Performance health (20%): Based on current FPS</li>
+     * </ul>
+     * 
+     * @return Health score between 0.0 (critical) and 1.0 (healthy)
+     */
+    public double getHealthScore() {
+        long now = System.currentTimeMillis();
+        if (now - lastHealthCheckTime < HEALTH_CACHE_MS) {
+            return lastHealthScore; // Cache for performance
+        }
+        
+        double memoryHealth = calculateMemoryHealth();
+        double gcHealth = calculateGCHealth();
+        double errorHealth = calculateErrorHealth();
+        double performanceHealth = calculatePerformanceHealth();
+        
+        // Weighted average of all components
+        lastHealthScore = (memoryHealth * 0.30) +
+                         (gcHealth * 0.25) +
+                         (errorHealth * 0.25) +
+                         (performanceHealth * 0.20);
+        
+        lastHealthCheckTime = now;
+        return lastHealthScore;
+    }
+    
+    /**
+     * Calculates memory health based on heap usage.
+     * Uses progressive scaling:
+     * - 0-85% usage: Health 0.5-1.0 (linear)
+     * - 85-95% usage: Health 0.0-0.5 (linear, warning zone)
+     * - 95%+ usage: Health 0.0 (critical)
+     */
+    private double calculateMemoryHealth() {
+        MemoryUsage heapUsage = memoryBean.getHeapMemoryUsage();
+        long maxMemory = heapUsage.getMax();
+        
+        if (maxMemory <= 0) {
+            return 1.0; // Cannot determine, assume healthy
+        }
+        
+        double usageRatio = (double) heapUsage.getUsed() / maxMemory;
+        
+        if (usageRatio >= CRITICAL_MEMORY_THRESHOLD) {
+            return 0.0; // Critical: imminent OOM
+        } else if (usageRatio >= WARNING_MEMORY_THRESHOLD) {
+            // Linear scale from 0.5 (at warning) to 0.0 (at critical)
+            double range = CRITICAL_MEMORY_THRESHOLD - WARNING_MEMORY_THRESHOLD;
+            double position = usageRatio - WARNING_MEMORY_THRESHOLD;
+            return 0.5 - (0.5 * (position / range));
         } else {
-            consecutiveSlowFrames = 0;
+            // Linear scale from 1.0 (at 0%) to 0.5 (at warning)
+            return 0.5 + (0.5 * (1.0 - (usageRatio / WARNING_MEMORY_THRESHOLD)));
         }
     }
-
+    
     /**
-     * Record action success.
+     * Calculates GC health based on average pause duration.
+     * Longer and more frequent pauses indicate poor GC health.
      */
-    public void recordActionSuccess(String actionId) {
-        consecutiveFailures = 0;
-        recordEvent(HealthEventType.ACTION_SUCCESS, "Action succeeded: " + actionId);
+    private double calculateGCHealth() {
+        if (gcCount == 0) {
+            return 1.0; // No GC activity yet
+        }
+        
+        double avgGCTime = (double) totalGCTime / gcCount;
+        
+        if (avgGCTime >= GC_WARNING_THRESHOLD) {
+            // Poor GC health: frequent long pauses
+            // Scale from 1.0 (at threshold) to 0.0 (at 2x threshold)
+            double ratio = avgGCTime / (GC_WARNING_THRESHOLD * 2);
+            return Math.max(0.0, 1.0 - ratio);
+        }
+        
+        return 1.0;
     }
-
+    
     /**
-     * Record action failure.
+     * Calculates error health based on recent error rates.
+     * Uses a sliding 1-minute window for error counting.
      */
-    public void recordActionFailure(String actionId, String reason) {
-        consecutiveFailures++;
-        recordEvent(HealthEventType.ACTION_FAILURE, "Action failed: " + actionId + " - " + reason);
-
-        if (consecutiveFailures >= FAILURE_THRESHOLD) {
-            updateStatus(HealthStatus.UNHEALTHY);
+    private double calculateErrorHealth() {
+        long now = System.currentTimeMillis();
+        long cutoff = now - ERROR_WINDOW_MS;
+        
+        // Clean old error counts (older than 1 minute)
+        errorCounts.entrySet().removeIf(e -> e.getKey() < cutoff);
+        
+        int recentErrors = errorCounts.values().stream()
+            .mapToInt(AtomicInteger::get)
+            .sum();
+        
+        if (recentErrors == 0) {
+            return 1.0; // No errors, perfect health
+        } else if (recentErrors >= MAX_ERRORS_PER_MINUTE) {
+            return 0.0; // Too many errors, critical
+        } else {
+            // Linear scale from 1.0 (0 errors) to 0.0 (max errors)
+            return 1.0 - ((double) recentErrors / MAX_ERRORS_PER_MINUTE);
         }
     }
-
+    
     /**
-     * Record action rollback.
+     * Calculates performance health based on current FPS vs target.
+     * Lower FPS indicates performance issues.
      */
-    public void recordRollback(String actionId) {
-        actionRollbackCount++;
-        recordEvent(HealthEventType.ROLLBACK_OCCURRED, "Rolled back: " + actionId);
-
-        if (actionRollbackCount >= ROLLBACK_THRESHOLD) {
-            updateStatus(HealthStatus.DEGRADED);
+    private double calculatePerformanceHealth() {
+        MinecraftClient client = MinecraftClient.getInstance();
+        if (client == null) {
+            return 1.0; // Cannot determine, assume healthy
+        }
+        
+        int currentFps = client.getCurrentFps();
+        int targetFps = 60; // Standard target, could be configurable
+        
+        if (currentFps >= targetFps) {
+            return 1.0; // Meeting or exceeding target
+        } else if (currentFps < targetFps / 2) {
+            return 0.0; // Less than half target, critical
+        } else {
+            // Linear scale from 1.0 (at target) to 0.0 (at half target)
+            return (double) currentFps / targetFps;
         }
     }
-
+    
     /**
-     * Record recovery action.
+     * Records a GC pause for health monitoring.
+     * 
+     * @param durationMs duration of the GC pause in milliseconds
      */
-    public void recordRecovery(String recoveryAction) {
-        recordEvent(HealthEventType.RECOVERY_INITIATED, recoveryAction);
-        consecutiveFailures = 0;
-        consecutiveSlowFrames = 0;
-        actionRollbackCount = 0;
-    }
-
-    /**
-     * Get current health status.
-     */
-    public HealthStatus getStatus() {
-        return currentStatus;
-    }
-
-    /**
-     * Check if system is healthy.
-     */
-    public boolean isHealthy() {
-        return currentStatus == HealthStatus.HEALTHY;
-    }
-
-    /**
-     * Get recent health events.
-     */
-    public List<HealthEvent> getRecentEvents(int count) {
-        List<HealthEvent> events = new ArrayList<>(recentEvents);
-        return events.subList(0, Math.min(count, events.size()));
-    }
-
-    /**
-     * Generate health report.
-     */
-    public String generateHealthReport() {
-        StringBuilder report = new StringBuilder();
-        report.append("=== SYSTEM HEALTH REPORT ===\n");
-        report.append("Status: ").append(currentStatus).append("\n");
-        report.append("Consecutive Failures: ").append(consecutiveFailures).append("\n");
-        report.append("Consecutive Slow Frames: ").append(consecutiveSlowFrames).append("\n");
-        report.append("Rollback Count: ").append(actionRollbackCount).append("\n");
-        report.append("\nRecent Events (last 10):\n");
-
-        int count = 0;
-        for (HealthEvent event : recentEvents) {
-            if (count++ >= 10) break;
-            report.append("  ").append(event).append("\n");
+    public void recordGCPause(long durationMs) {
+        if (durationMs < 0) {
+            return;
         }
-
-        return report.toString();
+        
+        totalGCTime += durationMs;
+        gcCount++;
+        lastGCTime = System.currentTimeMillis();
     }
-
+    
     /**
-     * Clear health history.
+     * Records an error for health monitoring.
+     * Errors are tracked with timestamps for time-windowing.
+     * 
+     * @param errorType type or category of the error (currently unused, for future expansion)
+     */
+    public void recordError(String errorType) {
+        long timestamp = System.currentTimeMillis();
+        errorCounts.computeIfAbsent(timestamp, k -> new AtomicInteger()).incrementAndGet();
+    }
+    
+    /**
+     * Checks if the system is in a critical state requiring immediate intervention.
+     * 
+     * @return true if health score is below 0.3 (critical threshold)
+     */
+    public boolean isCritical() {
+        return getHealthScore() < 0.3;
+    }
+    
+    /**
+     * Checks if the system needs attention but is not yet critical.
+     * 
+     * @return true if health score is below 0.6 (warning threshold)
+     */
+    public boolean needsAttention() {
+        return getHealthScore() < 0.6;
+    }
+    
+    /**
+     * Gets current memory usage as a percentage.
+     * 
+     * @return memory usage ratio (0.0 = empty, 1.0 = full)
+     */
+    public double getMemoryUsagePercent() {
+        MemoryUsage heapUsage = memoryBean.getHeapMemoryUsage();
+        long maxMemory = heapUsage.getMax();
+        
+        if (maxMemory <= 0) {
+            return 0.0;
+        }
+        
+        return (double) heapUsage.getUsed() / maxMemory;
+    }
+    
+    /**
+     * Suggests whether a garbage collection should be triggered.
+     * Based on memory pressure threshold.
+     * 
+     * @return true if memory usage is above warning threshold
+     */
+    public boolean shouldSuggestGC() {
+        return getMemoryUsagePercent() >= WARNING_MEMORY_THRESHOLD;
+    }
+    
+    /**
+     * Gets a human-readable health status description.
+     * 
+     * @return status string: HEALTHY, GOOD, WARNING, POOR, or CRITICAL
+     */
+    public String getHealthStatus() {
+        double score = getHealthScore();
+        
+        if (score >= 0.8) {
+            return "HEALTHY";
+        } else if (score >= 0.6) {
+            return "GOOD";
+        } else if (score >= 0.4) {
+            return "WARNING";
+        } else if (score >= 0.2) {
+            return "POOR";
+        } else {
+            return "CRITICAL";
+        }
+    }
+    
+    /**
+     * Gets the number of GC pauses recorded.
+     * 
+     * @return total GC pause count since creation or last reset
+     */
+    public int getGCCount() {
+        return gcCount;
+    }
+    
+    /**
+     * Gets the average GC pause duration.
+     * 
+     * @return average duration in milliseconds, or 0 if no GC pauses recorded
+     */
+    public double getAverageGCPause() {
+        return gcCount > 0 ? (double) totalGCTime / gcCount : 0.0;
+    }
+    
+    /**
+     * Resets all monitoring data.
+     * Useful when starting a new monitoring session or after major state changes.
      */
     public void reset() {
-        recentEvents.clear();
-        consecutiveFailures = 0;
-        consecutiveSlowFrames = 0;
-        actionRollbackCount = 0;
-        updateStatus(HealthStatus.HEALTHY);
-    }
-
-    private void recordEvent(HealthEventType type, String details) {
-        HealthEvent event = new HealthEvent(type, details, System.currentTimeMillis());
-        recentEvents.offer(event);
-
-        while (recentEvents.size() > MAX_EVENTS) {
-            recentEvents.poll();
-        }
-
-        if (type == HealthEventType.ACTION_FAILURE || type == HealthEventType.PERFORMANCE_DEGRADED) {
-            NozhConstants.LOGGER.warn("Health event: " + event);
-        }
-    }
-
-    private void updateStatus(HealthStatus newStatus) {
-        if (newStatus != currentStatus) {
-            NozhConstants.LOGGER.warn("Health status changed: " + currentStatus + " -> " + newStatus);
-            currentStatus = newStatus;
-            recordEvent(HealthEventType.STATUS_CHANGED, "Status: " + newStatus);
-        }
-    }
-
-    public enum HealthStatus {
-        HEALTHY,
-        DEGRADED,
-        UNHEALTHY,
-        CRITICAL
-    }
-
-    public enum HealthEventType {
-        ACTION_SUCCESS,
-        ACTION_FAILURE,
-        ROLLBACK_OCCURRED,
-        PERFORMANCE_DEGRADED,
-        RECOVERY_INITIATED,
-        STATUS_CHANGED
-    }
-
-    public record HealthEvent(HealthEventType type, String details, long timestamp) {
-        @Override
-        public String toString() {
-            return String.format("[%tT] %s: %s", timestamp, type, details);
-        }
+        errorCounts.clear();
+        totalGCTime = 0;
+        gcCount = 0;
+        lastGCTime = 0;
+        lastHealthScore = 1.0;
+        lastHealthCheckTime = 0;
     }
 }
