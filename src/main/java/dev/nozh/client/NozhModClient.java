@@ -137,6 +137,7 @@ public class NozhModClient implements ClientModInitializer {
 
         // Initialize PerfManager (collects FPS data)
         perfManager = new dev.nozh.core.profiler.PerfManager();
+        telemetryManager.setCriticalEventSink(perfManager);
         tickTimeSampler = new dev.nozh.core.monitoring.TickTimeSampler();
         perfManager.setTickSnapshotSupplier(() -> tickTimeSampler.getSnapshot());
         if (ConfigManager.getConfig().benchmarkModeEnabled) {
@@ -209,6 +210,7 @@ public class NozhModClient implements ClientModInitializer {
         // Register Frametime Sampler (called every frame)
         net.fabricmc.fabric.api.client.rendering.v1.WorldRenderEvents.START.register(context -> {
             if (perfManager != null) {
+                perfManager.onRenderFrameStart();
                 perfManager.onRenderPhaseStart(dev.nozh.core.profiler.RenderPhase.WORLD);
             }
         });
@@ -217,6 +219,7 @@ public class NozhModClient implements ClientModInitializer {
             if (perfManager != null) {
                 perfManager.onRenderPhaseEnd(dev.nozh.core.profiler.RenderPhase.WORLD);
                 perfManager.onFrame();
+                perfManager.onRenderFrameEnd();
             }
         });
 
@@ -254,6 +257,9 @@ public class NozhModClient implements ClientModInitializer {
 
             // Sample tick time (must be called once per tick)
             tickTimeSampler.onTick();
+            if (perfManager != null) {
+                perfManager.onTickSample(tickTimeSampler.getLastTickMs());
+            }
 
             if (scenarioDetector != null) {
                 scenarioDetector.tick();

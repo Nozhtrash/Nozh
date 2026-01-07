@@ -24,7 +24,7 @@ import java.util.function.Supplier;
  * - Capacity calculation
  * - Exposes Thread-Safe snapshots
  */
-public class PerfManager {
+public class PerfManager implements CriticalEventSink {
 
     private FrameTimeSampler sampler;
     private RollingWindowStats stats;
@@ -36,6 +36,8 @@ public class PerfManager {
     private final FramePauseTracker pauseTracker;
     private final RenderPipelineTracer renderPipelineTracer;
     private final StutterCauseAnalyzer stutterCauseAnalyzer;
+    private final SpikeCausalityAnalyzer spikeCausalityAnalyzer;
+    private final PerfTraceBuffer traceBuffer;
     private long lastWindowAdjustMillis = 0L;
     private Supplier<PerfSnapshot> tickSnapshotSupplier = null;
 
@@ -50,6 +52,8 @@ public class PerfManager {
         this.pauseTracker = new FramePauseTracker();
         this.renderPipelineTracer = new RenderPipelineTracer();
         this.stutterCauseAnalyzer = new StutterCauseAnalyzer();
+        this.spikeCausalityAnalyzer = new SpikeCausalityAnalyzer();
+        this.traceBuffer = new PerfTraceBuffer();
 
         int targetFps = Math.max(30, config.targetFps);
         int capacity = calculateCapacity(targetFps, windowSeconds);
@@ -74,7 +78,10 @@ public class PerfManager {
             // Correcting logic:
             sampler.onFrame();
         }
-        gcPauseWatcher.update();
+        gcPauseWatcher.update().ifPresent(event -> traceBuffer.record(PerfTraceEvent.gc(
+                event.timestampMillis(),
+                event.pauseMs(),
+                String.format("GC %.0fms", event.pauseMs()))));
     }
 
     public PerfSnapshot getSnapshot() {
@@ -107,6 +114,9 @@ public class PerfManager {
         GcMetricsSnapshot gcSnapshot = buildGcSnapshot();
         FramePauseSnapshot pauses = pauseTracker.snapshot();
         RenderPipelineSnapshot renderSnapshot = renderPipelineTracer.snapshot();
+        PerfTraceSnapshot traceSnapshot = traceBuffer.snapshot(windowSeconds * 1000L);
+        SpikeCausalityReport spikeCausality = spikeCausalityAnalyzer.analyze(snapshot, tickSnapshot, gcSnapshot,
+                pauses, renderSnapshot, traceSnapshot);
         PerfReport report = new PerfReport(
                 snapshot,
                 tickSnapshot,
@@ -115,7 +125,9 @@ public class PerfManager {
                 gcSnapshot,
                 renderSnapshot,
                 stutterCauseAnalyzer.analyze(snapshot, tickSnapshot, gcSnapshot,
-                        pauses, renderSnapshot));
+                        pauses, renderSnapshot),
+                traceSnapshot,
+                spikeCausality);
         String timestamp = DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss")
                 .withZone(ZoneOffset.UTC)
                 .format(Instant.ofEpochMilli(snapshot.timestampMillis()));
@@ -127,6 +139,7 @@ public class PerfManager {
     public void reset() {
         sampler.reset();
         spikePredictor.reset();
+        traceBuffer.reset();
     }
 
     public SpikePrediction getSpikePrediction() {
@@ -158,7 +171,13 @@ public class PerfManager {
     }
 
     public void onRenderPhaseEnd(RenderPhase phase) {
-        renderPipelineTracer.endPhase(phase);
+        long duration = renderPipelineTracer.endPhase(phase);
+        if (duration > 0L) {
+            traceBuffer.record(PerfTraceEvent.render(
+                    System.currentTimeMillis(),
+                    duration / 1_000_000.0,
+                    phase != null ? phase.name() : "UNKNOWN"));
+        }
     }
 
     public void onRenderFrameStart() {
@@ -169,11 +188,35 @@ public class PerfManager {
         long frameDuration = renderPipelineTracer.onFrameEnd();
         if (frameDuration > 0) {
             pauseTracker.recordFrameDuration(frameDuration);
+            traceBuffer.record(PerfTraceEvent.render(
+                    System.currentTimeMillis(),
+                    frameDuration / 1_000_000.0,
+                    "frame"));
         }
+    }
+
+    public void onTickSample(double tickDurationMs) {
+        if (tickDurationMs <= 0 || !Double.isFinite(tickDurationMs)) {
+            return;
+        }
+        traceBuffer.record(PerfTraceEvent.tick(
+                System.currentTimeMillis(),
+                tickDurationMs,
+                "tick"));
     }
 
     public void setTickSnapshotSupplier(Supplier<PerfSnapshot> tickSnapshotSupplier) {
         this.tickSnapshotSupplier = tickSnapshotSupplier;
+    }
+
+    public SpikeCausalityReport getSpikeCausality() {
+        PerfSnapshot tickSnapshot = resolveTickSnapshot();
+        GcMetricsSnapshot gcSnapshot = buildGcSnapshot();
+        FramePauseSnapshot pauses = pauseTracker.snapshot();
+        RenderPipelineSnapshot renderSnapshot = renderPipelineTracer.snapshot();
+        PerfTraceSnapshot traceSnapshot = traceBuffer.snapshot(windowSeconds * 1000L);
+        return spikeCausalityAnalyzer.analyze(stats.snapshot(), tickSnapshot, gcSnapshot, pauses, renderSnapshot,
+                traceSnapshot);
     }
 
     public PerfDiagnosticsSnapshot getDiagnosticsSnapshot() {
@@ -198,6 +241,12 @@ public class PerfManager {
                 hottestKey,
                 hottest != null ? hottest.maxMs() : 0.0,
                 hottest != null ? hottest.ticks() : 0);
+    }
+
+    @Override
+    public void recordCriticalEvent(String severity, String category, String message) {
+        String detail = message != null ? message : "";
+        traceBuffer.record(PerfTraceEvent.critical(System.currentTimeMillis(), detail, category, severity));
     }
 
     private void adjustWindowIfNeeded(PerfSnapshot snapshot) {

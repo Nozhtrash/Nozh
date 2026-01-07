@@ -89,7 +89,7 @@ public final class SimulationGovernor {
                         dev.nozh.core.state.BaselineSnapshot baselineSnapshot,
                         Map<dev.nozh.core.bus.CapabilityId, dev.nozh.core.bus.CapabilityValue> currentSettings,
                         ActionMatrixTuning tuning,
-                        DecisionBudget budget) {
+                        dev.nozh.core.profiler.SpikeCausalityReport spikeCausality) {
                 // OFF mode → no decisions
                 if (mode == GovernorMode.OFF) {
                         return Optional.empty();
@@ -122,8 +122,8 @@ public final class SimulationGovernor {
                                 profile,
                                 state.p95FrametimeMs(),
                                 state.spikeCount(),
-                                tuning,
-                                budget);
+                                tuning);
+                CausalityPriorityResolver.prioritizeCandidates(candidates, spikeCausality);
 
                 if (candidates.isEmpty()) {
                         return Optional.empty();

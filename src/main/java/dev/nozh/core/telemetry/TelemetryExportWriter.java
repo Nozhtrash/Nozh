@@ -21,7 +21,9 @@ public final class TelemetryExportWriter {
             TelemetryExportFormat format) throws Exception {
         return write(new PerfReport(snapshot, PerfSnapshot.empty(), samplesNanos,
                 FramePauseSnapshot.empty(), GcMetricsSnapshot.empty(),
-                RenderPipelineSnapshot.empty(), StutterCause.unknown()), outputFile, format);
+                RenderPipelineSnapshot.empty(), StutterCause.unknown(),
+                dev.nozh.core.profiler.PerfTraceSnapshot.empty(),
+                dev.nozh.core.profiler.SpikeCausalityReport.unknown()), outputFile, format);
     }
 
     public static Path write(PerfReport report, Path outputFile, TelemetryExportFormat format) throws Exception {
@@ -56,6 +58,7 @@ public final class TelemetryExportWriter {
         sb.append("tick_samples,").append(tickSnapshot.sampleCount()).append('\n');
         sb.append("tick_window_seconds,").append(tickSnapshot.windowSeconds()).append('\n');
         appendDiagnosticsCsv(sb, report);
+        appendTraceCsv(sb, report);
         return sb.toString();
     }
 
@@ -88,6 +91,7 @@ public final class TelemetryExportWriter {
         }
         sb.append("],\n");
         appendDiagnosticsJson(sb, report);
+        appendTraceJson(sb, report);
         sb.append("}\n");
         return sb.toString();
     }
@@ -98,6 +102,7 @@ public final class TelemetryExportWriter {
         RenderPipelineSnapshot pipeline = report.renderPipeline();
         StutterCause cause = report.stutterCause();
         RenderPhaseMetrics hottest = pipeline != null ? pipeline.hottestPhase() : null;
+        dev.nozh.core.profiler.SpikeCausalityReport spikeCause = report.spikeCausality();
 
         sb.append("gc_recent_ms,").append(formatMetricForCsvAllowZero(gc != null ? gc.recentGcMs() : 0.0))
                 .append('\n');
@@ -114,6 +119,10 @@ public final class TelemetryExportWriter {
                 : "UNKNOWN").append('\n');
         sb.append("hottest_phase_max_ms,")
                 .append(formatMetricForCsvAllowZero(hottest != null ? hottest.maxMs() : 0.0)).append('\n');
+        sb.append("spike_cause,").append(spikeCause != null ? spikeCause.cause().name() : "UNKNOWN").append('\n');
+        sb.append("spike_confidence,")
+                .append(formatMetricForCsvAllowZero(spikeCause != null ? spikeCause.confidence() : 0.0))
+                .append('\n');
     }
 
     private static void appendDiagnosticsJson(StringBuilder sb, PerfReport report) {
@@ -122,6 +131,7 @@ public final class TelemetryExportWriter {
         RenderPipelineSnapshot pipeline = report.renderPipeline();
         StutterCause cause = report.stutterCause();
         RenderPhaseMetrics hottest = pipeline != null ? pipeline.hottestPhase() : null;
+        dev.nozh.core.profiler.SpikeCausalityReport spikeCause = report.spikeCausality();
 
         sb.append("  \"diagnostics\": {\n");
         sb.append("    \"gcRecentMs\": ").append(formatMetricForJsonAllowZero(gc != null ? gc.recentGcMs() : 0.0))
@@ -139,8 +149,75 @@ public final class TelemetryExportWriter {
                 .append(hottest != null && hottest.phase() != null ? hottest.phase().name() : "UNKNOWN")
                 .append("\",\n");
         sb.append("    \"hottestPhaseMaxMs\": ")
-                .append(formatMetricForJsonAllowZero(hottest != null ? hottest.maxMs() : 0.0)).append("\n");
+                .append(formatMetricForJsonAllowZero(hottest != null ? hottest.maxMs() : 0.0)).append(",\n");
+        sb.append("    \"spikeCause\": \"")
+                .append(spikeCause != null ? spikeCause.cause().name() : "UNKNOWN").append("\",\n");
+        sb.append("    \"spikeConfidence\": ")
+                .append(formatMetricForJsonAllowZero(spikeCause != null ? spikeCause.confidence() : 0.0))
+                .append("\n");
+        sb.append("  },\n");
+    }
+
+    private static void appendTraceCsv(StringBuilder sb, PerfReport report) {
+        dev.nozh.core.profiler.PerfTraceSnapshot trace = report.traceSnapshot();
+        if (trace == null || trace.events().isEmpty()) {
+            return;
+        }
+        sb.append("\n");
+        sb.append("trace_timestamp_ms,trace_type,trace_duration_ms,trace_detail,trace_category,trace_severity\n");
+        for (dev.nozh.core.profiler.PerfTraceEvent event : trace.events()) {
+            sb.append(event.timestampMillis()).append(',')
+                    .append(event.type()).append(',')
+                    .append(formatMetricForCsvAllowZero(event.durationMs())).append(',')
+                    .append(event.detail() != null ? event.detail() : "").append(',')
+                    .append(event.category() != null ? event.category() : "").append(',')
+                    .append(event.severity() != null ? event.severity() : "").append('\n');
+        }
+    }
+
+    private static void appendTraceJson(StringBuilder sb, PerfReport report) {
+        dev.nozh.core.profiler.PerfTraceSnapshot trace = report.traceSnapshot();
+        sb.append("  \"trace\": {\n");
+        if (trace == null) {
+            sb.append("    \"windowStartMillis\": 0,\n");
+            sb.append("    \"windowEndMillis\": 0,\n");
+            sb.append("    \"events\": []\n");
+            sb.append("  }\n");
+            return;
+        }
+        sb.append("    \"windowStartMillis\": ").append(trace.windowStartMillis()).append(",\n");
+        sb.append("    \"windowEndMillis\": ").append(trace.windowEndMillis()).append(",\n");
+        sb.append("    \"events\": [");
+        if (!trace.events().isEmpty()) {
+            sb.append('\n');
+        }
+        for (int i = 0; i < trace.events().size(); i++) {
+            dev.nozh.core.profiler.PerfTraceEvent event = trace.events().get(i);
+            sb.append("      {")
+                    .append("\"timestampMillis\": ").append(event.timestampMillis()).append(", ")
+                    .append("\"type\": \"").append(event.type()).append("\", ")
+                    .append("\"durationMs\": ").append(formatMetricForJsonAllowZero(event.durationMs())).append(", ")
+                    .append("\"detail\": \"").append(escapeJson(event.detail())).append("\", ")
+                    .append("\"category\": \"").append(escapeJson(event.category())).append("\", ")
+                    .append("\"severity\": \"").append(escapeJson(event.severity())).append("\"")
+                    .append("}");
+            if (i < trace.events().size() - 1) {
+                sb.append(',');
+            }
+            sb.append('\n');
+        }
+        sb.append("    ]\n");
         sb.append("  }\n");
+    }
+
+    private static String escapeJson(String value) {
+        if (value == null) {
+            return "";
+        }
+        return value.replace("\\", "\\\\")
+                .replace("\"", "\\\"")
+                .replace("\n", "\\n")
+                .replace("\r", "\\r");
     }
 
     private static String formatMetricForCsvAllowZero(double value) {

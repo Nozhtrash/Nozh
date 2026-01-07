@@ -35,7 +35,7 @@ public final class HybridGovernor {
             Map<dev.nozh.core.bus.CapabilityId, dev.nozh.core.bus.CapabilityValue> currentSettings,
             NozhConfig config,
             ActionMatrixTuning tuning,
-            DecisionBudget budget) {
+            dev.nozh.core.profiler.SpikeCausalityReport spikeCausality) {
         Optional<ActionCandidate> candidate = rulesGovernor.decide(
                 state,
                 mode,
@@ -48,7 +48,7 @@ public final class HybridGovernor {
                 baselineSnapshot,
                 currentSettings,
                 tuning,
-                budget);
+                spikeCausality);
         if (candidate.isEmpty()) {
             return candidate;
         }
