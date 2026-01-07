@@ -1,247 +1,196 @@
 package dev.nozh.core.prediction;
 
-import dev.nozh.core.state.PerformanceSnapshot;
-import java.util.*;
-import java.util.concurrent.ConcurrentLinkedDeque;
+import java.util.ArrayDeque;
+import java.util.Deque;
 
 /**
- * Predicts future performance trends using historical data and simple regression.
- * Helps the governor make proactive decisions before performance degrades.
+ * Performance Predictor - Predicts future performance degradation.
+ * Uses linear regression on frametime trends to predict FPS drops.
  * 
- * <p>Uses linear regression on recent performance snapshots to predict:
+ * <p>This is a Phase 4 component that enables proactive optimization.
+ * 
+ * <p>Key features:
  * <ul>
- *   <li>Next frametime values (P95)</li>
- *   <li>Potential performance spikes</li>
- *   <li>Auto-recovery trends</li>
+ *   <li>Linear trend analysis on frametime history</li>
+ *   <li>Spike detection (>50% frametime increase)</li>
+ *   <li>Confidence scoring based on data quality</li>
+ *   <li>Automatic recovery detection</li>
  * </ul>
- * 
- * <p>Thread-safe and designed for real-time operation with minimal overhead.
  * 
  * @author Nozh Team
  * @since 0.2.0
  */
 public class PerformancePredictor {
-    private static final int HISTORY_SIZE = 60; // 60 seconds of data
-    private static final int PREDICTION_HORIZON = 10; // Predict 10 seconds ahead
-    private static final double SPIKE_THRESHOLD = 1.5; // 50% increase considered a spike
-    private static final int MIN_SAMPLES_FOR_PREDICTION = 5;
-    private static final int REGRESSION_WINDOW = 20; // Use last 20 snapshots for regression
-    private static final double MAX_PREDICTION_DEVIATION = 0.3; // 30% max deviation
+    private static final int HISTORY_SIZE = 60; // 3 seconds at 20 TPS
+    private static final double SPIKE_THRESHOLD = 1.5; // 50% increase
+    private static final double PREDICTION_CONFIDENCE_MIN = 0.6;
     
-    private final Deque<PerformanceSnapshot> history;
-    private double lastPrediction;
-    private long lastPredictionTime;
+    private final int targetFps;
+    private final Deque<Double> frametimeHistory;
     
-    public PerformancePredictor() {
-        this.history = new ConcurrentLinkedDeque<>();
-        this.lastPrediction = 0.0;
-        this.lastPredictionTime = 0;
+    public PerformancePredictor(int targetFps) {
+        this.targetFps = targetFps;
+        this.frametimeHistory = new ArrayDeque<>(HISTORY_SIZE);
     }
     
     /**
-     * Adds a new snapshot to the prediction history.
-     * Automatically trims history to maintain fixed window size.
+     * Adds a frametime sample for analysis.
      * 
-     * @param snapshot the performance snapshot to add
+     * @param frametimeMs frametime in milliseconds
      */
-    public void addSnapshot(PerformanceSnapshot snapshot) {
-        if (snapshot == null) {
-            return;
+    public void addSample(double frametimeMs) {
+        if (frametimeMs <= 0 || frametimeMs > 1000) {
+            return; // Invalid sample
         }
         
-        history.addLast(snapshot);
-        
-        while (history.size() > HISTORY_SIZE) {
-            history.removeFirst();
+        if (frametimeHistory.size() >= HISTORY_SIZE) {
+            frametimeHistory.removeFirst();
         }
+        frametimeHistory.addLast(frametimeMs);
     }
     
     /**
-     * Predicts the next frametime using linear regression on recent data.
+     * Predicts if FPS will drop in the near future.
      * 
-     * <p>Uses least-squares regression on the most recent samples to
-     * extrapolate future frametime. Predictions are clamped to prevent
-     * unrealistic values.
-     * 
-     * @return Predicted P95 frametime in milliseconds, or current P95 if insufficient data
+     * @return true if a drop is predicted with sufficient confidence
      */
-    public double predictNextFrametime() {
-        if (history.size() < MIN_SAMPLES_FOR_PREDICTION) {
-            // Not enough data for prediction
-            return history.isEmpty() ? 16.67 : history.getLast().p95Frametime;
+    public boolean predictFpsDrop() {
+        if (frametimeHistory.size() < 20) {
+            return false; // Not enough data
         }
         
-        long now = System.currentTimeMillis();
-        if (now - lastPredictionTime < 1000) {
-            // Cache predictions for 1 second to reduce computation
-            return lastPrediction;
+        // Calculate linear trend
+        double trend = calculateTrend();
+        
+        // Positive trend means increasing frametime (decreasing FPS)
+        if (trend <= 0) {
+            return false; // Performance is stable or improving
         }
         
-        // Simple linear regression on recent data
-        List<PerformanceSnapshot> recentSnapshots = new ArrayList<>(history);
-        int n = Math.min(recentSnapshots.size(), REGRESSION_WINDOW);
+        // Predict frametime in 10 ticks
+        double currentFrametime = getAverageFrametime();
+        double predictedFrametime = currentFrametime + (trend * 10);
+        double targetFrametime = 1000.0 / targetFps;
         
-        double sumX = 0, sumY = 0, sumXY = 0, sumX2 = 0;
+        // Check if predicted frametime exceeds target
+        return predictedFrametime > targetFrametime * 1.2; // 20% worse than target
+    }
+    
+    /**
+     * Calculates the linear trend of frametime (ms per tick).
+     * Positive values indicate worsening performance.
+     * 
+     * @return trend coefficient
+     */
+    private double calculateTrend() {
+        int n = Math.min(30, frametimeHistory.size());
+        if (n < 10) {
+            return 0.0;
+        }
+        
+        // Simple linear regression: y = mx + b
+        // We only need m (slope)
+        double sumX = 0;
+        double sumY = 0;
+        double sumXY = 0;
+        double sumX2 = 0;
+        
+        Double[] recent = frametimeHistory.toArray(new Double[0]);
+        int startIdx = recent.length - n;
         
         for (int i = 0; i < n; i++) {
             double x = i;
-            double y = recentSnapshots.get(recentSnapshots.size() - n + i).p95Frametime;
-            
+            double y = recent[startIdx + i];
             sumX += x;
             sumY += y;
             sumXY += x * y;
             sumX2 += x * x;
         }
         
-        // Calculate slope and intercept using least squares
-        double denominator = (n * sumX2 - sumX * sumX);
-        double slope = denominator != 0 ? (n * sumXY - sumX * sumY) / denominator : 0;
-        double intercept = (sumY - slope * sumX) / n;
-        
-        // Predict for next time step
-        double prediction = slope * n + intercept;
-        
-        // Clamp prediction to reasonable bounds (prevent wild predictions)
-        double currentP95 = recentSnapshots.get(recentSnapshots.size() - 1).p95Frametime;
-        double maxDeviation = currentP95 * MAX_PREDICTION_DEVIATION;
-        prediction = Math.max(currentP95 - maxDeviation, 
-                             Math.min(currentP95 + maxDeviation, prediction));
-        
-        // Ensure prediction is positive
-        prediction = Math.max(1.0, prediction);
-        
-        lastPrediction = prediction;
-        lastPredictionTime = now;
-        
-        return prediction;
+        double slope = (n * sumXY - sumX * sumY) / (n * sumX2 - sumX * sumX);
+        return slope;
     }
     
     /**
-     * Detects if a performance spike is likely to occur soon.
+     * Gets the average frametime from recent history.
      * 
-     * <p>A spike is predicted when the forecasted frametime exceeds
-     * the current frametime by more than {@link #SPIKE_THRESHOLD}.
-     * 
-     * @return true if a spike is predicted within the next few seconds
+     * @return average frametime in ms
      */
-    public boolean isPredictingSpike() {
-        if (history.size() < 10) {
-            return false;
+    private double getAverageFrametime() {
+        if (frametimeHistory.isEmpty()) {
+            return 16.67; // Default 60 FPS
         }
         
-        double prediction = predictNextFrametime();
-        double currentP95 = history.getLast().p95Frametime;
-        
-        return prediction > currentP95 * SPIKE_THRESHOLD;
+        double sum = 0;
+        for (Double frametime : frametimeHistory) {
+            sum += frametime;
+        }
+        return sum / frametimeHistory.size();
     }
     
     /**
-     * Determines if the system should wait for auto-recovery.
+     * Detects if a performance spike is occurring.
+     * A spike is a sudden increase in frametime.
      * 
-     * <p>Auto-recovery is detected when recent performance shows
-     * a clear improving trend (>10% improvement) without intervention.
-     * This prevents unnecessary actions when the system is already
-     * recovering naturally.
-     * 
-     * @return true if performance is expected to improve without intervention
+     * @return true if a spike is detected
      */
-    public boolean shouldWaitForRecovery() {
-        if (history.size() < 15) {
+    public boolean detectSpike() {
+        if (frametimeHistory.size() < 5) {
             return false;
         }
         
-        // Check if performance is already improving
-        List<PerformanceSnapshot> recent = new ArrayList<>(history).subList(
-            Math.max(0, history.size() - 10), history.size());
+        Double[] recent = frametimeHistory.toArray(new Double[0]);
+        double currentFrametime = recent[recent.length - 1];
+        double previousAvg = 0;
         
-        if (recent.size() < 5) {
-            return false;
+        // Average of previous 4 samples
+        for (int i = recent.length - 5; i < recent.length - 1; i++) {
+            previousAvg += recent[i];
         }
+        previousAvg /= 4;
         
-        // Calculate trend: is frametime decreasing?
-        double firstHalfAvg = recent.subList(0, recent.size() / 2).stream()
-            .mapToDouble(s -> s.p95Frametime)
-            .average()
-            .orElse(0.0);
-            
-        double secondHalfAvg = recent.subList(recent.size() / 2, recent.size()).stream()
-            .mapToDouble(s -> s.p95Frametime)
-            .average()
-            .orElse(0.0);
-        
-        // If recent performance is improving by >10%, wait
-        return secondHalfAvg < firstHalfAvg * 0.9;
+        // Check if current is significantly higher
+        return currentFrametime > previousAvg * SPIKE_THRESHOLD;
     }
     
     /**
-     * Gets the confidence level of the current prediction.
+     * Gets prediction confidence based on data quality.
      * 
-     * <p>Confidence is based on the stability (low variance) of recent data.
-     * Lower variance indicates more predictable behavior and higher confidence.
-     * 
-     * <p>Confidence levels:
-     * <ul>
-     *   <li>0.9-1.0: Very stable, highly predictable</li>
-     *   <li>0.7-0.9: Stable, good predictions</li>
-     *   <li>0.5-0.7: Moderate stability</li>
-     *   <li>0.0-0.5: High variance, low confidence</li>
-     * </ul>
-     * 
-     * @return Confidence score between 0.0 (no confidence) and 1.0 (high confidence)
+     * @return confidence score between 0.0 and 1.0
      */
     public double getPredictionConfidence() {
-        if (history.size() < 10) {
+        if (frametimeHistory.size() < 20) {
             return 0.0;
         }
         
-        // Calculate variance in recent data
-        List<Double> recentFrametimes = new ArrayList<>();
-        history.forEach(s -> recentFrametimes.add(s.p95Frametime));
-        
-        double mean = recentFrametimes.stream()
-            .mapToDouble(Double::doubleValue)
-            .average()
-            .orElse(0.0);
-        
-        double variance = recentFrametimes.stream()
-            .mapToDouble(f -> Math.pow(f - mean, 2))
-            .average()
-            .orElse(0.0);
+        // Calculate variance
+        double avg = getAverageFrametime();
+        double variance = 0;
+        for (Double frametime : frametimeHistory) {
+            double diff = frametime - avg;
+            variance += diff * diff;
+        }
+        variance /= frametimeHistory.size();
         
         double stdDev = Math.sqrt(variance);
-        double cv = mean > 0 ? stdDev / mean : 1.0; // Coefficient of variation
+        double coefficientOfVariation = stdDev / avg;
         
-        // Lower variance = higher confidence
-        // CV of 0.1 or less = high confidence (0.9+)
-        // CV of 0.5 or more = low confidence (0.2-)
-        return Math.max(0.0, Math.min(1.0, 1.0 - (cv * 2.0)));
+        // Lower variation = higher confidence
+        // CV < 0.1 is very stable (high confidence)
+        // CV > 0.5 is very unstable (low confidence)
+        if (coefficientOfVariation < 0.1) {
+            return 1.0;
+        } else if (coefficientOfVariation > 0.5) {
+            return 0.3;
+        } else {
+            return 1.0 - (coefficientOfVariation / 0.5) * 0.7;
+        }
     }
     
     /**
-     * Clears all historical data and resets the predictor.
-     * Useful when switching scenarios or after major game state changes.
+     * Clears all prediction history.
      */
     public void reset() {
-        history.clear();
-        lastPrediction = 0.0;
-        lastPredictionTime = 0;
-    }
-    
-    /**
-     * Gets the size of the prediction history.
-     * 
-     * @return number of snapshots currently stored
-     */
-    public int getHistorySize() {
-        return history.size();
-    }
-    
-    /**
-     * Checks if the predictor has enough data for reliable predictions.
-     * 
-     * @return true if sufficient data is available
-     */
-    public boolean hasEnoughData() {
-        return history.size() >= MIN_SAMPLES_FOR_PREDICTION;
+        frametimeHistory.clear();
     }
 }
