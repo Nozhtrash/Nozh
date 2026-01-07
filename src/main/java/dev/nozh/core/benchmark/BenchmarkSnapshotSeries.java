@@ -30,6 +30,13 @@ public final class BenchmarkSnapshotSeries {
         return snapshots.size();
     }
 
+    public PerfSnapshot latestSnapshot() {
+        if (snapshots.isEmpty()) {
+            return null;
+        }
+        return snapshots.get(snapshots.size() - 1);
+    }
+
     public void clear() {
         snapshots.clear();
     }

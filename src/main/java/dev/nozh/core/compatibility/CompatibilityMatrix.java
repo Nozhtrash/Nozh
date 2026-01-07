@@ -3,6 +3,7 @@ package dev.nozh.core.compatibility;
 import dev.nozh.core.bus.CapabilityId;
 import dev.nozh.core.capability.ProviderMetadata;
 import dev.nozh.fabric.compat.CompatRegistry;
+import dev.nozh.api.compat.StewardshipMode;
 import net.fabricmc.loader.api.FabricLoader;
 
 import java.util.List;
@@ -31,6 +32,10 @@ public final class CompatibilityMatrix {
                     return true;
                 }
             }
+        }
+        StewardshipDecision decision = getStewardshipDecision(capability);
+        if (decision != null && decision.mode() == StewardshipMode.EXCLUSIVE) {
+            return true;
         }
         if (compatRegistry.isExternallyManaged(capability)) {
             return true;
@@ -83,6 +88,21 @@ public final class CompatibilityMatrix {
             return registryDecision;
         }
         return conflictDetector.getStewardshipDecision(capability);
+    }
+
+    public StewardshipDecision getProviderStewardshipDecision(CapabilityId capability, ProviderMetadata metadata) {
+        if (metadata != null && !metadata.conflictingMods().isEmpty()) {
+            for (String mod : metadata.conflictingMods()) {
+                if (isModLoaded(mod)) {
+                    return new StewardshipDecision(
+                            capability,
+                            mod,
+                            StewardshipMode.EXCLUSIVE,
+                            "Provider conflicts with " + mod);
+                }
+            }
+        }
+        return getStewardshipDecision(capability);
     }
 
     public List<StewardshipDecision> getStewardshipTraces() {
