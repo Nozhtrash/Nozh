@@ -8,6 +8,7 @@ import dev.nozh.core.safety.*;
 import dev.nozh.core.telemetry.*;
 import dev.nozh.core.intelligence.*;
 import dev.nozh.core.config.AdaptiveConfigManager;
+import dev.nozh.fabric.context.EnhancedFabricScenarioDetector;
 import net.minecraft.client.MinecraftClient;
 import java.nio.file.Path;
 import java.util.Arrays;
@@ -35,7 +36,7 @@ public final class IntegratedGovernor {
     // Core systems
     private final MinecraftClient client;
     private final IntegratedRingTelemetryBuffer telemetryBuffer;
-    private final FabricScenarioDetector scenarioDetector;
+    private final EnhancedFabricScenarioDetector scenarioDetector;
     private final TransactionalExecutor executor;
     
     // Context tracking
@@ -74,7 +75,7 @@ public final class IntegratedGovernor {
         
         // Initialize core systems
         this.telemetryBuffer = new IntegratedRingTelemetryBuffer(512);
-        this.scenarioDetector = new FabricScenarioDetector(client);
+        this.scenarioDetector = new EnhancedFabricScenarioDetector(client);
         this.executor = new TransactionalExecutor();
         
         // Initialize context
@@ -84,7 +85,7 @@ public final class IntegratedGovernor {
         
         // Initialize intelligence
         double targetFps = 60.0; // TODO: Get from config
-        this.predictor = new PerformancePredictor(targetFps);
+        this.predictor = new PerformancePredictor((int) targetFps);
         this.utilityScorer = new UtilityScorer();
         
         // Initialize learning
@@ -177,9 +178,10 @@ public final class IntegratedGovernor {
             return;
         }
         
-        // Detect scenario
-        Scenario detectedScenario = scenarioDetector.detectScenario();
-        double scenarioConfidence = calculateScenarioConfidence(detectedScenario);
+        // Detect scenario using correct method
+        ScenarioSnapshot scenarioSnapshot = scenarioDetector.detect();
+        Scenario detectedScenario = scenarioSnapshot.scenario();
+        double scenarioConfidence = scenarioSnapshot.confidence();
         
         // Log scenario change
         if (detectedScenario != currentScenario && scenarioConfidence > 0.7) {
