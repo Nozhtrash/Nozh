@@ -233,12 +233,17 @@ public final class NozhCommands {
         if (runtimeState.suggestedActions() != null && !runtimeState.suggestedActions().isEmpty()) {
             PendingAction pending = runtimeState.suggestedActions().get(0);
             int remaining = runtimeState.suggestedActions().size();
-            ctx.getSource().sendFeedback(Text.literal(
-                    "Suggestions pending (" + remaining + "): " + pending.capability().name() + "="
-                            + pending.newValue() + " (/nozh apply)"));
+            String summary = pending.capability().name() + "=" + pending.newValue();
+            ctx.getSource().sendFeedback(Text.translatable(
+                    "nozh.status.suggestions.pending",
+                    remaining,
+                    summary,
+                    "/nozh apply"));
         }
-        runtimeState.pendingAction().ifPresent(pending -> ctx.getSource().sendFeedback(Text.literal(
-                "Action pending evaluation: " + pending.capability().name() + "=" + pending.newValue())));
+        runtimeState.pendingAction().ifPresent(pending -> {
+            String summary = pending.capability().name() + "=" + pending.newValue();
+            ctx.getSource().sendFeedback(Text.translatable("nozh.status.action.pending", summary));
+        });
     }
 
     private static void runHistory(CommandContext<FabricClientCommandSource> ctx) {
