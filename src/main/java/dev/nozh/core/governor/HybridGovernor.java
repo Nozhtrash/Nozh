@@ -78,6 +78,23 @@ public final class HybridGovernor {
         return candidate;
     }
 
+    public Optional<ActionCandidate> decide(
+            RuntimeState state,
+            GovernorMode mode,
+            String currentBound,
+            long nowMillis,
+            OptimizationProfile profile,
+            int targetFps,
+            double reverseEpsilonMs,
+            boolean reverseReady,
+            dev.nozh.core.state.BaselineSnapshot baselineSnapshot,
+            Map<dev.nozh.core.bus.CapabilityId, dev.nozh.core.bus.CapabilityValue> currentSettings,
+            NozhConfig config,
+            ActionMatrixTuning tuning) {
+        return decide(state, mode, currentBound, nowMillis, profile, targetFps, reverseEpsilonMs, reverseReady,
+                baselineSnapshot, currentSettings, config, tuning, null);
+    }
+
     public boolean canAct(RuntimeState state, long lastActionTimestamp, long nowMillis, boolean benchmarkMode,
             long benchmarkIntervalMillis) {
         return rulesGovernor.canAct(state, lastActionTimestamp, nowMillis, benchmarkMode, benchmarkIntervalMillis);
