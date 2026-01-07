@@ -69,6 +69,17 @@ If the mod crashes or fails strictly, it enters **Safe Mode**.
 | --- | --- | --- |
 | v1 | v0.1.x – v0.2.x | Baseline core architecture freeze. |
 
+### Matrix Update Procedure
+
+* **Disparadores de actualización**: nueva versión de NOZH, nuevo minor de Minecraft, cambio de loader, o cualquier breaking change.
+* **Cómo proponer cambios**: abrir un PR con la tabla actualizada y evidencia de benchmarks que respalde los cambios.
+* **Revisión obligatoria**: aprobación del owner técnico y de QA/benchmark reviewer.
+
+#### Criterios de aceptación
+
+* Evidencia de que los escenarios críticos pasaron (coverage/pass % según la sección de métricas).
+* Notas de migración si hay breaking changes (alineado con “Migration Notes” en este documento).
+
 ### Stable Public Interfaces
 
 The following interfaces are considered stable and part of the frozen core contract:
