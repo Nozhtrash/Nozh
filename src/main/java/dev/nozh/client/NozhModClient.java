@@ -338,11 +338,10 @@ public class NozhModClient implements ClientModInitializer {
             }
             if (sessionLearning != null) {
                 String sessionKey = resolveSessionKey(clientInstance, handler);
-                if (lastSessionKey == null || !lastSessionKey.equals(sessionKey)) {
-                    sessionLearning.resetForSession(sessionKey);
-                    sessionLearning.save();
-                    lastSessionKey = sessionKey;
-                }
+                String hardwareProfile = ConfigManager.getConfig().hardwareProfile;
+                sessionLearning.resetForSession(sessionKey, hardwareProfile);
+                sessionLearning.save();
+                lastSessionKey = sessionKey;
             }
             if (initialBenchmarkRunner != null) {
                 initialBenchmarkRunner.onSessionStart();

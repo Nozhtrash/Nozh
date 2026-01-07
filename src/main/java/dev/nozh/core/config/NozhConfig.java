@@ -42,6 +42,7 @@ public class NozhConfig {
     public int observationWindowSeconds = 5;
     public double hybridModelBlockConfidence = 0.65;
     public int governorDecisionBudgetMs = 8;
+    public double banditExplorationRate = 0.2;
 
     // Performance Targets
     public int targetFps = 60;
@@ -177,6 +178,11 @@ public class NozhConfig {
 
         if (governorDecisionBudgetMs < 1 || governorDecisionBudgetMs > 50) {
             governorDecisionBudgetMs = clamp(governorDecisionBudgetMs, 1, 50);
+            corrected = true;
+        }
+
+        if (banditExplorationRate < 0.0 || banditExplorationRate > 0.6) {
+            banditExplorationRate = clamp(banditExplorationRate, 0.0, 0.6);
             corrected = true;
         }
 

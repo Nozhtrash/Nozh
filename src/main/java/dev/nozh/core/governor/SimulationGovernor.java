@@ -16,6 +16,7 @@ import dev.nozh.core.matrix.ActionMatrix;
 import dev.nozh.core.matrix.ActionMatrixTuning;
 import dev.nozh.core.state.RuntimeState;
 import dev.nozh.api.PerfSnapshot;
+import dev.nozh.core.config.NozhConfig;
 
 import java.util.Map;
 
@@ -89,6 +90,7 @@ public final class SimulationGovernor {
                         dev.nozh.core.state.BaselineSnapshot baselineSnapshot,
                         Map<dev.nozh.core.bus.CapabilityId, dev.nozh.core.bus.CapabilityValue> currentSettings,
                         ActionMatrixTuning tuning,
+                        NozhConfig config,
                         dev.nozh.core.profiler.SpikeCausalityReport spikeCausality) {
                 ActionMatrixTuning budget = tuning != null ? tuning : ActionMatrixTuning.defaults();
                 // OFF mode → no decisions
@@ -129,8 +131,12 @@ public final class SimulationGovernor {
                         return Optional.empty();
                 }
 
-                // Return best candidate (already sorted by ActionMatrix)
-                return Optional.of(candidates.get(0));
+                double explorationRate = config != null ? config.banditExplorationRate : 0.2;
+                ActionCandidate selected = actionMatrix.selectCandidateBandit(
+                                candidates,
+                                state.currentScenario(),
+                                explorationRate);
+                return Optional.of(selected != null ? selected : candidates.get(0));
         }
 
         public Optional<ActionCandidate> decide(
@@ -144,9 +150,10 @@ public final class SimulationGovernor {
                         boolean reverseReady,
                         dev.nozh.core.state.BaselineSnapshot baselineSnapshot,
                         Map<dev.nozh.core.bus.CapabilityId, dev.nozh.core.bus.CapabilityValue> currentSettings,
-                        ActionMatrixTuning tuning) {
+                        ActionMatrixTuning tuning,
+                        NozhConfig config) {
                 return decide(state, mode, currentBound, nowMillis, profile, targetFps, reverseEpsilonMs, reverseReady,
-                                baselineSnapshot, currentSettings, tuning, null);
+                                baselineSnapshot, currentSettings, tuning, config, null);
         }
 
         private boolean shouldReverseOptimize(

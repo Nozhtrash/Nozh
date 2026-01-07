@@ -48,6 +48,7 @@ public final class HybridGovernor {
                 baselineSnapshot,
                 currentSettings,
                 tuning,
+                config,
                 spikeCausality);
         if (candidate.isEmpty()) {
             return candidate;

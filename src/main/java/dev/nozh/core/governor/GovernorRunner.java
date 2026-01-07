@@ -1046,6 +1046,9 @@ public final class GovernorRunner {
         actionMatrixTuning = PresetTuningResolver.resolve(hardware, modpackProfile.orElse(null));
         lastHardwareProfile = hardwareProfile;
         lastModpackId = modpackId;
+        if (sessionLearning != null) {
+            sessionLearning.updateHardwareProfile(hardwareProfile);
+        }
     }
 
     private void applyPredictionLearningFeedback() {
