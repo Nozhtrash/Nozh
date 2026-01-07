@@ -69,13 +69,16 @@ If the mod crashes or fails strictly, it enters **Safe Mode**.
 | --- | --- | --- |
 | v1 | v0.1.x – v0.2.x | Baseline core architecture freeze. |
 
-### Compatibility Matrix (Runtime)
+### Matrix Update Procedure
 
-This matrix captures the **supported runtime combinations** aligned with benchmarking requirements. Fields are sourced from the **Hardware + Environment Requirements** (OS/JVM/Minecraft) and **Recording Configuration** (mods list, shaders) in `docs/benchmarking.md`.
+* **Disparadores de actualización**: nueva versión de NOZH, nuevo minor de Minecraft, cambio de loader, o cualquier breaking change.
+* **Cómo proponer cambios**: abrir un PR con la tabla actualizada y evidencia de benchmarks que respalde los cambios.
+* **Revisión obligatoria**: aprobación del owner técnico y de QA/benchmark reviewer.
 
-| SO | JVM | Minecraft | Loader (Fabric/Forge) | NOZH | modpack/deps clave |
-| --- | --- | --- | --- | --- | --- |
-| `<OS version>` | `<JVM vendor + version>` | `<MC version>` | `<Fabric/Forge + version>` | `<NOZH version>` | `<mods list, shader pack>` |
+#### Criterios de aceptación
+
+* Evidencia de que los escenarios críticos pasaron (coverage/pass % según la sección de métricas).
+* Notas de migración si hay breaking changes (alineado con “Migration Notes” en este documento).
 
 ### Stable Public Interfaces
 
