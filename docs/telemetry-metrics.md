@@ -82,3 +82,73 @@ Este documento define un checklist operativo de métricas, su origen dentro de N
 - [ ] CPU/memoria provistos por colector externo y adjuntados al export.
 - [ ] Error rate definido con denominador explícito y exportado.
 - [ ] Export en CSV/JSON válido y compatible con `TelemetryExportWriter`.
+
+## 6) Definición operativa de telemetría, logs y crash
+
+### 6.1 Fuentes actuales (telemetría/logs)
+
+- **Telemetría de performance (en memoria y exportable):**
+  - `PerfManager` + `RollingWindowStats` generan `PerfSnapshot` y muestras crudas por ventana. Exportables vía
+    `TelemetryExportWriter` en CSV/JSON desde `config/nozh/telemetry_exports/`.
+  - `TelemetryManager` agrega métricas por escenario (`TelemetryAggregator`) y eventos (`EventTimeline`) y permite
+    reportes en Markdown/JSON si se llama explícitamente.
+- **Eventos de crash loop / recuperación (telemetría de eventos):**
+  - `CrashLoopGuard.recordFailureContext(...)` captura contexto y lo envía a `TelemetryManager.recordCrashContext(...)`.
+  - `CrashLoopGuard.evaluateCrashRecovery(...)` emite un evento de recuperación (`recordCrashRecovery`) cuando se
+    activa cuarentena o safe mode.
+- **Logging operativo:**
+  - Logger principal: `NozhConstants.LOGGER` (SLF4J) para info/warn/error.
+  - Logger de diagnóstico opcional: `DebugLogger` escribe a `config/nozh/nozh-debug.log` cuando `debugLogs=true`.
+
+### 6.2 Definición exacta de “crash” (para métricas operativas)
+
+**Se considera “crash” dentro de la telemetría interna cuando ocurre alguno de estos eventos:**
+1. **Fallo/exception en ejecución de acción** que llama a
+   `CrashLoopGuard.recordFailureContext(...)` (p. ej., fallos en `StandardActionProcessor` o
+   `StandardActionExecutor`).
+2. **Crash loop recovery** detectado al iniciar: `bootAttempts >= 3` y sesión no marcada como estable,
+   con resultado de **cuarentena de capability** o **safe mode**.
+
+**Eventos excluidos (NO cuentan como crash):**
+- Spikes de rendimiento, `TelemetrySnapshot` vacíos, o drops del buffer de telemetría.
+- Safe mode forzado por configuración o activado manualmente por el usuario.
+- Errores de exportación o fallos de diagnóstico sin relación con `CrashLoopGuard`.
+
+### 6.3 Cómo se agregan los eventos de crash
+
+**Unidad base de crash:**
+- Cada llamada a `recordFailureContext` cuenta como **1 evento de crash técnico**.
+- Cada acción de recuperación (`quarantine` o `safe mode`) cuenta como **1 evento de crash loop**.
+
+**Agregación recomendada (operativa):**
+- **Crash rate por sesión:** `crash_events / session_duration_minutes`.
+- **Crash loop rate:** `crash_loop_events / total_sessions`.
+- **Por capability:** agrupar por `capabilityId` dentro del contexto de crash.
+
+### 6.4 Ventanas temporales y entornos
+
+**Ventanas actuales en el código (tiempo real):**
+- **Ventana de telemetría de performance:** 3–10s dinámicos (`PerfManager` ajusta la ventana).
+- **Actualización de métricas de estado:** cada 1s (20 ticks).
+- **Crash loop guard:**
+  - Sesión estable tras ~10s (200 ticks).
+  - Cuarentena por 10 minutos (`CRASH_RECOVERY_QUARANTINE_MILLIS`).
+
+**Ventanas operativas externas (recomendadas):**
+- **24h / 7d / 30d** para reporting ejecutivo y tendencias.
+- Estas ventanas **no se calculan dentro del mod**; deben agregarse a partir de
+  exports CSV/JSON o logs agregados por entorno.
+
+**Entornos:**
+- `prod`: instancia de jugador final.
+- `staging`: pruebas internas con builds de integración.
+- `qa`: pruebas automatizadas/regresión.
+
+### 6.5 Ejemplos de cálculo
+
+- **Crash rate (24h, prod):**
+  - `total recordFailureContext en 24h / total sesiones prod en 24h`.
+- **Crash loop rate (7d, staging):**
+  - `eventos de cuarentena + safe mode en 7d / total sesiones staging en 7d`.
+- **Crash por capability (30d, qa):**
+  - `crash_events agrupados por capabilityId / total sesiones qa en 30d`.
