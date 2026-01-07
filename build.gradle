@@ -81,6 +81,29 @@ test {
 	maxParallelForks = Runtime.runtime.availableProcessors().intdiv(2) ?: 1
 }
 
+tasks.register('quickTest', JavaExec) {
+	group = 'verification'
+	description = 'Runs the modpack quick-test executor and writes JSON/CSV results.'
+	classpath = sourceSets.test.runtimeClasspath
+	mainClass = 'dev.nozh.core.testing.ModpackQuickTestRunner'
+	dependsOn testClasses
+
+	def addArg = { prop, flag ->
+		if (project.hasProperty(prop)) {
+			args flag, project.property(prop).toString()
+		}
+	}
+
+	addArg('modpack', '--modpack')
+	addArg('seed', '--seed')
+	addArg('scenarios', '--scenarios')
+	addArg('outputDir', '--output')
+	addArg('samplesDir', '--samples')
+	addArg('warmupSeconds', '--warmup')
+	addArg('measurementSeconds', '--measurement')
+	addArg('cooldownSeconds', '--cooldown')
+}
+
 java {
 	sourceCompatibility = JavaVersion.VERSION_17
 	targetCompatibility = JavaVersion.VERSION_17
