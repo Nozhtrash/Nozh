@@ -5,6 +5,7 @@ import dev.nozh.api.PerfSnapshot;
 import dev.nozh.core.state.StateStore;
 import dev.nozh.core.telemetry.TelemetrySnapshot;
 
+import java.util.function.Consumer;
 import java.util.function.Supplier;
 
 /**
@@ -17,6 +18,7 @@ public final class InitialBenchmarkRunner {
 
     private final StateStore stateStore;
     private final Supplier<PerfSnapshot> snapshotSupplier;
+    private final Consumer<PerfSnapshot> snapshotConsumer;
 
     private boolean sessionActive = false;
     private boolean benchmarkStarted = false;
@@ -25,8 +27,14 @@ public final class InitialBenchmarkRunner {
     private long benchmarkStartMillis = 0L;
 
     public InitialBenchmarkRunner(StateStore stateStore, Supplier<PerfSnapshot> snapshotSupplier) {
+        this(stateStore, snapshotSupplier, null);
+    }
+
+    public InitialBenchmarkRunner(StateStore stateStore, Supplier<PerfSnapshot> snapshotSupplier,
+            Consumer<PerfSnapshot> snapshotConsumer) {
         this.stateStore = stateStore;
         this.snapshotSupplier = snapshotSupplier;
+        this.snapshotConsumer = snapshotConsumer;
     }
 
     public void onSessionStart() {
@@ -88,6 +96,9 @@ public final class InitialBenchmarkRunner {
             stateStore.update(s -> s.withBenchmarkStatus(false, benchmarkStartMillis, validity.name()));
         } catch (Exception e) {
             NozhConstants.LOGGER.warn("Failed to finish initial benchmark: {}", e.getMessage());
+        }
+        if (snapshotConsumer != null) {
+            snapshotConsumer.accept(snapshot);
         }
         benchmarkCompleted = true;
     }

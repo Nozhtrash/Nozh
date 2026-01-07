@@ -14,7 +14,10 @@ import dev.nozh.core.safety.CrashLoopGuard;
 import dev.nozh.core.state.RuntimeState;
 import dev.nozh.core.state.StateStore;
 import dev.nozh.core.benchmark.InitialBenchmarkRunner;
+import dev.nozh.core.benchmark.BenchmarkEnvironment;
+import dev.nozh.core.benchmark.BenchmarkScenarioRecorder;
 import dev.nozh.core.telemetry.TelemetryManager;
+import dev.nozh.core.context.Scenario;
 import dev.nozh.fabric.FabricNozhLogger;
 import dev.nozh.fabric.capability.CompatAwareMinecraftOptionsAdapter;
 import dev.nozh.fabric.capability.MinecraftOptionsAdapter;
@@ -24,6 +27,7 @@ import dev.nozh.fabric.capability.StandardCapabilityExecutor;
 import dev.nozh.fabric.compat.CompatRegistry;
 import dev.nozh.fabric.input.ManualConfirmationHandler;
 import dev.nozh.client.hud.NozhHudRenderer;
+import net.fabricmc.loader.api.FabricLoader;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
@@ -57,6 +61,7 @@ public class NozhModClient implements ClientModInitializer {
     private static ProviderRegistry providerRegistry;
     private static dev.nozh.fabric.context.FabricScenarioDetector scenarioDetector;
     private static InitialBenchmarkRunner initialBenchmarkRunner;
+    private static BenchmarkScenarioRecorder benchmarkScenarioRecorder;
     private static KeyBinding toggleHudKey;
     private static KeyBinding applySuggestionKey;
     private static KeyBinding exportReportKey;
@@ -134,8 +139,19 @@ public class NozhModClient implements ClientModInitializer {
         perfManager = new dev.nozh.core.profiler.PerfManager();
         tickTimeSampler = new dev.nozh.core.monitoring.TickTimeSampler();
         perfManager.setTickSnapshotSupplier(() -> tickTimeSampler.getSnapshot());
+        if (ConfigManager.getConfig().benchmarkModeEnabled) {
+            benchmarkScenarioRecorder = new BenchmarkScenarioRecorder(
+                    perfManager,
+                    () -> perfManager != null ? perfManager.getSnapshot() : dev.nozh.api.PerfSnapshot.empty(),
+                    NozhConstants.CONFIG_DIR.resolve("benchmark_artifacts"));
+        }
         initialBenchmarkRunner = new InitialBenchmarkRunner(stateStore,
-                () -> perfManager != null ? perfManager.getSnapshot() : dev.nozh.api.PerfSnapshot.empty());
+                () -> perfManager != null ? perfManager.getSnapshot() : dev.nozh.api.PerfSnapshot.empty(),
+                snapshot -> {
+                    if (benchmarkScenarioRecorder != null) {
+                        benchmarkScenarioRecorder.recordInitialBenchmarkSnapshot(snapshot);
+                    }
+                });
 
         // 8. Create ActionProcessor bridge
         StandardActionProcessor actionProcessor = new StandardActionProcessor(
@@ -286,6 +302,10 @@ public class NozhModClient implements ClientModInitializer {
             if (initialBenchmarkRunner != null) {
                 initialBenchmarkRunner.tick();
             }
+            if (benchmarkScenarioRecorder != null) {
+                Scenario scenario = stateStore.snapshotSafe().currentScenario();
+                benchmarkScenarioRecorder.tick(scenario);
+            }
 
             handleTutorial(clientInstance);
 
@@ -300,6 +320,9 @@ public class NozhModClient implements ClientModInitializer {
             }
             if (initialBenchmarkRunner != null) {
                 initialBenchmarkRunner.onSessionEnd();
+            }
+            if (benchmarkScenarioRecorder != null) {
+                benchmarkScenarioRecorder.onSessionEnd();
             }
         });
 
@@ -317,6 +340,9 @@ public class NozhModClient implements ClientModInitializer {
             }
             if (initialBenchmarkRunner != null) {
                 initialBenchmarkRunner.onSessionStart();
+            }
+            if (benchmarkScenarioRecorder != null) {
+                benchmarkScenarioRecorder.onSessionStart(buildBenchmarkEnvironment(clientInstance));
             }
         });
 
@@ -380,6 +406,19 @@ public class NozhModClient implements ClientModInitializer {
 
     public static dev.nozh.fabric.context.FabricScenarioDetector getScenarioDetector() {
         return scenarioDetector;
+    }
+
+    private BenchmarkEnvironment buildBenchmarkEnvironment(MinecraftClient clientInstance) {
+        String hardwareProfile = ConfigManager.getConfig().hardwareProfile;
+        String resolution = "unknown";
+        if (clientInstance != null && clientInstance.getWindow() != null) {
+            resolution = clientInstance.getWindow().getFramebufferWidth()
+                    + "x" + clientInstance.getWindow().getFramebufferHeight();
+        }
+        int modCount = FabricLoader.getInstance().getAllMods().size();
+        String modsSummary = "mods=" + modCount;
+        String workloadProfile = ConfigManager.getConfig().optimizationProfile;
+        return new BenchmarkEnvironment(hardwareProfile, resolution, modsSummary, workloadProfile);
     }
 
     public static void requestSuggestedAction() {
