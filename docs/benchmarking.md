@@ -27,6 +27,8 @@ This document defines **how to measure frametime stability** for NOZH, the **rep
 - **Power mode** (e.g., High Performance, laptop plugged in).
 - **Background load** (close heavy apps; record unavoidable daemons).
 
+> **Note:** This matrix defines the supported runtime combinations. See **Compatibility Matrix (Runtime)** in `docs/ARCHITECTURE.md`.
+
 ### Graphics + Game Config (must be fixed)
 - **Render distance** (e.g., 12–16).
 - **Simulation distance** (e.g., 8–12).
@@ -68,6 +70,14 @@ Run **all three** scenarios if possible. Each scenario must be a **saved world**
   1. Teleport to base center.
   2. Walk a fixed 30s path loop, repeat 6 times.
   3. Measure for 180s.
+
+### Critical Scenarios (must-run)
+
+These scenarios are **critical** and required for any benchmark run:
+
+- **Critical A — Combat with Mobs:** Scenario A above.
+- **Critical B — Redstone Tick-Heavy:** Scenario B above.
+- **Critical C — Megabase with Entities:** Scenario C above.
 
 ## 3) Recording Configuration
 
