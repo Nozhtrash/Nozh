@@ -48,6 +48,7 @@ public final class FabricScenarioDetector implements ScenarioDetector {
     private long lastInventoryOpenTick = 0;
     private int blocksPlacedRecent = 0;
     private int blocksBrokenRecent = 0;
+    private int lastEntityCount = -1;
     
     // Stability tracking
     private Scenario lastScenario = Scenario.STANDARD;
@@ -62,10 +63,12 @@ public final class FabricScenarioDetector implements ScenarioDetector {
     public ScenarioSnapshot detect() {
         ClientPlayerEntity player = client.player;
         if (player == null || client.world == null) {
+            lastEntityCount = -1;
             return new ScenarioSnapshot(Scenario.MENU, 0.95);
         }
 
         long currentTick = client.world.getTime();
+        lastEntityCount = client.world.getEntities().size();
 
         // Clean old actions (> 30s)
         while (!actionHistory.isEmpty() && 
@@ -88,6 +91,11 @@ public final class FabricScenarioDetector implements ScenarioDetector {
         double confidence = calculateConfidence(detected, stability);
 
         return new ScenarioSnapshot(detected, confidence);
+    }
+
+    @Override
+    public int getEntityCount() {
+        return lastEntityCount;
     }
 
     private Scenario detectAdvanced(ClientPlayerEntity player, World world, long currentTick) {

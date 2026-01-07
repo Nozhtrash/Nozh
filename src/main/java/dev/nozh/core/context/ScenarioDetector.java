@@ -9,4 +9,11 @@ public interface ScenarioDetector {
      * Detect current scenario based on game state.
      */
     ScenarioSnapshot detect();
+
+    /**
+     * Return current entity count estimate, or -1 if unavailable.
+     */
+    default int getEntityCount() {
+        return -1;
+    }
 }

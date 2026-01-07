@@ -230,11 +230,19 @@ public class PerfManager implements CriticalEventSink {
         String hottestKey = hottest != null && hottest.phase() != null
                 ? hottest.phase().translationKey()
                 : RenderPhase.UNKNOWN.translationKey();
+        double tickMs = tickSnapshot != null && tickSnapshot.sufficientData()
+                ? tickSnapshot.p95FrametimeMs()
+                : -1.0;
+        double renderMs = stats.snapshot().sufficientData()
+                ? stats.snapshot().p95FrametimeMs()
+                : -1.0;
         return new PerfDiagnosticsSnapshot(
                 gcSnapshot.recentGcMs(),
                 gcSnapshot.pressureScore(),
                 pauses.pauseCount(),
                 pauses.maxPauseMs(),
+                tickMs,
+                renderMs,
                 cause.causeKey(),
                 cause.detail(),
                 cause.confidence(),

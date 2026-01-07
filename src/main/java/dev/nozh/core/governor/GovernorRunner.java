@@ -72,6 +72,7 @@ public final class GovernorRunner {
     private final dev.nozh.core.monitoring.SystemMonitor systemMonitor;
     private final dev.nozh.core.monitoring.ChunkLoadMonitor chunkLoadMonitor;
     private final dev.nozh.core.context.ScenarioDetector scenarioDetector;
+    private final RiskHeuristicModel riskModel;
     private final Optional<ModpackProfile> modpackProfile;
     private final AdaptiveVisualQualityController visualQualityController;
     private ActionMatrixTuning actionMatrixTuning = ActionMatrixTuning.defaults();
@@ -94,6 +95,10 @@ public final class GovernorRunner {
     private double lastFrametimePredictionAvgMs = Double.NaN;
     private double lastFrametimePredictionP95Ms = Double.NaN;
     private int lastFrametimePredictionSpikes = -1;
+    private boolean pendingRiskPrediction = false;
+    private long lastRiskPredictionMillis = 0L;
+    private int lastRiskPredictionCount = -1;
+    private double lastRiskPredictionScore = 0.0;
 
     public GovernorRunner(
             ProviderRegistry registry,
@@ -129,6 +134,7 @@ public final class GovernorRunner {
         this.chunkLoadMonitor = new ChunkLoadMonitor();
         this.modpackProfile = ModpackRegistry.detect();
         this.visualQualityController = new AdaptiveVisualQualityController();
+        this.riskModel = new RiskHeuristicModel();
     }
 
     public void onTick() {
@@ -208,7 +214,8 @@ public final class GovernorRunner {
             return;
         }
 
-        if (attemptPreventiveAction(state, config, now)) {
+        RiskScore riskScore = evaluateRiskScore(state);
+        if (attemptPreventiveAction(state, config, now, riskScore)) {
             return;
         }
 
@@ -480,7 +487,7 @@ public final class GovernorRunner {
         return true;
     }
 
-    private boolean attemptPreventiveAction(RuntimeState state, NozhConfig config, long nowMillis) {
+    private boolean attemptPreventiveAction(RuntimeState state, NozhConfig config, long nowMillis, RiskScore riskScore) {
         if (state == null || config == null) {
             return false;
         }
@@ -489,7 +496,10 @@ public final class GovernorRunner {
         }
 
         PredictiveAnalyzer.Prediction prediction = predictiveAnalyzer.evaluate();
-        if (!prediction.ready() || !prediction.isLikely() || prediction.confidence() < 0.5) {
+        boolean predictionLikely = prediction.ready() && prediction.isLikely() && prediction.confidence() >= 0.5;
+        boolean riskLikely = riskScore != null && riskModel.isReady()
+                && riskScore.total() >= riskModel.getRiskThreshold();
+        if (!predictionLikely && !riskLikely) {
             return false;
         }
 
@@ -539,8 +549,10 @@ public final class GovernorRunner {
 
         successTracker.recordDecision(decision);
         ActionCandidate preventiveDecision = decision;
-        String actionSummary = "preventive(" + prediction.window().name().toLowerCase(Locale.ROOT) + ") "
-                + formatActionSummary(preventiveDecision);
+        String actionSummary = riskLikely
+                ? "preventive(risk) " + formatActionSummary(preventiveDecision)
+                : "preventive(" + prediction.window().name().toLowerCase(Locale.ROOT) + ") "
+                        + formatActionSummary(preventiveDecision);
 
         logger.info("Preventive governor decision: " + preventiveDecision.reason());
         try {
@@ -1052,6 +1064,34 @@ public final class GovernorRunner {
         predictiveAnalyzer.applyLearning(
                 sessionLearning.getPredictionAccuracy(),
                 sessionLearning.getPredictionAvgConfidence());
+        riskModel.updateWeights(sessionLearning);
+    }
+
+    private RiskScore evaluateRiskScore(RuntimeState state) {
+        if (state == null || perfManager == null) {
+            return null;
+        }
+        var diagnostics = perfManager.getDiagnosticsSnapshot();
+        if (diagnostics == null) {
+            return null;
+        }
+        int entityCount = scenarioDetector != null ? scenarioDetector.getEntityCount() : -1;
+        int chunkRate = chunkLoadMonitor.getChunkLoadRate();
+        RiskFeatureVector vector = new RiskFeatureVector(
+                diagnostics.tickMs(),
+                diagnostics.renderMs(),
+                diagnostics.recentGcMs(),
+                entityCount,
+                chunkRate);
+        riskModel.addSample(vector);
+        RiskScore score = riskModel.score(vector);
+        if (riskModel.isReady() && score.total() >= riskModel.getRiskThreshold() && !pendingRiskPrediction) {
+            lastRiskPredictionMillis = nowMillis();
+            lastRiskPredictionCount = state.spikeCount();
+            lastRiskPredictionScore = score.total();
+            pendingRiskPrediction = true;
+        }
+        return score;
     }
 
     private PerfSnapshot captureSnapshot() {
@@ -1244,6 +1284,7 @@ public final class GovernorRunner {
         }
         evaluateSpikePredictionAccuracy(state, config, nowMillis);
         evaluateFrametimePredictionAccuracy(state, config, nowMillis);
+        evaluateRiskPredictionAccuracy(state, config, nowMillis);
     }
 
     private void updateSpikePrediction(RuntimeState state, NozhConfig config, long nowMillis) {
@@ -1322,6 +1363,24 @@ public final class GovernorRunner {
         boolean actualSpike = isPredictionSpike(state, config);
         sessionLearning.recordPredictionOutcome(true, actualSpike, pendingFrametimeConfidence);
         pendingFrametimePrediction = false;
+    }
+
+    private void evaluateRiskPredictionAccuracy(RuntimeState state, NozhConfig config, long nowMillis) {
+        if (!pendingRiskPrediction) {
+            return;
+        }
+        long windowMs = resolvePredictionWindowMillis(config);
+        if (nowMillis - lastRiskPredictionMillis < windowMs) {
+            return;
+        }
+        if (lastRiskPredictionCount < 0) {
+            pendingRiskPrediction = false;
+            return;
+        }
+        boolean actualSpike = state.spikeCount() > lastRiskPredictionCount;
+        sessionLearning.recordPredictionOutcome(true, actualSpike, lastRiskPredictionScore);
+        riskModel.recordOutcome(state, true);
+        pendingRiskPrediction = false;
     }
 
     private boolean isPredictionSpike(RuntimeState state, NozhConfig config) {
