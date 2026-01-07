@@ -8,6 +8,7 @@ import dev.nozh.core.safety.*;
 import dev.nozh.core.telemetry.*;
 import dev.nozh.core.intelligence.*;
 import dev.nozh.core.config.AdaptiveConfigManager;
+import dev.nozh.fabric.context.EnhancedFabricScenarioDetector;
 import net.minecraft.client.MinecraftClient;
 import java.nio.file.Path;
 import java.util.Arrays;
