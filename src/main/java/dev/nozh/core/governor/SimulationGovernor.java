@@ -90,7 +90,7 @@ public final class SimulationGovernor {
                         Map<dev.nozh.core.bus.CapabilityId, dev.nozh.core.bus.CapabilityValue> currentSettings,
                         ActionMatrixTuning tuning,
                         dev.nozh.core.profiler.SpikeCausalityReport spikeCausality) {
-                ActionMatrixTuning budget = tuning;
+                ActionMatrixTuning budget = tuning != null ? tuning : ActionMatrixTuning.defaults();
                 // OFF mode → no decisions
                 if (mode == GovernorMode.OFF) {
                         return Optional.empty();
