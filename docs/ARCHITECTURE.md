@@ -53,6 +53,36 @@ If the mod crashes or fails strictly, it enters **Safe Mode**.
 * **Effect**: All Governor/Executor logic is strictly bypassed.
 * **Persistence**: Stored in `nozh-state.json`. Requires user intervention or strict stability check to reset.
 
+## Core Architecture Freeze
+
+**Freeze Date**: 2025-02-14  
+**Scope (Included)**: Core runtime loop, measurement pipeline, classification logic, decision engine, executor safety rails, rollback system, and safe mode persistence.  
+**Scope (Excluded)**: UI/UX surfaces, telemetry/analytics, external integrations, experimental action handlers, and build/packaging tooling.
+
+### Forward Compatibility Policy
+
+* **Supported Versions**: Latest stable release and one previous minor version (e.g., v0.2.x and v0.1.x).
+* **Breaking Changes Limit**: Only in minor releases with explicit migration notes; patch releases are strictly backward compatible.
+* **Compatibility Matrix**:
+
+| Core API Version | Supported Mod Releases | Notes |
+| --- | --- | --- |
+| v1 | v0.1.x – v0.2.x | Baseline core architecture freeze. |
+
+### Stable Public Interfaces
+
+The following interfaces are considered stable and part of the frozen core contract:
+
+* **APIs**: `SimulationGovernor`, `StandardActionExecutor`, `ExecutorGuard`, `FrameTimeSampler`, `RollingWindowStats`.
+* **Events**: `WorldRenderEvents.END` frametime sampling hook.
+* **Data Contracts**: `PerfSnapshot`, `Decision`, `ActionType`, and `nozh-state.json` persistence format.
+
+### Change Process (Deprecations & Versioning)
+
+* **Deprecation Window**: Deprecated interfaces remain supported for at least one minor release with warnings.
+* **Versioning**: Core API versions are incremented on breaking changes; new capabilities use additive, backward-compatible fields or methods.
+* **Migration Notes**: Required for all breaking changes and must include rationale, steps, and fallback behavior.
+
 ## Frametime Definition
 
 In NOZH, **Frametime** is the wall-clock time elapsed between two consecutive `WorldRenderEvents.END` callbacks.
