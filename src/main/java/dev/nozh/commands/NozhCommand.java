@@ -5,17 +5,19 @@ import com.mojang.brigadier.arguments.DoubleArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.context.CommandContext;
 import dev.nozh.core.governor.IntegratedGovernor;
-import net.minecraft.server.command.CommandManager;
-import net.minecraft.server.command.ServerCommandSource;
+import net.fabricmc.fabric.api.client.command.v2.FabricClientCommandSource;
 import net.minecraft.text.Text;
 import net.minecraft.util.Formatting;
 
 import java.util.Map;
 
+import static net.fabricmc.fabric.api.client.command.v2.ClientCommandManager.*;
+
 /**
  * Main command interface for Nozh FPS Optimizer.
  * 
  * Provides comprehensive control over the governor system.
+ * Client-side commands using FabricClientCommandSource.
  * 
  * INTEGRATION: User interface
  */
@@ -27,41 +29,41 @@ public class NozhCommand {
         governor = gov;
     }
 
-    public static void register(CommandDispatcher<ServerCommandSource> dispatcher) {
-        dispatcher.register(CommandManager.literal("nozh")
+    public static void register(CommandDispatcher<FabricClientCommandSource> dispatcher) {
+        dispatcher.register(literal("nozh")
                 .executes(NozhCommand::showHelp)
-                .then(CommandManager.literal("status")
+                .then(literal("status")
                         .executes(NozhCommand::showStatus))
-                .then(CommandManager.literal("health")
+                .then(literal("health")
                         .executes(NozhCommand::showHealth))
-                .then(CommandManager.literal("learning")
+                .then(literal("learning")
                         .executes(NozhCommand::showLearning))
-                .then(CommandManager.literal("metrics")
+                .then(literal("metrics")
                         .executes(NozhCommand::showMetrics))
-                .then(CommandManager.literal("effectiveness")
-                        .then(CommandManager.argument("action", StringArgumentType.string())
+                .then(literal("effectiveness")
+                        .then(argument("action", StringArgumentType.string())
                                 .executes(NozhCommand::showEffectiveness)))
-                .then(CommandManager.literal("reset")
-                        .then(CommandManager.literal("learning")
+                .then(literal("reset")
+                        .then(literal("learning")
                                 .executes(NozhCommand::resetLearning)))
-                .then(CommandManager.literal("config")
-                        .then(CommandManager.argument("key", StringArgumentType.string())
-                                .then(CommandManager.argument("value", DoubleArgumentType.doubleArg())
+                .then(literal("config")
+                        .then(argument("key", StringArgumentType.string())
+                                .then(argument("value", DoubleArgumentType.doubleArg())
                                         .executes(NozhCommand::setConfig))))
-                .then(CommandManager.literal("scenario")
+                .then(literal("scenario")
                         .executes(NozhCommand::showScenario))
-                .then(CommandManager.literal("debug")
-                        .then(CommandManager.literal("telemetry")
+                .then(literal("debug")
+                        .then(literal("telemetry")
                                 .executes(NozhCommand::debugTelemetry))
-                        .then(CommandManager.literal("predictor")
+                        .then(literal("predictor")
                                 .executes(NozhCommand::debugPredictor))
-                        .then(CommandManager.literal("weights")
+                        .then(literal("weights")
                                 .executes(NozhCommand::debugWeights)))
         );
     }
 
-    private static int showHelp(CommandContext<ServerCommandSource> context) {
-        ServerCommandSource source = context.getSource();
+    private static int showHelp(CommandContext<FabricClientCommandSource> context) {
+        FabricClientCommandSource source = context.getSource();
         
         sendMessage(source, "=== Nozh FPS Optimizer ===", Formatting.GOLD);
         sendMessage(source, "Commands:", Formatting.YELLOW);
@@ -81,10 +83,10 @@ public class NozhCommand {
         return 1;
     }
 
-    private static int showStatus(CommandContext<ServerCommandSource> context) {
+    private static int showStatus(CommandContext<FabricClientCommandSource> context) {
         if (!checkGovernor(context.getSource())) return 0;
         
-        ServerCommandSource source = context.getSource();
+        FabricClientCommandSource source = context.getSource();
         
         sendMessage(source, "=== Governor Status ===", Formatting.GOLD);
         sendMessage(source, "Initialized: " + governor.isInitialized(), Formatting.GREEN);
@@ -93,10 +95,10 @@ public class NozhCommand {
         return 1;
     }
 
-    private static int showHealth(CommandContext<ServerCommandSource> context) {
+    private static int showHealth(CommandContext<FabricClientCommandSource> context) {
         if (!checkGovernor(context.getSource())) return 0;
         
-        ServerCommandSource source = context.getSource();
+        FabricClientCommandSource source = context.getSource();
         String report = governor.getHealthReport();
         
         for (String line : report.split("\n")) {
@@ -106,10 +108,10 @@ public class NozhCommand {
         return 1;
     }
 
-    private static int showLearning(CommandContext<ServerCommandSource> context) {
+    private static int showLearning(CommandContext<FabricClientCommandSource> context) {
         if (!checkGovernor(context.getSource())) return 0;
         
-        ServerCommandSource source = context.getSource();
+        FabricClientCommandSource source = context.getSource();
         Map<String, Object> stats = governor.getLearningStats();
         
         sendMessage(source, "=== Learning Statistics ===", Formatting.GOLD);
@@ -120,10 +122,10 @@ public class NozhCommand {
         return 1;
     }
 
-    private static int showMetrics(CommandContext<ServerCommandSource> context) {
+    private static int showMetrics(CommandContext<FabricClientCommandSource> context) {
         if (!checkGovernor(context.getSource())) return 0;
         
-        ServerCommandSource source = context.getSource();
+        FabricClientCommandSource source = context.getSource();
         Map<String, Object> metrics = governor.getMetricsSummary();
         
         sendMessage(source, "=== Performance Metrics ===", Formatting.GOLD);
@@ -151,20 +153,20 @@ public class NozhCommand {
         return 1;
     }
 
-    private static int showEffectiveness(CommandContext<ServerCommandSource> context) {
+    private static int showEffectiveness(CommandContext<FabricClientCommandSource> context) {
         if (!checkGovernor(context.getSource())) return 0;
         
         String action = StringArgumentType.getString(context, "action");
         double effectiveness = governor.getActionEffectiveness(action);
         
-        ServerCommandSource source = context.getSource();
+        FabricClientCommandSource source = context.getSource();
         sendMessage(source, String.format("Effectiveness of '%s': %.2f", action, effectiveness), 
                 effectiveness > 0.7 ? Formatting.GREEN : effectiveness > 0.4 ? Formatting.YELLOW : Formatting.RED);
         
         return 1;
     }
 
-    private static int resetLearning(CommandContext<ServerCommandSource> context) {
+    private static int resetLearning(CommandContext<FabricClientCommandSource> context) {
         if (!checkGovernor(context.getSource())) return 0;
         
         governor.resetLearning();
@@ -173,7 +175,7 @@ public class NozhCommand {
         return 1;
     }
 
-    private static int setConfig(CommandContext<ServerCommandSource> context) {
+    private static int setConfig(CommandContext<FabricClientCommandSource> context) {
         if (!checkGovernor(context.getSource())) return 0;
         
         String key = StringArgumentType.getString(context, "key");
@@ -187,7 +189,7 @@ public class NozhCommand {
         return 1;
     }
 
-    private static int showScenario(CommandContext<ServerCommandSource> context) {
+    private static int showScenario(CommandContext<FabricClientCommandSource> context) {
         if (!checkGovernor(context.getSource())) return 0;
         
         // TODO: Get current scenario from governor
@@ -196,7 +198,7 @@ public class NozhCommand {
         return 1;
     }
 
-    private static int debugTelemetry(CommandContext<ServerCommandSource> context) {
+    private static int debugTelemetry(CommandContext<FabricClientCommandSource> context) {
         if (!checkGovernor(context.getSource())) return 0;
         
         // TODO: Get telemetry debug info
@@ -205,7 +207,7 @@ public class NozhCommand {
         return 1;
     }
 
-    private static int debugPredictor(CommandContext<ServerCommandSource> context) {
+    private static int debugPredictor(CommandContext<FabricClientCommandSource> context) {
         if (!checkGovernor(context.getSource())) return 0;
         
         // TODO: Get predictor debug info
@@ -214,7 +216,7 @@ public class NozhCommand {
         return 1;
     }
 
-    private static int debugWeights(CommandContext<ServerCommandSource> context) {
+    private static int debugWeights(CommandContext<FabricClientCommandSource> context) {
         if (!checkGovernor(context.getSource())) return 0;
         
         // TODO: Get current weights
@@ -223,7 +225,7 @@ public class NozhCommand {
         return 1;
     }
 
-    private static boolean checkGovernor(ServerCommandSource source) {
+    private static boolean checkGovernor(FabricClientCommandSource source) {
         if (governor == null || !governor.isInitialized()) {
             sendMessage(source, "Governor not initialized!", Formatting.RED);
             return false;
@@ -231,8 +233,8 @@ public class NozhCommand {
         return true;
     }
 
-    private static void sendMessage(ServerCommandSource source, String message, Formatting formatting) {
-        source.sendFeedback(() -> Text.literal(message).formatted(formatting), false);
+    private static void sendMessage(FabricClientCommandSource source, String message, Formatting formatting) {
+        source.sendFeedback(Text.literal(message).formatted(formatting));
     }
 
     private static Formatting getHealthColor(dev.nozh.core.monitoring.SystemHealthMonitor.HealthStatus status) {

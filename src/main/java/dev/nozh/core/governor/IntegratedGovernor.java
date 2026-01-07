@@ -85,7 +85,7 @@ public final class IntegratedGovernor {
         
         // Initialize intelligence
         double targetFps = 60.0; // TODO: Get from config
-        this.predictor = new PerformancePredictor(targetFps);
+        this.predictor = new PerformancePredictor((int) targetFps);
         this.utilityScorer = new UtilityScorer();
         
         // Initialize learning
@@ -178,9 +178,10 @@ public final class IntegratedGovernor {
             return;
         }
         
-        // Detect scenario
-        Scenario detectedScenario = scenarioDetector.detectScenario();
-        double scenarioConfidence = calculateScenarioConfidence(detectedScenario);
+        // Detect scenario using correct method
+        ScenarioSnapshot scenarioSnapshot = scenarioDetector.detect();
+        Scenario detectedScenario = scenarioSnapshot.scenario();
+        double scenarioConfidence = scenarioSnapshot.confidence();
         
         // Log scenario change
         if (detectedScenario != currentScenario && scenarioConfidence > 0.7) {
