@@ -15,6 +15,7 @@ public final class TickTimeSampler {
     private final RollingWindowStats stats;
     private long lastTickNanos = 0;
     private boolean initialized = false;
+    private double lastTickMs = 0.0;
 
     public TickTimeSampler() {
         this(5);
@@ -47,6 +48,7 @@ public final class TickTimeSampler {
             }
 
             stats.addSample(deltaNanos);
+            lastTickMs = deltaNanos / 1_000_000.0;
         } catch (Exception e) {
             NozhConstants.LOGGER.debug("Error in TickTimeSampler: {}", e.getMessage());
         }
@@ -59,6 +61,11 @@ public final class TickTimeSampler {
     public void reset() {
         lastTickNanos = 0;
         initialized = false;
+        lastTickMs = 0.0;
         stats.reset();
+    }
+
+    public double getLastTickMs() {
+        return lastTickMs;
     }
 }

@@ -4,6 +4,7 @@ import dev.nozh.api.compat.StewardshipMode;
 import dev.nozh.core.bus.CapabilityId;
 import dev.nozh.core.compatibility.StewardshipDecision;
 import dev.nozh.core.compatibility.StewardshipHandshakeRegistry;
+import dev.nozh.api.compat.StewardshipDeclaration;
 import net.fabricmc.loader.api.FabricLoader;
 
 import java.util.EnumSet;
@@ -50,6 +51,8 @@ public final class CompatRegistry {
                 EnumSet.of(CapabilityId.RENDER_DISTANCE, CapabilityId.VSYNC, CapabilityId.ENTITY_DISTANCE)));
         register(new CompatModule("bobby", "Bobby",
                 EnumSet.of(CapabilityId.RENDER_DISTANCE)));
+        register(new CompatModule("farsight", "Farsight",
+                EnumSet.of(CapabilityId.RENDER_DISTANCE)));
         register(new CompatModule("distant-horizons", "Distant Horizons",
                 EnumSet.of(CapabilityId.RENDER_DISTANCE, CapabilityId.FOG)));
         register(new CompatModule("c2me", "C2ME",
@@ -65,6 +68,8 @@ public final class CompatRegistry {
         register(new CompatModule("modernfix", "ModernFix",
                 EnumSet.of(CapabilityId.CHUNK_LOADING)));
         register(new CompatModule("krypton", "Krypton",
+                EnumSet.of(CapabilityId.CHUNK_LOADING)));
+        register(new CompatModule("noisium", "Noisium",
                 EnumSet.of(CapabilityId.CHUNK_LOADING)));
         register(new CompatModule("immediatelyfast", "ImmediatelyFast",
                 EnumSet.of(CapabilityId.ANIMATIONS, CapabilityId.ENTITY_SHADOWS)));
@@ -112,6 +117,8 @@ public final class CompatRegistry {
                 EnumSet.of(CapabilityId.SIMULATION_DISTANCE)));
         register(new CompatModule("cullclouds", "Cull Clouds",
                 EnumSet.of(CapabilityId.CLOUDS)));
+        register(new CompatModule("simpleclouds", "Simple Clouds",
+                EnumSet.of(CapabilityId.CLOUDS)));
         register(new CompatModule("betterclouds", "Better Clouds",
                 EnumSet.of(CapabilityId.CLOUDS)));
         register(new CompatModule("continuity", "Continuity",
@@ -124,6 +131,8 @@ public final class CompatRegistry {
                 EnumSet.of(CapabilityId.ANIMATIONS)));
         register(new CompatModule("entity_model_features", "Entity Model Features",
                 EnumSet.of(CapabilityId.ANIMATIONS)));
+        register(new CompatModule("particleculling", "Particle Culling",
+                EnumSet.of(CapabilityId.PARTICLES)));
         register(new CompatModule("visuality", "Visuality",
                 EnumSet.of(CapabilityId.PARTICLES)));
         register(new CompatModule("presencefootsteps", "Presence Footsteps",
@@ -146,6 +155,7 @@ public final class CompatRegistry {
         actionRegistry.register("vulkanmod", EnumSet.noneOf(CapabilityId.class));
         actionRegistry.register("nvidium", EnumSet.noneOf(CapabilityId.class));
         actionRegistry.register("bobby", EnumSet.noneOf(CapabilityId.class));
+        actionRegistry.register("farsight", EnumSet.noneOf(CapabilityId.class));
         actionRegistry.register("distant-horizons", EnumSet.noneOf(CapabilityId.class));
         actionRegistry.register("c2me", EnumSet.noneOf(CapabilityId.class));
         actionRegistry.register("lithium", EnumSet.noneOf(CapabilityId.class));
@@ -154,6 +164,7 @@ public final class CompatRegistry {
         actionRegistry.register("ferritecore", EnumSet.noneOf(CapabilityId.class));
         actionRegistry.register("modernfix", EnumSet.noneOf(CapabilityId.class));
         actionRegistry.register("krypton", EnumSet.noneOf(CapabilityId.class));
+        actionRegistry.register("noisium", EnumSet.noneOf(CapabilityId.class));
         actionRegistry.register("immediatelyfast", EnumSet.noneOf(CapabilityId.class));
         actionRegistry.register("exordium", EnumSet.noneOf(CapabilityId.class));
         actionRegistry.register("entityculling", EnumSet.noneOf(CapabilityId.class));
@@ -176,12 +187,14 @@ public final class CompatRegistry {
         actionRegistry.register("vmp", EnumSet.noneOf(CapabilityId.class));
         actionRegistry.register("servercore", EnumSet.noneOf(CapabilityId.class));
         actionRegistry.register("cullclouds", EnumSet.noneOf(CapabilityId.class));
+        actionRegistry.register("simpleclouds", EnumSet.noneOf(CapabilityId.class));
         actionRegistry.register("betterclouds", EnumSet.noneOf(CapabilityId.class));
         actionRegistry.register("continuity", EnumSet.noneOf(CapabilityId.class));
         actionRegistry.register("lambdabettergrass", EnumSet.noneOf(CapabilityId.class));
         actionRegistry.register("animatica", EnumSet.noneOf(CapabilityId.class));
         actionRegistry.register("entity_texture_features", EnumSet.noneOf(CapabilityId.class));
         actionRegistry.register("entity_model_features", EnumSet.noneOf(CapabilityId.class));
+        actionRegistry.register("particleculling", EnumSet.noneOf(CapabilityId.class));
         actionRegistry.register("visuality", EnumSet.noneOf(CapabilityId.class));
         actionRegistry.register("presencefootsteps", EnumSet.noneOf(CapabilityId.class));
         actionRegistry.register("fabricskyboxes", EnumSet.noneOf(CapabilityId.class));
@@ -189,6 +202,8 @@ public final class CompatRegistry {
 
         registerAdapter(new SodiumOptionsAdapter());
         registerAdapter(new LambDynamicLightsAdapter());
+
+        syncStewardshipDeclarations();
     }
 
     private void register(CompatModule module) {
@@ -200,6 +215,7 @@ public final class CompatRegistry {
     }
 
     public boolean isExternallyManaged(CapabilityId capability) {
+        syncStewardshipDeclarations();
         StewardshipDecision handshakeDecision = StewardshipHandshakeRegistry.resolveDecision(capability);
         if (handshakeDecision != null) {
             return handshakeDecision.mode() == StewardshipMode.EXCLUSIVE;
@@ -267,6 +283,7 @@ public final class CompatRegistry {
     }
 
     public StewardshipDecision getStewardshipDecision(CapabilityId capability) {
+        syncStewardshipDeclarations();
         StewardshipDecision handshakeDecision = StewardshipHandshakeRegistry.resolveDecision(capability);
         if (handshakeDecision != null) {
             return handshakeDecision;
@@ -292,5 +309,28 @@ public final class CompatRegistry {
         }
         CompatAdapter adapter = adapters.get(module.modId());
         return adapter != null && adapter.isAvailable() && adapter.supportedCapabilities().contains(capability);
+    }
+
+    private void syncStewardshipDeclarations() {
+        for (CompatModule module : modules.values()) {
+            EnumSet<CapabilityId> shared = EnumSet.noneOf(CapabilityId.class);
+            EnumSet<CapabilityId> exclusive = EnumSet.noneOf(CapabilityId.class);
+            for (CapabilityId capability : module.managedCapabilities()) {
+                if (isActionPermitted(module, capability)) {
+                    shared.add(capability);
+                } else {
+                    exclusive.add(capability);
+                }
+            }
+            StewardshipDeclaration.Builder builder = StewardshipDeclaration.builder(module.modId(), module.displayName())
+                    .reason("Compat registry stewardship handshake");
+            if (!shared.isEmpty()) {
+                builder.shared(shared.toArray(new CapabilityId[0]));
+            }
+            if (!exclusive.isEmpty()) {
+                builder.exclusive(exclusive.toArray(new CapabilityId[0]));
+            }
+            StewardshipHandshakeRegistry.register(builder.build());
+        }
     }
 }

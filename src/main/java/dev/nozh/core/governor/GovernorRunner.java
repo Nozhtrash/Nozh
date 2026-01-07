@@ -18,6 +18,7 @@ import dev.nozh.core.governor.OptimizationProfile;
 import dev.nozh.core.compat.IrisCompat;
 import dev.nozh.core.compatibility.CompatibilityMatrix;
 import dev.nozh.core.profiler.PerfManager;
+import dev.nozh.core.profiler.SpikeCausalityReport;
 import dev.nozh.core.state.RuntimeState;
 import dev.nozh.core.state.StateStore;
 import dev.nozh.core.state.PendingAction;
@@ -38,6 +39,7 @@ import dev.nozh.core.monitoring.SystemMonitor;
 import java.util.function.Supplier;
 import java.util.function.ToDoubleFunction;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
@@ -243,7 +245,8 @@ public final class GovernorRunner {
         ModePolicy policy = ModePolicy.forMode(mode);
 
         // 3. Detect performance bound from telemetry
-        String bound = detectBound(state);
+        SpikeCausalityReport spikeCausality = resolveSpikeCausality();
+        String bound = applyCausalityBound(detectBound(state), spikeCausality);
         // REMOVED: withGovernorSnapshot() tracking no longer available
 
         // 4. Check cooldown (NO CASCADE) with adaptive window
@@ -255,6 +258,8 @@ public final class GovernorRunner {
             return;
         }
 
+        int decisionBudgetMs = Math.min(config.governorDecisionBudgetMs, DECISION_LATENCY_TARGET_MS);
+        DecisionBudget decisionBudget = new DecisionBudget(decisionBudgetMs);
         long decisionStartNanos = perfManager != null ? perfManager.startDecisionTimer() : System.nanoTime();
         Optional<ActionCandidate> decisionOpt = governor.decide(
                 state,
@@ -268,10 +273,20 @@ public final class GovernorRunner {
                 state.baselineSnapshot(),
                 state.currentSettings(),
                 config,
-                actionMatrixTuning);
+                actionMatrixTuning,
+                spikeCausality);
 
-        if (perfManager != null && !perfManager.isDecisionWithinBudget(decisionStartNanos,
-                config.governorDecisionBudgetMs)) {
+        if (decisionBudget.isOverBudget()) {
+            if (perfManager != null) {
+                perfManager.recordDecisionLatency(decisionStartNanos);
+            }
+            logger.warn(String.format(
+                    "Governor decision aborted - internal budget exceeded (%dms)",
+                    decisionBudget.elapsedMs()));
+            return;
+        }
+
+        if (perfManager != null && !perfManager.isDecisionWithinBudget(decisionStartNanos, decisionBudgetMs)) {
             logger.warn(String.format(
                     "Governor decision aborted - latency budget exceeded (%dms)",
                     perfManager.getLastDecisionLatencyMs()));
@@ -283,6 +298,10 @@ public final class GovernorRunner {
         }
 
         ActionCandidate decision = decisionOpt.get();
+        if (decision.targetValue() == null) {
+            logger.info("Governor idle: stewardship active (" + decision.reason() + ")");
+            return;
+        }
         successTracker.recordDecision(decision);
         // REMOVED: withDecision() tracking no longer available
         String actionSummary = formatActionSummary(decision);
@@ -498,7 +517,8 @@ public final class GovernorRunner {
         GovernorMode mode = determineMode(state);
         mode = ModePolicy.enforceManualPreference(mode, state.autoTuning() && config.allowAutoTuning);
         ModePolicy policy = ModePolicy.forMode(mode);
-        String bound = detectBound(state);
+        SpikeCausalityReport spikeCausality = resolveSpikeCausality();
+        String bound = applyCausalityBound(detectBound(state), spikeCausality);
         long lastActionTimestamp = state.governorLastActionTimestamp();
         boolean benchmarkMode = config.benchmarkModeEnabled;
         if (!governor.canAct(state, lastActionTimestamp, nowMillis, benchmarkMode, config.benchmarkMicroIntervalMillis)) {
@@ -507,14 +527,16 @@ public final class GovernorRunner {
 
         OptimizationProfile profile = OptimizationProfile.fromConfig(config.optimizationProfile);
         ActionCandidate decision = null;
-        for (ActionCandidate candidate : actionMatrix.generateCandidates(
+        List<ActionCandidate> candidates = actionMatrix.generateCandidates(
                 policy,
                 bound,
                 state.currentScenario(),
                 profile,
                 state.p95FrametimeMs(),
                 state.spikeCount(),
-                actionMatrixTuning)) {
+                actionMatrixTuning);
+        applyCausalityPriority(candidates, spikeCausality);
+        for (ActionCandidate candidate : candidates) {
             if (candidate.targetValue() == null) {
                 continue;
             }
@@ -679,6 +701,22 @@ public final class GovernorRunner {
     public void captureBaselineSettings() {
         refreshBaselineSettings();
         refreshCurrentSettings();
+    }
+
+    private SpikeCausalityReport resolveSpikeCausality() {
+        if (perfManager == null) {
+            return SpikeCausalityReport.unknown();
+        }
+        SpikeCausalityReport report = perfManager.getSpikeCausality();
+        return report != null ? report : SpikeCausalityReport.unknown();
+    }
+
+    private String applyCausalityBound(String detectedBound, SpikeCausalityReport report) {
+        return CausalityPriorityResolver.applyBound(detectedBound, report);
+    }
+
+    private void applyCausalityPriority(List<ActionCandidate> candidates, SpikeCausalityReport report) {
+        CausalityPriorityResolver.prioritizeCandidates(candidates, report);
     }
 
     private String detectBound(RuntimeState state) {
@@ -860,7 +898,7 @@ public final class GovernorRunner {
                             logger.warn("Safe fallback rollback failed");
                         }
                     }), () -> logger.warn("Safe fallback rollback unavailable"));
-            sessionLearning.recordOutcome(pending.capability(), pending.scenario(), ActionOutcome.NEGATIVE, 0.0);
+            sessionLearning.recordOutcome(pending.capability(), pending.scenario(), ActionOutcome.NEGATIVE, 0.0, 0.0, 0);
             successTracker.recordFailure(pending.capability());
             try {
                 stateStore.update(RuntimeState::withPendingActionCleared);
@@ -909,16 +947,18 @@ public final class GovernorRunner {
                 logger.info("Rollback disabled in config, keeping ineffective action.");
             }
 
-            sessionLearning.recordOutcome(pending.capability(), pending.scenario(), ActionOutcome.NEGATIVE, 0.0);
+            sessionLearning.recordOutcome(pending.capability(), pending.scenario(), ActionOutcome.NEGATIVE, 0.0,
+                    p95Delta, spikeDelta);
             successTracker.recordFailure(pending.capability());
         } else if (outcome == ActionOutcome.POSITIVE) {
             double gainAvg = resolveGain(pending.baselineAvgMs(), currentSnapshot != null ? currentSnapshot.avgFrametimeMs() : Double.NaN);
             double gainP95 = resolveGain(pending.baselineP95Ms(), currentSnapshot != null ? currentSnapshot.p95FrametimeMs() : Double.NaN);
             sessionLearning.recordOutcome(pending.capability(), pending.scenario(), ActionOutcome.POSITIVE,
-                    Math.max(gainAvg, gainP95));
+                    Math.max(gainAvg, gainP95), p95Delta, spikeDelta);
             successTracker.recordSuccess(pending.capability());
         } else {
-            sessionLearning.recordOutcome(pending.capability(), pending.scenario(), ActionOutcome.NEUTRAL, 0.0);
+            sessionLearning.recordOutcome(pending.capability(), pending.scenario(), ActionOutcome.NEUTRAL, 0.0,
+                    p95Delta, spikeDelta);
         }
 
         logger.debug(String.format(
