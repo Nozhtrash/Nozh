@@ -37,6 +37,8 @@ public final class BenchmarkScenarioRecorder {
     private boolean sessionActive;
     private Path sessionDir;
     private Path initialBenchmarkSnapshotJson;
+    private Path comparisonJson;
+    private PerfSnapshot baselineSnapshot;
 
     public BenchmarkScenarioRecorder(PerfManager perfManager, Supplier<PerfSnapshot> snapshotSupplier, Path rootDir) {
         this.perfManager = perfManager;
@@ -52,6 +54,8 @@ public final class BenchmarkScenarioRecorder {
         this.lastSnapshotMillis = 0L;
         this.snapshotSeries.clear();
         this.initialBenchmarkSnapshotJson = null;
+        this.comparisonJson = null;
+        this.baselineSnapshot = null;
         this.sessionDir = resolveSessionDir();
         writeMatrixSnapshot();
     }
@@ -90,6 +94,7 @@ public final class BenchmarkScenarioRecorder {
             series.addSnapshot(snapshot);
             series.writeJson(outputFile);
             initialBenchmarkSnapshotJson = outputFile;
+            baselineSnapshot = snapshot;
         } catch (Exception e) {
             NozhConstants.LOGGER.warn("Failed to write initial benchmark snapshot: {}", e.getMessage());
         }
@@ -125,12 +130,7 @@ public final class BenchmarkScenarioRecorder {
                         + "_" + timestamp + ".json");
                 snapshotSeries.writeJson(snapshotsJson);
             }
-            if (perfManager != null) {
-                DecisionLatencyStats stats = perfManager.getDecisionLatencyStats();
-                String timestamp = TIMESTAMP_FORMAT.format(Instant.ofEpochMilli(now));
-                decisionLatencyJson = sessionDir.resolve("decision_latency_" + timestamp + ".json");
-                Files.writeString(decisionLatencyJson, stats.toJson(), StandardCharsets.UTF_8);
-            }
+            Path comparison = writeComparisonReport(now);
             BenchmarkArtifactMetadata metadata = new BenchmarkArtifactMetadata(
                     environment,
                     activeScenario.name(),
@@ -140,12 +140,13 @@ public final class BenchmarkScenarioRecorder {
                     json,
                     snapshotsJson,
                     initialBenchmarkSnapshotJson,
-                    decisionLatencyJson);
+                    comparison);
             writeMetadata(metadata, now);
         } catch (Exception e) {
             NozhConstants.LOGGER.warn("Failed to export benchmark artifacts: {}", e.getMessage());
         } finally {
             snapshotSeries.clear();
+            comparisonJson = null;
             activeScenario = null;
             scenarioStartMillis = 0L;
         }
@@ -180,6 +181,28 @@ public final class BenchmarkScenarioRecorder {
             Files.writeString(outputFile, matrix.toJson(), StandardCharsets.UTF_8);
         } catch (Exception e) {
             NozhConstants.LOGGER.warn("Failed to write benchmark matrix: {}", e.getMessage());
+        }
+    }
+
+    private Path writeComparisonReport(long now) {
+        if (sessionDir == null || baselineSnapshot == null) {
+            return null;
+        }
+        PerfSnapshot latest = snapshotSeries.latestSnapshot();
+        if (latest == null) {
+            return null;
+        }
+        try {
+            BenchmarkComparisonReport report = BenchmarkComparisonReport.compare(baselineSnapshot, latest);
+            String timestamp = TIMESTAMP_FORMAT.format(Instant.ofEpochMilli(now));
+            Path outputFile = sessionDir.resolve("comparison_" + activeScenario.name().toLowerCase()
+                    + "_" + timestamp + ".json");
+            Files.writeString(outputFile, report.toJson(), StandardCharsets.UTF_8);
+            comparisonJson = outputFile;
+            return outputFile;
+        } catch (Exception e) {
+            NozhConstants.LOGGER.warn("Failed to write benchmark comparison: {}", e.getMessage());
+            return null;
         }
     }
 

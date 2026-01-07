@@ -32,8 +32,10 @@ public final class ModConflictDetector {
         checkForMod("indium");
         checkForMod("distant-horizons");
         checkForMod("bobby");
+        checkForMod("farsight");
         checkForMod("cullclouds");
         checkForMod("betterclouds");
+        checkForMod("simpleclouds");
         checkForMod("fabricskyboxes");
 
         // Optimization Suites
@@ -46,6 +48,7 @@ public final class ModConflictDetector {
         checkForMod("modernfix");
         checkForMod("krypton");
         checkForMod("c2me");
+        checkForMod("noisium");
         checkForMod("immediatelyfast");
         checkForMod("exordium");
         checkForMod("entityculling");
@@ -72,6 +75,7 @@ public final class ModConflictDetector {
         checkForMod("animatica");
         checkForMod("entity_texture_features");
         checkForMod("entity_model_features");
+        checkForMod("particleculling");
         checkForMod("visuality");
         checkForMod("presencefootsteps");
         checkForMod("blur");
@@ -99,6 +103,7 @@ public final class ModConflictDetector {
             // Sodium/Vulkan/Canvas manage chunk rendering
             case RENDER_DISTANCE -> installedMods.contains("sodium") ||
                     installedMods.contains("bobby") ||
+                    installedMods.contains("farsight") ||
                     installedMods.contains("vulkanmod") ||
                     installedMods.contains("canvas") ||
                     installedMods.contains("distant-horizons") ||
@@ -107,6 +112,7 @@ public final class ModConflictDetector {
             // Sodium Extra / Canvas manage particles
             case PARTICLES -> installedMods.contains("sodium-extra") ||
                     installedMods.contains("canvas") ||
+                    installedMods.contains("particleculling") ||
                     installedMods.contains("visuality") ||
                     installedMods.contains("presencefootsteps");
 
@@ -122,6 +128,7 @@ public final class ModConflictDetector {
                     installedMods.contains("canvas") ||
                     installedMods.contains("betterclouds") ||
                     installedMods.contains("cullclouds") ||
+                    installedMods.contains("simpleclouds") ||
                     installedMods.contains("fabricskyboxes");
 
             // Sodium / EntityCulling / MoreCulling manage entity distance/culling
@@ -172,7 +179,8 @@ public final class ModConflictDetector {
             case CHUNK_LOADING -> installedMods.contains("c2me") ||
                     installedMods.contains("starlight") ||
                     installedMods.contains("phosphor") ||
-                    installedMods.contains("dashloader");
+                    installedMods.contains("dashloader") ||
+                    installedMods.contains("noisium");
 
             case SIMULATION_DISTANCE -> installedMods.contains("c2me") ||
                     installedMods.contains("lithium") ||
@@ -235,6 +243,8 @@ public final class ModConflictDetector {
                     yield "Bobby (View Distance)";
                 if (installedMods.contains("distant-horizons"))
                     yield "Distant Horizons";
+                if (installedMods.contains("farsight"))
+                    yield "Farsight";
                 if (installedMods.contains("nvidium"))
                     yield "Nvidium";
                 if (installedMods.contains("vulkanmod"))
@@ -243,16 +253,34 @@ public final class ModConflictDetector {
                     yield "Canvas";
                 yield "Sodium";
             }
-            case PARTICLES -> installedMods.contains("sodium-extra") ? "Sodium Extra" : "Visuality";
+            case PARTICLES -> {
+                if (installedMods.contains("sodium-extra"))
+                    yield "Sodium Extra";
+                if (installedMods.contains("particleculling"))
+                    yield "Particle Culling";
+                yield "Visuality";
+            }
             case FPS_CAP -> installedMods.contains("dynamic-fps") || installedMods.contains("dynamic_fps")
                     ? "Dynamic FPS"
                     : "FPS Reducer";
-            case CLOUDS -> installedMods.contains("iris") ? "Iris" : "Sodium";
+            case CLOUDS -> {
+                if (installedMods.contains("simpleclouds"))
+                    yield "Simple Clouds";
+                if (installedMods.contains("iris"))
+                    yield "Iris";
+                yield "Sodium";
+            }
             case ENTITY_DISTANCE -> installedMods.contains("entityculling") ? "Entity Culling" : "Sodium";
             case FOG -> installedMods.contains("sodium-extra") ? "Sodium Extra" : "Sodium/Iris";
             case DYNAMIC_LIGHTING -> "LambDynamicLights";
             case GRAPHICS_MODE -> installedMods.contains("canvas") ? "Canvas" : "Sodium";
-            case CHUNK_LOADING -> installedMods.contains("c2me") ? "C2ME" : "Starlight";
+            case CHUNK_LOADING -> {
+                if (installedMods.contains("c2me"))
+                    yield "C2ME";
+                if (installedMods.contains("noisium"))
+                    yield "Noisium";
+                yield "Starlight";
+            }
             case RESOLUTION_SCALE, DISTORTION_EFFECT_SCALE -> installedMods.contains("iris") ? "Iris" : "Canvas";
             case ARMOR_STANDS, ITEM_FRAMES, BLOCK_ENTITIES -> installedMods.contains("moreculling")
                     ? "More Culling"
