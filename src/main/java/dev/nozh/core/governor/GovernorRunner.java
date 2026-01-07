@@ -18,6 +18,7 @@ import dev.nozh.core.governor.OptimizationProfile;
 import dev.nozh.core.compat.IrisCompat;
 import dev.nozh.core.compatibility.CompatibilityMatrix;
 import dev.nozh.core.profiler.PerfManager;
+import dev.nozh.core.profiler.SpikeCausalityReport;
 import dev.nozh.core.state.RuntimeState;
 import dev.nozh.core.state.StateStore;
 import dev.nozh.core.state.PendingAction;
@@ -38,6 +39,7 @@ import dev.nozh.core.monitoring.SystemMonitor;
 import java.util.function.Supplier;
 import java.util.function.ToDoubleFunction;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
@@ -225,7 +227,8 @@ public final class GovernorRunner {
         ModePolicy policy = ModePolicy.forMode(mode);
 
         // 3. Detect performance bound from telemetry
-        String bound = detectBound(state);
+        SpikeCausalityReport spikeCausality = resolveSpikeCausality();
+        String bound = applyCausalityBound(detectBound(state), spikeCausality);
         // REMOVED: withGovernorSnapshot() tracking no longer available
 
         // 4. Check cooldown (NO CASCADE) with adaptive window
@@ -250,7 +253,8 @@ public final class GovernorRunner {
                 state.baselineSnapshot(),
                 state.currentSettings(),
                 config,
-                actionMatrixTuning);
+                actionMatrixTuning,
+                spikeCausality);
 
         if (perfManager != null && !perfManager.isDecisionWithinBudget(decisionStartNanos,
                 config.governorDecisionBudgetMs)) {
@@ -483,7 +487,8 @@ public final class GovernorRunner {
         GovernorMode mode = determineMode(state);
         mode = ModePolicy.enforceManualPreference(mode, state.autoTuning() && config.allowAutoTuning);
         ModePolicy policy = ModePolicy.forMode(mode);
-        String bound = detectBound(state);
+        SpikeCausalityReport spikeCausality = resolveSpikeCausality();
+        String bound = applyCausalityBound(detectBound(state), spikeCausality);
         long lastActionTimestamp = state.governorLastActionTimestamp();
         boolean benchmarkMode = config.benchmarkModeEnabled;
         if (!governor.canAct(state, lastActionTimestamp, nowMillis, benchmarkMode, config.benchmarkMicroIntervalMillis)) {
@@ -492,14 +497,16 @@ public final class GovernorRunner {
 
         OptimizationProfile profile = OptimizationProfile.fromConfig(config.optimizationProfile);
         ActionCandidate decision = null;
-        for (ActionCandidate candidate : actionMatrix.generateCandidates(
+        List<ActionCandidate> candidates = actionMatrix.generateCandidates(
                 policy,
                 bound,
                 state.currentScenario(),
                 profile,
                 state.p95FrametimeMs(),
                 state.spikeCount(),
-                actionMatrixTuning)) {
+                actionMatrixTuning);
+        applyCausalityPriority(candidates, spikeCausality);
+        for (ActionCandidate candidate : candidates) {
             if (candidate.targetValue() == null) {
                 continue;
             }
@@ -663,6 +670,22 @@ public final class GovernorRunner {
     public void captureBaselineSettings() {
         refreshBaselineSettings();
         refreshCurrentSettings();
+    }
+
+    private SpikeCausalityReport resolveSpikeCausality() {
+        if (perfManager == null) {
+            return SpikeCausalityReport.unknown();
+        }
+        SpikeCausalityReport report = perfManager.getSpikeCausality();
+        return report != null ? report : SpikeCausalityReport.unknown();
+    }
+
+    private String applyCausalityBound(String detectedBound, SpikeCausalityReport report) {
+        return CausalityPriorityResolver.applyBound(detectedBound, report);
+    }
+
+    private void applyCausalityPriority(List<ActionCandidate> candidates, SpikeCausalityReport report) {
+        CausalityPriorityResolver.prioritizeCandidates(candidates, report);
     }
 
     private String detectBound(RuntimeState state) {

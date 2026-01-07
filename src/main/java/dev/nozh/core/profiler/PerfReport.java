@@ -9,5 +9,7 @@ public record PerfReport(
         FramePauseSnapshot pauses,
         GcMetricsSnapshot gcMetrics,
         RenderPipelineSnapshot renderPipeline,
-        StutterCause stutterCause) {
+        StutterCause stutterCause,
+        PerfTraceSnapshot traceSnapshot,
+        SpikeCausalityReport spikeCausality) {
 }
