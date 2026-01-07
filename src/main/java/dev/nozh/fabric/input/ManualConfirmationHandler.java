@@ -228,7 +228,7 @@ public final class ManualConfirmationHandler {
             
             if (client.player != null) {
                 Text prefix = Text.literal("[NOZH] ").formatted(Formatting.GRAY);
-                Text styledMessage = message.formatted(error ? Formatting.RED : Formatting.YELLOW);
+                Text styledMessage = message.copy().formatted(error ? Formatting.RED : Formatting.YELLOW);
                 client.player.sendMessage(prefix.copy().append(styledMessage), true);
             }
         } catch (Exception e) {
