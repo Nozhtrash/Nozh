@@ -18,6 +18,7 @@ import dev.nozh.core.governor.ModePolicy;
 import dev.nozh.core.governor.OptimizationProfile;
 import dev.nozh.core.intelligence.SessionLearning;
 import dev.nozh.core.state.BaselineSnapshot;
+import dev.nozh.core.governor.ActionOutcome;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -191,6 +192,32 @@ class ActionMatrixTest {
         assertEquals(CapabilityId.CLOUDS, candidates.get(0).capabilityId());
         assertEquals(RollbackGuarantee.BEST_EFFORT, candidates.get(0).rollbackGuarantee());
         assertEquals(RollbackGuarantee.STRONG, candidates.get(1).rollbackGuarantee());
+    }
+
+    @Test
+    void spikePenaltyDemotesNoisyActions() {
+        ProviderMetadata cloudsMetadata = metadata(ImpactLevel.LOW, ImpactLevel.LOW, SafetyLevel.SAFE, 2.0);
+        ProviderMetadata particlesMetadata = metadata(ImpactLevel.LOW, ImpactLevel.LOW, SafetyLevel.SAFE, 2.0);
+        ProviderRegistry registry = registryWith(
+                provider(CapabilityId.CLOUDS, cloudsMetadata),
+                provider(CapabilityId.PARTICLES, particlesMetadata));
+
+        ActionSuccessTracker tracker = successTrackerWith(CapabilityId.CLOUDS, CapabilityId.PARTICLES);
+        SessionLearning learning = new SessionLearning(tempDir.toFile());
+        learning.recordOutcome(CapabilityId.CLOUDS, Scenario.STANDARD, ActionOutcome.POSITIVE, 2.0, -0.8, 0);
+        learning.recordOutcome(CapabilityId.PARTICLES, Scenario.STANDARD, ActionOutcome.POSITIVE, 2.0, -0.8, 3);
+
+        ActionMatrix matrix = new ActionMatrix(
+                registry,
+                tracker,
+                new ConfidenceCalculator(),
+                learning);
+
+        List<ActionCandidate> candidates = matrix.generateCandidates(ModePolicy.manualAssist(), "BALANCED",
+                Scenario.STANDARD, OptimizationProfile.BALANCED, 20.0, 2);
+
+        assertEquals(2, candidates.size());
+        assertEquals(CapabilityId.CLOUDS, candidates.get(0).capabilityId());
     }
 
     @Test

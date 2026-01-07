@@ -3,6 +3,7 @@ package dev.nozh.core.benchmark;
 import dev.nozh.NozhConstants;
 import dev.nozh.api.PerfSnapshot;
 import dev.nozh.core.context.Scenario;
+import dev.nozh.core.profiler.DecisionLatencyStats;
 import dev.nozh.core.profiler.PerfManager;
 import dev.nozh.core.telemetry.TelemetryExportFormat;
 
@@ -113,6 +114,7 @@ public final class BenchmarkScenarioRecorder {
             TelemetryExportFormat[] formats = {TelemetryExportFormat.CSV, TelemetryExportFormat.JSON};
             Path csv = null;
             Path json = null;
+            Path decisionLatencyJson = null;
             for (TelemetryExportFormat format : formats) {
                 Path export = perfManager != null ? perfManager.exportTelemetry(sessionDir, format) : null;
                 if (format == TelemetryExportFormat.CSV) {

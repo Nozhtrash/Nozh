@@ -9,6 +9,7 @@ import dev.nozh.core.capability.ProviderRegistry;
 import dev.nozh.core.capability.ProviderStatus;
 import dev.nozh.core.capability.SafetyLevel;
 import dev.nozh.core.context.Scenario;
+import dev.nozh.core.governor.DecisionBudget;
 import dev.nozh.core.governor.ModePolicy;
 import dev.nozh.core.governor.OptimizationProfile;
 
@@ -36,6 +37,8 @@ public final class ActionMatrix {
     private static final double LEARNED_RANKING_WEIGHT = 0.2;
     private static final double LEARNED_SUCCESS_WEIGHT = 0.1;
     private static final double LEARNED_GAIN_WEIGHT = 0.1;
+    private static final double REAL_GAIN_WEIGHT = 0.15;
+    private static final double SPIKE_PENALTY_WEIGHT = 0.2;
     private static final double SCENARIO_PRIORITY_WEIGHT = 0.15;
     private static final double PERFORMANCE_PRESSURE_WEIGHT = 0.25;
     private static final double BASELINE_FRAME_MS = 16.67;
@@ -108,14 +111,18 @@ public final class ActionMatrix {
             OptimizationProfile profile,
             double p95FrametimeMs,
             int spikeCount,
-            ActionMatrixTuning tuning) {
+            ActionMatrixTuning tuning,
+            DecisionBudget budget) {
         List<ActionCandidate> candidates = new ArrayList<>();
-        List<ActionCandidate> yieldCandidates = new ArrayList<>();
+        ActionCandidate yieldCandidate = null;
         long now = System.currentTimeMillis();
         ActionMatrixTuning resolvedTuning = tuning != null ? tuning : ActionMatrixTuning.defaults();
 
         // Iterate all registered providers
         for (CapabilityProvider provider : registry.getAllProviders()) {
+            if (budget != null && budget.isOverBudget()) {
+                return List.of();
+            }
             CapabilityId id = provider.id();
             ProviderMetadata metadata = provider.metadata();
 
@@ -138,8 +145,10 @@ public final class ActionMatrix {
             }
 
             if (compatibilityMatrix != null && compatibilityMatrix.isBlockedByDependencies(metadata)) {
-                yieldCandidates.add(ActionCandidate.yield(id,
-                        compatibilityMatrix.getDependencySteward(metadata)));
+                if (yieldCandidate == null) {
+                    yieldCandidate = ActionCandidate.yield(id,
+                            compatibilityMatrix.getDependencySteward(metadata));
+                }
                 continue;
             }
 
@@ -181,7 +190,9 @@ public final class ActionMatrix {
             // INTEGRATION: Conflict Detection
             if (compatibilityMatrix != null && compatibilityMatrix.isExternallyManaged(id, metadata)) {
                 // If another mod handles this, we should not touch it
-                yieldCandidates.add(ActionCandidate.yield(id, compatibilityMatrix.getSteward(id)));
+                if (yieldCandidate == null) {
+                    yieldCandidate = ActionCandidate.yield(id, compatibilityMatrix.getSteward(id));
+                }
                 continue;
             }
 
@@ -217,31 +228,43 @@ public final class ActionMatrix {
             candidates.add(candidate);
         }
 
+        if (budget != null && budget.isOverBudget()) {
+            return List.of();
+        }
+
         // Sort by weighted score (descending)
-        double maxExpectedGain = candidates.stream()
-                .mapToDouble(ActionCandidate::expectedGainMs)
-                .max()
-                .orElse(0.0);
+        double maxExpectedGain = 0.0;
+        double maxRanking = 0.0;
+        double maxLearnedGain = 0.0;
+        double maxP95Gain = 0.0;
+        double maxSpikePenalty = 0.0;
+        for (ActionCandidate candidate : candidates) {
+            maxExpectedGain = Math.max(maxExpectedGain, candidate.expectedGainMs());
+            double ranking = sessionLearning.getRanking(candidate.capabilityId(), scenario);
+            maxRanking = Math.max(maxRanking, ranking);
+            double learnedGain = sessionLearning.getAvgFpsGain(candidate.capabilityId(), scenario);
+            maxLearnedGain = Math.max(maxLearnedGain, learnedGain);
+            double p95Gain = sessionLearning.getAvgP95Gain(candidate.capabilityId(), scenario);
+            maxP95Gain = Math.max(maxP95Gain, p95Gain);
+            double spikePenalty = Math.max(0.0, sessionLearning.getAvgSpikeDelta(candidate.capabilityId(), scenario));
+            maxSpikePenalty = Math.max(maxSpikePenalty, spikePenalty);
+        }
 
-        double maxRanking = candidates.stream()
-                .mapToDouble(candidate -> sessionLearning.getRanking(candidate.capabilityId(), scenario))
-                .max()
-                .orElse(0.0);
-
-        double maxLearnedGain = candidates.stream()
-                .mapToDouble(candidate -> sessionLearning.getAvgFpsGain(candidate.capabilityId(), scenario))
-                .max()
-                .orElse(0.0);
+        final double maxExpectedGainFinal = maxExpectedGain;
+        final double maxRankingFinal = maxRanking;
+        final double maxLearnedGainFinal = maxLearnedGain;
+        final double maxP95GainFinal = maxP95Gain;
+        final double maxSpikePenaltyFinal = maxSpikePenalty;
 
         ActionSelectionContext selectionContext = new ActionSelectionContext(scenario, profile, p95FrametimeMs,
                 spikeCount, resolvedTuning);
         candidates.sort(Comparator
-                .comparingDouble((ActionCandidate candidate) -> scoreCandidate(candidate, maxExpectedGain, maxRanking,
-                        maxLearnedGain, selectionContext))
+                .comparingDouble((ActionCandidate candidate) -> scoreCandidate(candidate, maxExpectedGainFinal,
+                        maxRankingFinal, maxLearnedGainFinal, maxP95GainFinal, maxSpikePenaltyFinal, selectionContext))
                 .reversed());
 
-        if (candidates.isEmpty() && !yieldCandidates.isEmpty()) {
-            return List.of(yieldCandidates.get(0));
+        if (candidates.isEmpty() && yieldCandidate != null) {
+            return List.of(yieldCandidate);
         }
 
         return candidates;
@@ -255,7 +278,19 @@ public final class ActionMatrix {
             double p95FrametimeMs,
             int spikeCount) {
         return generateCandidates(policy, currentBound, scenario, profile, p95FrametimeMs, spikeCount,
-                ActionMatrixTuning.defaults());
+                ActionMatrixTuning.defaults(), null);
+    }
+
+    public List<ActionCandidate> generateCandidates(
+            ModePolicy policy,
+            String currentBound,
+            Scenario scenario,
+            OptimizationProfile profile,
+            double p95FrametimeMs,
+            int spikeCount,
+            ActionMatrixTuning tuning) {
+        return generateCandidates(policy, currentBound, scenario, profile, p95FrametimeMs, spikeCount,
+                tuning, null);
     }
 
     public List<ActionCandidate> generateReverseCandidates(
@@ -264,7 +299,8 @@ public final class ActionMatrix {
             OptimizationProfile profile,
             dev.nozh.core.state.BaselineSnapshot baselineSnapshot,
             Map<CapabilityId, CapabilityValue> currentSettings,
-            ActionMatrixTuning tuning) {
+            ActionMatrixTuning tuning,
+            DecisionBudget budget) {
         List<ActionCandidate> candidates = new ArrayList<>();
         if (baselineSnapshot == null || baselineSnapshot.isEmpty()) {
             return candidates;
@@ -273,6 +309,9 @@ public final class ActionMatrix {
         ActionMatrixTuning resolvedTuning = tuning != null ? tuning : ActionMatrixTuning.defaults();
 
         for (CapabilityProvider provider : registry.getAllProviders()) {
+            if (budget != null && budget.isOverBudget()) {
+                return List.of();
+            }
             CapabilityId id = provider.id();
             ProviderMetadata metadata = provider.metadata();
 
@@ -346,7 +385,18 @@ public final class ActionMatrix {
             dev.nozh.core.state.BaselineSnapshot baselineSnapshot,
             Map<CapabilityId, CapabilityValue> currentSettings) {
         return generateReverseCandidates(policy, scenario, profile, baselineSnapshot, currentSettings,
-                ActionMatrixTuning.defaults());
+                ActionMatrixTuning.defaults(), null);
+    }
+
+    public List<ActionCandidate> generateReverseCandidates(
+            ModePolicy policy,
+            Scenario scenario,
+            OptimizationProfile profile,
+            dev.nozh.core.state.BaselineSnapshot baselineSnapshot,
+            Map<CapabilityId, CapabilityValue> currentSettings,
+            ActionMatrixTuning tuning) {
+        return generateReverseCandidates(policy, scenario, profile, baselineSnapshot, currentSettings,
+                tuning, null);
     }
 
     private int determineTier(ProviderMetadata metadata) {
@@ -576,13 +626,17 @@ public final class ActionMatrix {
     }
 
     private double scoreCandidate(ActionCandidate candidate, double maxExpectedGain, double maxRanking,
-            double maxLearnedGain, ActionSelectionContext context) {
+            double maxLearnedGain, double maxP95Gain, double maxSpikePenalty, ActionSelectionContext context) {
         double normalizedGain = maxExpectedGain > 0 ? candidate.expectedGainMs() / maxExpectedGain : 0.0;
         double ranking = sessionLearning.getRanking(candidate.capabilityId(), context.scenario());
         double normalizedRanking = maxRanking > 0 ? ranking / maxRanking : 0.0;
         double learnedSuccess = sessionLearning.getSuccessRate(candidate.capabilityId(), context.scenario());
         double learnedGain = sessionLearning.getAvgFpsGain(candidate.capabilityId(), context.scenario());
         double normalizedLearnedGain = maxLearnedGain > 0 ? learnedGain / maxLearnedGain : 0.0;
+        double p95Gain = sessionLearning.getAvgP95Gain(candidate.capabilityId(), context.scenario());
+        double normalizedP95Gain = maxP95Gain > 0 ? p95Gain / maxP95Gain : 0.0;
+        double spikePenalty = Math.max(0.0, sessionLearning.getAvgSpikeDelta(candidate.capabilityId(), context.scenario()));
+        double normalizedSpikePenalty = maxSpikePenalty > 0 ? spikePenalty / maxSpikePenalty : 0.0;
         double scenarioBoost = scenarioRules.ruleWeight(candidate.capabilityId(), context.scenario(),
                 context.profile()) * context.tuning().scenarioWeightMultiplier();
         double pressure = calculatePerformancePressure(context.p95FrametimeMs(), context.spikeCount())
@@ -596,9 +650,11 @@ public final class ActionMatrix {
                 + (normalizedRanking * LEARNED_RANKING_WEIGHT)
                 + (learnedSuccess * LEARNED_SUCCESS_WEIGHT)
                 + (normalizedLearnedGain * LEARNED_GAIN_WEIGHT)
+                + (normalizedP95Gain * REAL_GAIN_WEIGHT)
                 + (scenarioBoost * SCENARIO_PRIORITY_WEIGHT);
 
-        return baseScore + (pressure * profilePressureWeight * (normalizedGain + scenarioBoost) / 2.0);
+        double score = baseScore + (pressure * profilePressureWeight * (normalizedGain + scenarioBoost) / 2.0);
+        return score - (normalizedSpikePenalty * SPIKE_PENALTY_WEIGHT);
     }
 
     private double blendConfidence(double baseConfidence, double learnedConfidence) {
