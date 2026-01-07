@@ -12,7 +12,8 @@ public record ChaosTestReport(
         int totalScenarios,
         int passed,
         int failed,
-        long totalDurationMs) {
+        long totalDurationMs,
+        ChaosReportMetadata metadata) {
     /**
      * Check if all scenarios passed.
      */
