@@ -21,6 +21,7 @@ public class NozhConfig {
     public int hudOffsetX = 0;
     public int hudOffsetY = 0;
     public double hudScale = 1.0;
+    public int tutorialStep = 0; // 0=welcome, 1=apply, 2=export, 3=complete
 
     // Version tracking for migrations
     public int configVersion = 0; // 0=v0.1.0, 1=legacy, 2=v0.2.0-alpha
@@ -240,6 +241,12 @@ public class NozhConfig {
         double clampedHudScale = clamp(hudScale, 0.5, 2.0);
         if (Double.compare(clampedHudScale, hudScale) != 0) {
             hudScale = clampedHudScale;
+            corrected = true;
+        }
+
+        int clampedTutorialStep = clamp(tutorialStep, 0, 3);
+        if (clampedTutorialStep != tutorialStep) {
+            tutorialStep = clampedTutorialStep;
             corrected = true;
         }
 

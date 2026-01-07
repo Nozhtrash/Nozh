@@ -30,6 +30,7 @@ public final class JsonMini {
                 "  \"hudOffsetX\": " + c.hudOffsetX + ",\n" +
                 "  \"hudOffsetY\": " + c.hudOffsetY + ",\n" +
                 "  \"hudScale\": " + c.hudScale + ",\n" +
+                "  \"tutorialStep\": " + c.tutorialStep + ",\n" +
 
                 "  \"targetFps\": " + c.targetFps + ",\n" +
                 "  \"optimizationProfile\": \"" + (c.optimizationProfile == null ? "BALANCED" : c.optimizationProfile)
@@ -165,6 +166,7 @@ public final class JsonMini {
             c.hudOffsetX = getInt(json, "hudOffsetX", c.hudOffsetX);
             c.hudOffsetY = getInt(json, "hudOffsetY", c.hudOffsetY);
             c.hudScale = getDouble(json, "hudScale", c.hudScale);
+            c.tutorialStep = getInt(json, "tutorialStep", c.tutorialStep);
 
             // Targets
             c.targetFps = getInt(json, "targetFps", c.targetFps);

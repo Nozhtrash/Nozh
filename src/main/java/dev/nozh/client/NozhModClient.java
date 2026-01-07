@@ -64,11 +64,17 @@ public class NozhModClient implements ClientModInitializer {
     private static TelemetryManager telemetryManager;
     private static boolean safeModeNotified = false;
     private static String lastSessionKey = null;
+    private static boolean tutorialPrompted = false;
+    private static boolean lastApplyKeyPressed = false;
 
     private static int tickCounter = 0;
     private static final int TELEMETRY_UPDATE_INTERVAL = 20; // Every second (20 ticks)
     private static final int GOVERNOR_POLL_INTERVAL = 100; // Every 5 seconds (100 ticks)
     private static final int SESSION_SAVE_INTERVAL = 1200; // Every 60 seconds (1200 ticks)
+    private static final int TUTORIAL_STEP_TOGGLE = 0;
+    private static final int TUTORIAL_STEP_APPLY = 1;
+    private static final int TUTORIAL_STEP_EXPORT = 2;
+    private static final int TUTORIAL_STEP_COMPLETE = 3;
 
     @Override
     public void onInitializeClient() {
@@ -242,12 +248,14 @@ public class NozhModClient implements ClientModInitializer {
                     var config = ConfigManager.getConfig();
                     config.showHud = !config.showHud;
                     ConfigManager.saveAndNotify();
+                    advanceTutorialIfExpected(clientInstance, TUTORIAL_STEP_TOGGLE);
                 }
             }
 
             if (exportReportKey != null) {
                 while (exportReportKey.wasPressed()) {
                     exportHudReport(clientInstance);
+                    advanceTutorialIfExpected(clientInstance, TUTORIAL_STEP_EXPORT);
                 }
             }
 
@@ -278,6 +286,8 @@ public class NozhModClient implements ClientModInitializer {
             if (initialBenchmarkRunner != null) {
                 initialBenchmarkRunner.tick();
             }
+
+            handleTutorial(clientInstance);
 
             if (perfManager != null) {
                 perfManager.onRenderPhaseEnd(dev.nozh.core.profiler.RenderPhase.CLIENT_TICK);
@@ -417,6 +427,79 @@ public class NozhModClient implements ClientModInitializer {
         if (client.inGameHud != null) {
             client.inGameHud.getChatHud().addMessage(title.copy().append(Text.literal(" ")).append(message));
         }
+    }
+
+    private static void handleTutorial(MinecraftClient client) {
+        var config = ConfigManager.getConfig();
+        if (config == null || config.tutorialStep >= TUTORIAL_STEP_COMPLETE) {
+            return;
+        }
+        if (!tutorialPrompted) {
+            showTutorialStep(client, config.tutorialStep);
+            tutorialPrompted = true;
+        }
+
+        boolean applyPressed = applySuggestionKey != null && applySuggestionKey.isPressed();
+        if (config.tutorialStep == TUTORIAL_STEP_APPLY && applyPressed && !lastApplyKeyPressed) {
+            advanceTutorial(client);
+        }
+        lastApplyKeyPressed = applyPressed;
+    }
+
+    private static void advanceTutorialIfExpected(MinecraftClient client, int expectedStep) {
+        var config = ConfigManager.getConfig();
+        if (config == null || config.tutorialStep != expectedStep) {
+            return;
+        }
+        advanceTutorial(client);
+    }
+
+    private static void advanceTutorial(MinecraftClient client) {
+        var config = ConfigManager.getConfig();
+        if (config == null) {
+            return;
+        }
+        config.tutorialStep++;
+        ConfigManager.saveAndNotify();
+        if (config.tutorialStep >= TUTORIAL_STEP_COMPLETE) {
+            notifyClient(client,
+                    Text.translatable("nozh.tutorial.complete.title"),
+                    Text.translatable("nozh.tutorial.complete.message"));
+            tutorialPrompted = true;
+            return;
+        }
+        showTutorialStep(client, config.tutorialStep);
+        tutorialPrompted = true;
+    }
+
+    private static void showTutorialStep(MinecraftClient client, int step) {
+        if (client == null) {
+            return;
+        }
+        if (step == TUTORIAL_STEP_TOGGLE) {
+            notifyClient(client,
+                    Text.translatable("nozh.tutorial.welcome.title"),
+                    Text.translatable("nozh.tutorial.welcome.message", resolveKeyLabel(toggleHudKey)));
+        } else if (step == TUTORIAL_STEP_APPLY) {
+            notifyClient(client,
+                    Text.translatable("nozh.tutorial.step.apply.title"),
+                    Text.translatable("nozh.tutorial.step.apply.message", resolveKeyLabel(applySuggestionKey)));
+        } else if (step == TUTORIAL_STEP_EXPORT) {
+            notifyClient(client,
+                    Text.translatable("nozh.tutorial.step.export.title"),
+                    Text.translatable("nozh.tutorial.step.export.message", resolveKeyLabel(exportReportKey)));
+        }
+    }
+
+    private static String resolveKeyLabel(KeyBinding keyBinding) {
+        if (keyBinding == null) {
+            return Text.translatable("nozh.hud.export.unbound").getString();
+        }
+        String label = keyBinding.getBoundKeyLocalizedText().getString();
+        if (label == null || label.isBlank()) {
+            return Text.translatable("nozh.hud.export.unbound").getString();
+        }
+        return label;
     }
 
     private static String resolveSessionKey(MinecraftClient client,

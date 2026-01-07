@@ -15,6 +15,7 @@ import net.minecraft.client.option.KeyBinding;
 import net.minecraft.client.toast.SystemToast;
 import net.minecraft.client.util.InputUtil;
 import net.minecraft.text.Text;
+import net.minecraft.util.Formatting;
 import org.lwjgl.glfw.GLFW;
 
 import java.util.ArrayList;
@@ -118,7 +119,7 @@ public final class ManualConfirmationHandler {
         List<PendingAction> suggestions = state.suggestedActions();
 
         if (suggestions == null || suggestions.isEmpty()) {
-            showMessage("⚠️ No pending suggestions", true);
+            showMessage(Text.translatable("nozh.suggestion.dismiss.none"), true);
             return;
         }
 
@@ -130,9 +131,9 @@ public final class ManualConfirmationHandler {
                 updated.remove(suggestion);
                 return createStateWithUpdatedSuggestions(currentState, updated);
             });
-            showMessage("❌ Dismissed: " + suggestion.capability().name(), false);
+            showMessage(Text.translatable("nozh.suggestion.dismiss.success", suggestion.capability().name()), false);
         } catch (Exception e) {
-            showMessage("❌ Failed to dismiss", true);
+            showMessage(Text.translatable("nozh.suggestion.dismiss.failed"), true);
         }
     }
 
@@ -220,15 +221,15 @@ public final class ManualConfirmationHandler {
         );
     }
 
-    private void showMessage(String message, boolean error) {
+    private void showMessage(Text message, boolean error) {
         try {
             net.minecraft.client.MinecraftClient client = 
                 net.minecraft.client.MinecraftClient.getInstance();
             
             if (client.player != null) {
-                String color = error ? "\u00a7c" : "\u00a7e";
-                Text text = Text.literal(color + "[NOZH] \u00a7r" + message);
-                client.player.sendMessage(text, true); // Actionbar
+                Text prefix = Text.literal("[NOZH] ").formatted(Formatting.GRAY);
+                Text styledMessage = message.formatted(error ? Formatting.RED : Formatting.YELLOW);
+                client.player.sendMessage(prefix.copy().append(styledMessage), true);
             }
         } catch (Exception e) {
             // Ignore messaging failures
@@ -282,9 +283,9 @@ public final class ManualConfirmationHandler {
             stateStore.update(currentState -> 
                 createStateWithUpdatedSuggestions(currentState, List.of())
             );
-            showMessage("All suggestions cleared", false);
+            showMessage(Text.translatable("nozh.suggestion.clear.success"), false);
         } catch (Exception e) {
-            showMessage("Failed to clear suggestions", true);
+            showMessage(Text.translatable("nozh.suggestion.clear.failed"), true);
         }
     }
 
