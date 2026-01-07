@@ -965,7 +965,19 @@ public final class GovernorRunner {
         if (telemetryManager == null || capability == null || outcome == null) {
             return;
         }
-        telemetryManager.recordDecisionOutcome(capability, outcome, measuredImpactMs);
+        dev.nozh.core.capability.CapabilityId telemetryCapability = resolveTelemetryCapability(capability);
+        if (telemetryCapability == null) {
+            return;
+        }
+        telemetryManager.recordDecisionOutcome(telemetryCapability, outcome, measuredImpactMs);
+    }
+
+    private dev.nozh.core.capability.CapabilityId resolveTelemetryCapability(dev.nozh.core.bus.CapabilityId capability) {
+        try {
+            return dev.nozh.core.capability.CapabilityId.valueOf(capability.name());
+        } catch (IllegalArgumentException e) {
+            return null;
+        }
     }
 
     private double resolvePreP95(PendingAction pending) {
