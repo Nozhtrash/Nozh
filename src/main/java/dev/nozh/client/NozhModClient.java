@@ -176,6 +176,7 @@ public class NozhModClient implements ClientModInitializer {
                 sessionLearning,
                 perfManager,
                 scenarioDetector,
+                telemetryManager,
                 () -> perfManager != null ? perfManager.getSnapshot() : dev.nozh.api.PerfSnapshot.empty());
 
         logger.info("Governor system initialized");

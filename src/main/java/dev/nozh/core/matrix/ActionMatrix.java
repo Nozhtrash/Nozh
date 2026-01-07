@@ -40,9 +40,15 @@ public final class ActionMatrix {
     private static final double REAL_GAIN_WEIGHT = 0.15;
     private static final double SPIKE_PENALTY_WEIGHT = 0.2;
     private static final double SCENARIO_PRIORITY_WEIGHT = 0.15;
+    private static final double UTILITY_WEIGHT = 0.35;
+    private static final double VISUAL_COST_WEIGHT = 0.8;
+    private static final double GAMEPLAY_COST_WEIGHT = 1.0;
     private static final double PERFORMANCE_PRESSURE_WEIGHT = 0.25;
     private static final double BASELINE_FRAME_MS = 16.67;
     private static final double MAX_SPIKE_PRESSURE = 5.0;
+    private static final double IMPACT_COST_LOW = 0.5;
+    private static final double IMPACT_COST_MED = 1.5;
+    private static final double IMPACT_COST_HIGH = 3.0;
 
     private final ProviderRegistry registry;
     private final ActionSuccessTracker successTracker;
@@ -238,6 +244,7 @@ public final class ActionMatrix {
         double maxLearnedGain = 0.0;
         double maxP95Gain = 0.0;
         double maxSpikePenalty = 0.0;
+        double maxUtility = 0.0;
         for (ActionCandidate candidate : candidates) {
             maxExpectedGain = Math.max(maxExpectedGain, candidate.expectedGainMs());
             double ranking = sessionLearning.getRanking(candidate.capabilityId(), scenario);
@@ -248,6 +255,7 @@ public final class ActionMatrix {
             maxP95Gain = Math.max(maxP95Gain, p95Gain);
             double spikePenalty = Math.max(0.0, sessionLearning.getAvgSpikeDelta(candidate.capabilityId(), scenario));
             maxSpikePenalty = Math.max(maxSpikePenalty, spikePenalty);
+            maxUtility = Math.max(maxUtility, Math.abs(expectedUtility(candidate)));
         }
 
         final double maxExpectedGainFinal = maxExpectedGain;
@@ -255,12 +263,14 @@ public final class ActionMatrix {
         final double maxLearnedGainFinal = maxLearnedGain;
         final double maxP95GainFinal = maxP95Gain;
         final double maxSpikePenaltyFinal = maxSpikePenalty;
+        final double maxUtilityFinal = maxUtility;
 
         ActionSelectionContext selectionContext = new ActionSelectionContext(scenario, profile, p95FrametimeMs,
                 spikeCount, resolvedTuning);
         candidates.sort(Comparator
                 .comparingDouble((ActionCandidate candidate) -> scoreCandidate(candidate, maxExpectedGainFinal,
-                        maxRankingFinal, maxLearnedGainFinal, maxP95GainFinal, maxSpikePenaltyFinal, selectionContext))
+                        maxRankingFinal, maxLearnedGainFinal, maxP95GainFinal, maxSpikePenaltyFinal, maxUtilityFinal,
+                        selectionContext))
                 .reversed());
 
         if (candidates.isEmpty() && yieldCandidate != null) {
@@ -626,8 +636,11 @@ public final class ActionMatrix {
     }
 
     private double scoreCandidate(ActionCandidate candidate, double maxExpectedGain, double maxRanking,
-            double maxLearnedGain, double maxP95Gain, double maxSpikePenalty, ActionSelectionContext context) {
+            double maxLearnedGain, double maxP95Gain, double maxSpikePenalty, double maxUtility,
+            ActionSelectionContext context) {
         double normalizedGain = maxExpectedGain > 0 ? candidate.expectedGainMs() / maxExpectedGain : 0.0;
+        double utility = expectedUtility(candidate);
+        double normalizedUtility = maxUtility > 0 ? utility / maxUtility : 0.0;
         double ranking = sessionLearning.getRanking(candidate.capabilityId(), context.scenario());
         double normalizedRanking = maxRanking > 0 ? ranking / maxRanking : 0.0;
         double learnedSuccess = sessionLearning.getSuccessRate(candidate.capabilityId(), context.scenario());
@@ -646,7 +659,8 @@ public final class ActionMatrix {
                 : PERFORMANCE_PRESSURE_WEIGHT;
 
         double baseScore = (candidate.confidenceScore() * CONFIDENCE_WEIGHT)
-                + (normalizedGain * EXPECTED_GAIN_WEIGHT)
+                + (normalizedUtility * UTILITY_WEIGHT)
+                + (normalizedGain * EXPECTED_GAIN_WEIGHT * 0.5)
                 + (normalizedRanking * LEARNED_RANKING_WEIGHT)
                 + (learnedSuccess * LEARNED_SUCCESS_WEIGHT)
                 + (normalizedLearnedGain * LEARNED_GAIN_WEIGHT)
@@ -655,6 +669,36 @@ public final class ActionMatrix {
 
         double score = baseScore + (pressure * profilePressureWeight * (normalizedGain + scenarioBoost) / 2.0);
         return score - (normalizedSpikePenalty * SPIKE_PENALTY_WEIGHT);
+    }
+
+    private double expectedUtility(ActionCandidate candidate) {
+        double expectedFpsGain = expectedFpsGain(candidate.expectedGainMs());
+        double visualCost = impactCost(candidate.visualImpact()) * VISUAL_COST_WEIGHT;
+        double gameplayCost = impactCost(candidate.gameplayImpact()) * GAMEPLAY_COST_WEIGHT;
+        return expectedFpsGain - visualCost - gameplayCost;
+    }
+
+    private double expectedFpsGain(double expectedGainMs) {
+        if (expectedGainMs <= 0) {
+            return 0.0;
+        }
+        double baselineMs = BASELINE_FRAME_MS;
+        double adjustedMs = Math.max(1.0, baselineMs - expectedGainMs);
+        double baselineFps = 1000.0 / baselineMs;
+        double adjustedFps = 1000.0 / adjustedMs;
+        return Math.max(0.0, adjustedFps - baselineFps);
+    }
+
+    private double impactCost(ImpactLevel impact) {
+        if (impact == null) {
+            return 0.0;
+        }
+        return switch (impact) {
+            case NONE -> 0.0;
+            case LOW -> IMPACT_COST_LOW;
+            case MED -> IMPACT_COST_MED;
+            case HIGH -> IMPACT_COST_HIGH;
+        };
     }
 
     private double blendConfidence(double baseConfidence, double learnedConfidence) {
