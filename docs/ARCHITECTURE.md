@@ -69,6 +69,14 @@ If the mod crashes or fails strictly, it enters **Safe Mode**.
 | --- | --- | --- |
 | v1 | v0.1.x – v0.2.x | Baseline core architecture freeze. |
 
+### Compatibility Matrix (Runtime)
+
+This matrix captures the **supported runtime combinations** aligned with benchmarking requirements. Fields are sourced from the **Hardware + Environment Requirements** (OS/JVM/Minecraft) and **Recording Configuration** (mods list, shaders) in `docs/benchmarking.md`.
+
+| SO | JVM | Minecraft | Loader (Fabric/Forge) | NOZH | modpack/deps clave |
+| --- | --- | --- | --- | --- | --- |
+| `<OS version>` | `<JVM vendor + version>` | `<MC version>` | `<Fabric/Forge + version>` | `<NOZH version>` | `<mods list, shader pack>` |
+
 ### Stable Public Interfaces
 
 The following interfaces are considered stable and part of the frozen core contract:
