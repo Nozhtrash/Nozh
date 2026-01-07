@@ -94,6 +94,11 @@ public final class SessionLearning {
 
     public void recordOutcome(CapabilityId id, dev.nozh.core.context.Scenario scenario, ActionOutcome outcome,
             double fpsGainMs) {
+        recordOutcome(id, scenario, outcome, fpsGainMs, 0.0, 0);
+    }
+
+    public void recordOutcome(CapabilityId id, dev.nozh.core.context.Scenario scenario, ActionOutcome outcome,
+            double fpsGainMs, double p95DeltaMs, int spikeDelta) {
         String key = buildKey(id, scenario);
         ActionStats stats = history.computeIfAbsent(key, k -> new ActionStats());
 
@@ -109,6 +114,10 @@ public final class SessionLearning {
         } else {
             stats.neutralCount++;
         }
+        stats.totalP95DeltaMs += p95DeltaMs;
+        stats.avgP95DeltaMs = stats.totalP95DeltaMs / stats.totalAttempts;
+        stats.totalSpikeDelta += spikeDelta;
+        stats.avgSpikeDelta = (double) stats.totalSpikeDelta / stats.totalAttempts;
         dirty = true;
     }
 
@@ -170,6 +179,19 @@ public final class SessionLearning {
     public double getAvgFpsGain(CapabilityId id, dev.nozh.core.context.Scenario scenario) {
         ActionStats stats = history.get(buildKey(id, scenario));
         return stats != null ? stats.avgFpsGain : 0.0;
+    }
+
+    public double getAvgP95Gain(CapabilityId id, dev.nozh.core.context.Scenario scenario) {
+        ActionStats stats = history.get(buildKey(id, scenario));
+        if (stats == null) {
+            return 0.0;
+        }
+        return Math.max(0.0, -stats.avgP95DeltaMs);
+    }
+
+    public double getAvgSpikeDelta(CapabilityId id, dev.nozh.core.context.Scenario scenario) {
+        ActionStats stats = history.get(buildKey(id, scenario));
+        return stats != null ? stats.avgSpikeDelta : 0.0;
     }
 
     /**
@@ -392,6 +414,10 @@ public final class SessionLearning {
         public long lastFailureTime = 0;
         public double totalFpsGain = 0.0;
         public double avgFpsGain = 0.0;
+        public double totalP95DeltaMs = 0.0;
+        public double avgP95DeltaMs = 0.0;
+        public int totalSpikeDelta = 0;
+        public double avgSpikeDelta = 0.0;
     }
 
     public static class PredictionStats {
