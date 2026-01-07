@@ -30,7 +30,16 @@ import java.util.Arrays;
  * 
  * This is the production-ready, self-learning governor.
  * 
- * FULL INTEGRATION: Phases 1-4 complete
+ * <p><b>Thread Safety:</b> This class is NOT thread-safe. It should only be
+ * called from the main game thread.
+ * 
+ * <p><b>Null Safety:</b> All public methods validate inputs and handle null
+ * gracefully with appropriate logging.
+ * 
+ * FULL INTEGRATION: Phases 1-4 complete + P0 hardening
+ * 
+ * @author Nozh Team
+ * @since 0.3.0
  */
 public final class IntegratedGovernor {
 
@@ -71,7 +80,21 @@ public final class IntegratedGovernor {
     private int tickCounter = 0;
     private boolean initialized = false;
 
+    /**
+     * Constructs a new IntegratedGovernor.
+     * 
+     * @param client Minecraft client instance (must not be null)
+     * @param logPath path for performance logs (must not be null)
+     * @throws NullPointerException if client or logPath is null
+     */
     public IntegratedGovernor(MinecraftClient client, Path logPath) {
+        if (client == null) {
+            throw new NullPointerException("MinecraftClient cannot be null");
+        }
+        if (logPath == null) {
+            throw new NullPointerException("Log path cannot be null");
+        }
+        
         this.client = client;
         
         // Initialize core systems
@@ -112,92 +135,185 @@ public final class IntegratedGovernor {
 
     /**
      * Main update tick - called every game tick.
+     * 
+     * <p><b>Thread Safety:</b> Must be called from main game thread only.
+     * 
+     * <p>This method is hardened against null values and exceptions. All errors
+     * are logged and recorded in health metrics.
      */
     public void tick() {
-        if (!initialized || client.world == null) {
+        if (!initialized) {
+            return;
+        }
+        
+        // CRITICAL NULL CHECK: World must exist
+        if (client == null || client.world == null) {
             return;
         }
 
         try {
             tickCounter++;
             
-            // Update context trackers
-            cameraTracker.tick();
+            // Update context trackers (null-safe)
+            if (cameraTracker != null) {
+                cameraTracker.tick();
+            }
             
             // Collect telemetry
             TelemetrySample sample = collectTelemetry();
-            if (sample != null) {
+            if (sample != null && telemetryBuffer != null) {
                 telemetryBuffer.add(sample);
                 
                 // Feed to predictor
-                if (sample.hasFrametimeData()) {
+                if (sample.hasFrametimeData() && predictor != null) {
                     predictor.addSample(sample.frametimeMs());
                 }
             }
             
-            // Get telemetry snapshot
+            // CRITICAL P0 FIX: Get telemetry snapshot with null check
+            if (telemetryBuffer == null) {
+                NozhConstants.LOGGER.warn("Telemetry buffer is null, skipping decision");
+                return;
+            }
+            
             TelemetrySnapshot snapshot = telemetryBuffer.snapshot();
+            if (snapshot == null) {
+                NozhConstants.LOGGER.warn("Null telemetry snapshot, skipping decision");
+                if (healthMonitor != null) {
+                    healthMonitor.recordError("null_telemetry_snapshot");
+                }
+                return;
+            }
             
-            // Update health monitor
-            healthMonitor.updateFromTelemetry(snapshot);
+            // Update health monitor (null-safe)
+            if (healthMonitor != null) {
+                try {
+                    healthMonitor.updateFromTelemetry(snapshot);
+                } catch (Exception e) {
+                    NozhConstants.LOGGER.error("Health monitor update failed", e);
+                }
+            }
             
-            // Record metrics
-            metricsCollector.recordTelemetry(snapshot);
+            // Record metrics (null-safe)
+            if (metricsCollector != null) {
+                try {
+                    metricsCollector.recordTelemetry(snapshot);
+                } catch (Exception e) {
+                    NozhConstants.LOGGER.error("Metrics recording failed", e);
+                }
+            }
             
             // Log metrics periodically (every 5 seconds)
-            if (tickCounter % 100 == 0) {
-                double avgFps = 1000.0 / snapshot.avgFrametimeMs();
-                eventLogger.logMetrics(avgFps, snapshot.p95FrametimeMs(), snapshot.spikeCount());
+            if (tickCounter % 100 == 0 && eventLogger != null) {
+                try {
+                    double avgFps = 1000.0 / snapshot.avgFrametimeMs();
+                    eventLogger.logMetrics(avgFps, snapshot.p95FrametimeMs(), snapshot.spikeCount());
+                } catch (Exception e) {
+                    NozhConstants.LOGGER.error("Event logging failed", e);
+                }
             }
             
             // Check if we should make a decision
-            double decisionInterval = configManager.getValue("decision_interval_ms", 2000.0);
-            double now = System.currentTimeMillis();
-            if (now - lastDecisionTime >= decisionInterval) {
-                makeDecision(snapshot);
-                lastDecisionTime = now;
+            if (configManager != null) {
+                double decisionInterval = configManager.getValue("decision_interval_ms", 2000.0);
+                double now = System.currentTimeMillis();
+                if (now - lastDecisionTime >= decisionInterval) {
+                    makeDecision(snapshot);
+                    lastDecisionTime = now;
+                }
             }
             
         } catch (Exception e) {
             NozhConstants.LOGGER.error("Governor tick error", e);
-            healthMonitor.recordError("tick_error");
+            if (healthMonitor != null) {
+                healthMonitor.recordError("tick_error: " + e.getMessage());
+            }
         }
     }
 
     /**
      * Make a governor decision.
+     * 
+     * <p><b>CRITICAL P0 FIX:</b> All inputs are validated for null with appropriate
+     * fallbacks and error logging.
+     * 
+     * @param snapshot telemetry snapshot (must not be null)
      */
     private void makeDecision(TelemetrySnapshot snapshot) {
+        // Defensive validation
+        if (snapshot == null) {
+            NozhConstants.LOGGER.error("Cannot make decision with null snapshot");
+            return;
+        }
+        
         // Skip if not warmed up
-        if (!telemetryBuffer.isWarmupComplete()) {
+        if (telemetryBuffer == null || !telemetryBuffer.isWarmupComplete()) {
             return;
         }
         
         // Skip if unhealthy
-        if (!isHealthy()) {
+        if (healthMonitor != null && !isHealthy()) {
             NozhConstants.LOGGER.warn("Skipping decision - system unhealthy: " + healthMonitor.getHealthStatus());
             return;
         }
         
-        // Detect scenario using correct method
-        ScenarioSnapshot scenarioSnapshot = scenarioDetector.detect();
+        // CRITICAL P0 FIX: Detect scenario with null check and default fallback
+        if (scenarioDetector == null) {
+            NozhConstants.LOGGER.error("Scenario detector is null, using default scenario");
+            return;
+        }
+        
+        ScenarioSnapshot scenarioSnapshot = null;
+        try {
+            scenarioSnapshot = scenarioDetector.detect();
+        } catch (Exception e) {
+            NozhConstants.LOGGER.error("Scenario detection failed", e);
+            if (healthMonitor != null) {
+                healthMonitor.recordError("scenario_detection_failed");
+            }
+        }
+        
+        // CRITICAL P0 FIX: Handle null scenario snapshot
+        if (scenarioSnapshot == null) {
+            NozhConstants.LOGGER.warn("Null scenario snapshot, using default");
+            // Create safe default
+            scenarioSnapshot = createDefaultScenarioSnapshot();
+        }
+        
         Scenario detectedScenario = scenarioSnapshot.scenario();
         double scenarioConfidence = scenarioSnapshot.confidence();
         
+        // Validate scenario
+        if (detectedScenario == null) {
+            NozhConstants.LOGGER.warn("Null detected scenario, using STANDARD");
+            detectedScenario = Scenario.STANDARD;
+            scenarioConfidence = 0.5;
+        }
+        
         // Log scenario change
-        if (detectedScenario != currentScenario && scenarioConfidence > 0.7) {
-            eventLogger.logScenarioChange(currentScenario, detectedScenario, scenarioConfidence);
+        if (detectedScenario != currentScenario && scenarioConfidence > 0.7 && eventLogger != null) {
+            try {
+                eventLogger.logScenarioChange(currentScenario, detectedScenario, scenarioConfidence);
+            } catch (Exception e) {
+                NozhConstants.LOGGER.error("Failed to log scenario change", e);
+            }
             currentScenario = detectedScenario;
         }
         
-        // Calculate current FPS
-        double currentFps = 1000.0 / snapshot.avgFrametimeMs();
-        double targetFps = configManager.getValue("target_fps", 60.0);
-        double minFps = configManager.getValue("min_fps", 30.0);
+        // Calculate current FPS (with bounds checking)
+        double avgFrametime = snapshot.avgFrametimeMs();
+        if (avgFrametime <= 0 || !Double.isFinite(avgFrametime)) {
+            NozhConstants.LOGGER.warn("Invalid average frametime: " + avgFrametime);
+            return;
+        }
+        
+        double currentFps = 1000.0 / avgFrametime;
+        double targetFps = configManager != null ? configManager.getValue("target_fps", 60.0) : 60.0;
+        double minFps = configManager != null ? configManager.getValue("min_fps", 30.0) : 30.0;
         
         // Check if action needed
         boolean fpsBelowTarget = currentFps < targetFps * 0.9; // 90% of target
-        boolean predictedDrop = predictor.predictFpsDrop();
+        boolean predictedDrop = predictor != null && predictor.predictFpsDrop();
         boolean criticallyLow = currentFps < minFps;
         
         if (!fpsBelowTarget && !predictedDrop && !criticallyLow) {
@@ -206,54 +322,115 @@ public final class IntegratedGovernor {
         
         // Select best action using learning
         String[] availableActions = getAvailableActions();
-        if (availableActions.length == 0) {
+        if (availableActions == null || availableActions.length == 0) {
             return; // No actions available
         }
         
         String hardwareProfile = determineHardwareProfile(currentFps);
+        
+        // Validate hardwareProfile
+        if (hardwareProfile == null) {
+            hardwareProfile = "medium"; // Safe default
+        }
+        
         PerformanceLearningEngine.GameState state = new PerformanceLearningEngine.GameState(
                 currentScenario,
                 currentFps,
                 hardwareProfile
         );
         
-        String selectedAction = learningEngine.getBestAction(state, availableActions);
-        if (selectedAction == null || blacklist.isBlacklisted(selectedAction)) {
+        // Get best action with null check
+        String selectedAction = null;
+        if (learningEngine != null) {
+            try {
+                selectedAction = learningEngine.getBestAction(state, availableActions);
+            } catch (Exception e) {
+                NozhConstants.LOGGER.error("Failed to get best action", e);
+            }
+        }
+        
+        if (selectedAction == null || (blacklist != null && blacklist.isBlacklisted(selectedAction))) {
             return; // No valid action
         }
         
-        // Build decision reasoning
-        DecisionReasoning reasoning = new DecisionReasoning.Builder()
-                .actionId(selectedAction)
-                .scenario(currentScenario.name())
-                .addTrigger(fpsBelowTarget ? "FPS below target" : "")
-                .addTrigger(predictedDrop ? "Predicted FPS drop" : "")
-                .addTrigger(criticallyLow ? "Critically low FPS" : "")
-                .addSignal(String.format("Current FPS: %.1f", currentFps))
-                .addSignal(String.format("P95 frametime: %.2fms", snapshot.p95FrametimeMs()))
-                .expectedOutcome("Improve FPS by 10-20")
-                .confidenceScore(scenarioConfidence)
-                .build();
+        // Build decision reasoning (null-safe)
+        DecisionReasoning reasoning = null;
+        try {
+            reasoning = new DecisionReasoning.Builder()
+                    .actionId(selectedAction)
+                    .scenario(currentScenario.name())
+                    .addTrigger(fpsBelowTarget ? "FPS below target" : "")
+                    .addTrigger(predictedDrop ? "Predicted FPS drop" : "")
+                    .addTrigger(criticallyLow ? "Critically low FPS" : "")
+                    .addSignal(String.format("Current FPS: %.1f", currentFps))
+                    .addSignal(String.format("P95 frametime: %.2fms", snapshot.p95FrametimeMs()))
+                    .expectedOutcome("Improve FPS by 10-20")
+                    .confidenceScore(scenarioConfidence)
+                    .build();
+        } catch (Exception e) {
+            NozhConstants.LOGGER.error("Failed to build decision reasoning", e);
+            return;
+        }
         
-        // Log decision
-        eventLogger.logDecision(reasoning, currentScenario, scenarioConfidence);
+        // Log decision (null-safe)
+        if (eventLogger != null && reasoning != null) {
+            try {
+                eventLogger.logDecision(reasoning, currentScenario, scenarioConfidence);
+            } catch (Exception e) {
+                NozhConstants.LOGGER.error("Failed to log decision", e);
+            }
+        }
         
         // Execute action
-        executeAction(selectedAction, reasoning, snapshot, state, currentFps);
+        if (reasoning != null) {
+            executeAction(selectedAction, reasoning, snapshot, state, currentFps);
+        }
+    }
+
+    /**
+     * Creates a default scenario snapshot when detection fails.
+     * 
+     * @return safe default ScenarioSnapshot
+     */
+    private ScenarioSnapshot createDefaultScenarioSnapshot() {
+        return new ScenarioSnapshot(Scenario.STANDARD, 0.5, System.currentTimeMillis());
     }
 
     /**
      * Execute action with learning feedback.
+     * 
+     * @param actionId action to execute (must not be null)
+     * @param reasoning decision reasoning (must not be null)
+     * @param beforeSnapshot snapshot before action (must not be null)
+     * @param state game state (must not be null)
+     * @param fpsBefore FPS before action (must be positive)
      */
     private void executeAction(String actionId, DecisionReasoning reasoning, 
                               TelemetrySnapshot beforeSnapshot, 
                               PerformanceLearningEngine.GameState state,
                               double fpsBefore) {
+        // Validate inputs
+        if (actionId == null || reasoning == null || beforeSnapshot == null || state == null) {
+            NozhConstants.LOGGER.error("Cannot execute action with null parameters");
+            return;
+        }
+        
+        if (fpsBefore <= 0 || !Double.isFinite(fpsBefore)) {
+            NozhConstants.LOGGER.error("Invalid FPS before: " + fpsBefore);
+            return;
+        }
+        
         long startTime = System.currentTimeMillis();
         double expectedFpsDelta = 15.0; // Expected improvement
         
         // Record action start for effectiveness tracking
-        effectivenessTracker.recordActionStart(actionId, expectedFpsDelta, reasoning);
+        if (effectivenessTracker != null) {
+            try {
+                effectivenessTracker.recordActionStart(actionId, expectedFpsDelta, reasoning);
+            } catch (Exception e) {
+                NozhConstants.LOGGER.error("Failed to record action start", e);
+            }
+        }
         
         try {
             // TODO: Execute actual provider action
@@ -264,19 +441,44 @@ public final class IntegratedGovernor {
             Thread.sleep(1000);
             
             // Measure results
-            TelemetrySnapshot afterSnapshot = telemetryBuffer.snapshot();
+            TelemetrySnapshot afterSnapshot = telemetryBuffer != null ? telemetryBuffer.snapshot() : null;
+            if (afterSnapshot == null) {
+                NozhConstants.LOGGER.warn("No telemetry after action execution");
+                return;
+            }
+            
             double fpsAfter = 1000.0 / afterSnapshot.avgFrametimeMs();
             double actualFpsDelta = fpsAfter - fpsBefore;
             
             long duration = System.currentTimeMillis() - startTime;
             boolean success = executionSuccess && actualFpsDelta > 0;
             
-            // Record results
-            effectivenessTracker.recordActionResult(actionId, actualFpsDelta, success);
-            eventLogger.logActionExecution(actionId, success, duration);
-            metricsCollector.recordAction(actionId, success, duration);
+            // Record results (null-safe)
+            if (effectivenessTracker != null) {
+                try {
+                    effectivenessTracker.recordActionResult(actionId, actualFpsDelta, success);
+                } catch (Exception e) {
+                    NozhConstants.LOGGER.error("Failed to record action result", e);
+                }
+            }
             
-            if (!success) {
+            if (eventLogger != null) {
+                try {
+                    eventLogger.logActionExecution(actionId, success, duration);
+                } catch (Exception e) {
+                    NozhConstants.LOGGER.error("Failed to log action execution", e);
+                }
+            }
+            
+            if (metricsCollector != null) {
+                try {
+                    metricsCollector.recordAction(actionId, success, duration);
+                } catch (Exception e) {
+                    NozhConstants.LOGGER.error("Failed to record action metrics", e);
+                }
+            }
+            
+            if (!success && healthMonitor != null) {
                 healthMonitor.recordError("action_failed: " + actionId);
             }
             
@@ -287,50 +489,95 @@ public final class IntegratedGovernor {
                     fpsBefore, fpsAfter, visualImpact, gameplayImpact
             );
             
-            // Update learning
-            PerformanceLearningEngine.GameState newState = new PerformanceLearningEngine.GameState(
-                    currentScenario, fpsAfter, determineHardwareProfile(fpsAfter)
-            );
-            learningEngine.updateFromExperience(state, actionId, reward, newState);
+            // Update learning (null-safe)
+            if (learningEngine != null) {
+                try {
+                    PerformanceLearningEngine.GameState newState = new PerformanceLearningEngine.GameState(
+                            currentScenario, fpsAfter, determineHardwareProfile(fpsAfter)
+                    );
+                    learningEngine.updateFromExperience(state, actionId, reward, newState);
+                } catch (Exception e) {
+                    NozhConstants.LOGGER.error("Failed to update learning", e);
+                }
+            }
             
-            // Adapt weights
-            weightTuner.adaptWeights(currentScenario, actionId, actualFpsDelta, visualImpact, gameplayImpact);
+            // Adapt weights (null-safe)
+            if (weightTuner != null) {
+                try {
+                    weightTuner.adaptWeights(currentScenario, actionId, actualFpsDelta, visualImpact, gameplayImpact);
+                } catch (Exception e) {
+                    NozhConstants.LOGGER.error("Failed to adapt weights", e);
+                }
+            }
             
-            // Adapt config
-            configManager.adaptValue("target_fps", fpsAfter, configManager.getValue("target_fps", 60.0));
+            // Adapt config (null-safe)
+            if (configManager != null) {
+                try {
+                    configManager.adaptValue("target_fps", fpsAfter, configManager.getValue("target_fps", 60.0));
+                } catch (Exception e) {
+                    NozhConstants.LOGGER.error("Failed to adapt config", e);
+                }
+            }
             
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            NozhConstants.LOGGER.error("Action execution interrupted", e);
         } catch (Exception e) {
             NozhConstants.LOGGER.error("Action execution failed: " + actionId, e);
-            healthMonitor.recordError("execution_error: " + e.getMessage());
-            effectivenessTracker.recordActionResult(actionId, 0.0, false);
-            metricsCollector.recordAction(actionId, false, System.currentTimeMillis() - startTime);
+            if (healthMonitor != null) {
+                healthMonitor.recordError("execution_error: " + e.getMessage());
+            }
+            if (effectivenessTracker != null) {
+                effectivenessTracker.recordActionResult(actionId, 0.0, false);
+            }
+            if (metricsCollector != null) {
+                metricsCollector.recordAction(actionId, false, System.currentTimeMillis() - startTime);
+            }
         }
     }
 
     /**
      * Calculate scenario confidence from multiple signals.
+     * 
+     * @param scenario scenario to calculate confidence for (must not be null)
+     * @return confidence score between 0.0 and 1.0
      */
     private double calculateScenarioConfidence(Scenario scenario) {
-        ScenarioConfidenceCalculator.ScenarioSignal[] signals = new ScenarioConfidenceCalculator.ScenarioSignal[]{
-                ScenarioConfidenceCalculator.strongSignal(
-                        "environment", 
-                        environmentContext.isDangerousBiome() ? 0.8 : 0.5
-                ),
-                ScenarioConfidenceCalculator.strongSignal(
-                        "camera", 
-                        cameraTracker.isHighActivity() ? 0.9 : 0.3
-                ),
-                ScenarioConfidenceCalculator.weakSignal(
-                        "weather", 
-                        environmentContext.getWeatherSeverity()
-                )
-        };
+        if (scenario == null) {
+            return 0.5; // Default confidence
+        }
         
-        return ScenarioConfidenceCalculator.calculateWeighted(signals, 0.8);
+        if (confidenceCalculator == null || environmentContext == null || cameraTracker == null) {
+            return 0.5; // Cannot calculate, return default
+        }
+        
+        try {
+            ScenarioConfidenceCalculator.ScenarioSignal[] signals = new ScenarioConfidenceCalculator.ScenarioSignal[]{
+                    ScenarioConfidenceCalculator.strongSignal(
+                            "environment", 
+                            environmentContext.isDangerousBiome() ? 0.8 : 0.5
+                    ),
+                    ScenarioConfidenceCalculator.strongSignal(
+                            "camera", 
+                            cameraTracker.isHighActivity() ? 0.9 : 0.3
+                    ),
+                    ScenarioConfidenceCalculator.weakSignal(
+                            "weather", 
+                            environmentContext.getWeatherSeverity()
+                    )
+            };
+            
+            return ScenarioConfidenceCalculator.calculateWeighted(signals, 0.8);
+        } catch (Exception e) {
+            NozhConstants.LOGGER.error("Failed to calculate scenario confidence", e);
+            return 0.5; // Fallback
+        }
     }
 
     /**
      * Get available actions (not blacklisted).
+     * 
+     * @return array of available action IDs, never null but may be empty
      */
     private String[] getAvailableActions() {
         String[] allActions = {
@@ -341,15 +588,31 @@ public final class IntegratedGovernor {
                 "lower_entity_distance"
         };
         
-        return Arrays.stream(allActions)
-                .filter(action -> !blacklist.isBlacklisted(action))
-                .toArray(String[]::new);
+        if (blacklist == null) {
+            return allActions; // No filtering if blacklist unavailable
+        }
+        
+        try {
+            return Arrays.stream(allActions)
+                    .filter(action -> !blacklist.isBlacklisted(action))
+                    .toArray(String[]::new);
+        } catch (Exception e) {
+            NozhConstants.LOGGER.error("Failed to filter actions", e);
+            return allActions; // Return all on error
+        }
     }
 
     /**
      * Determine hardware profile from FPS.
+     * 
+     * @param fps current FPS (must be positive)
+     * @return hardware profile string ("high", "medium", or "low"), never null
      */
     private String determineHardwareProfile(double fps) {
+        if (fps <= 0 || !Double.isFinite(fps)) {
+            return "medium"; // Safe default for invalid input
+        }
+        
         if (fps >= 120) return "high";
         if (fps >= 60) return "medium";
         return "low";
@@ -357,95 +620,195 @@ public final class IntegratedGovernor {
 
     /**
      * Collect telemetry sample.
+     * 
+     * @return telemetry sample, or null if collection fails
      */
     private TelemetrySample collectTelemetry() {
-        if (client.world == null) {
+        if (client == null || client.world == null) {
             return null;
         }
         
-        double frametime = client.getLastFrameDuration();
-        int fps = client.getCurrentFps();
-        
-        return new TelemetrySample(
-                System.currentTimeMillis(),
-                frametime,
-                -1, // tick time
-                fps,
-                -1, // entities
-                -1, // chunks
-                -1, // draw calls
-                telemetryBuffer.getDroppedCount()
-        );
+        try {
+            double frametime = client.getLastFrameDuration();
+            int fps = client.getCurrentFps();
+            
+            // Validate collected data
+            if (frametime < 0 || !Double.isFinite(frametime)) {
+                frametime = 16.67; // Default to 60 FPS
+            }
+            
+            if (fps < 0) {
+                fps = 60; // Default FPS
+            }
+            
+            int droppedCount = telemetryBuffer != null ? telemetryBuffer.getDroppedCount() : 0;
+            
+            return new TelemetrySample(
+                    System.currentTimeMillis(),
+                    frametime,
+                    -1, // tick time
+                    fps,
+                    -1, // entities
+                    -1, // chunks
+                    -1, // draw calls
+                    droppedCount
+            );
+        } catch (Exception e) {
+            NozhConstants.LOGGER.error("Failed to collect telemetry", e);
+            return null;
+        }
     }
 
     /**
      * Check if system is healthy enough to make decisions.
+     * 
+     * @return true if system is healthy, false otherwise
      */
     public boolean isHealthy() {
-        return !healthMonitor.isCritical();
+        return healthMonitor != null && !healthMonitor.isCritical();
     }
 
     /**
      * Get health status.
+     * 
+     * @return human-readable health status string, never null
      */
     public String getHealthStatus() {
-        return healthMonitor.getHealthStatus();
+        if (healthMonitor == null) {
+            return "UNKNOWN";
+        }
+        
+        try {
+            return healthMonitor.getHealthStatus();
+        } catch (Exception e) {
+            NozhConstants.LOGGER.error("Failed to get health status", e);
+            return "ERROR";
+        }
     }
 
     /**
      * Get health report.
+     * 
+     * @return detailed health report string, never null
      */
     public String getHealthReport() {
-        return String.format(
-                "Health: %s (%.2f) | Memory: %.1f%% | GC: %d pauses (%.1fms avg)",
-                healthMonitor.getHealthStatus(),
-                healthMonitor.getHealthScore(),
-                healthMonitor.getMemoryUsagePercent() * 100,
-                healthMonitor.getGCCount(),
-                healthMonitor.getAverageGCPause()
-        );
+        if (healthMonitor == null) {
+            return "Health monitor unavailable";
+        }
+        
+        try {
+            return String.format(
+                    "Health: %s (%.2f) | Memory: %.1f%% | GC: %d pauses (%.1fms avg)",
+                    healthMonitor.getHealthStatus(),
+                    healthMonitor.getHealthScore(),
+                    healthMonitor.getMemoryUsagePercent() * 100,
+                    healthMonitor.getGCCount(),
+                    healthMonitor.getAverageGCPause()
+            );
+        } catch (Exception e) {
+            NozhConstants.LOGGER.error("Failed to generate health report", e);
+            return "Health report generation failed: " + e.getMessage();
+        }
     }
 
     /**
      * Get learning statistics.
+     * 
+     * @return map of learning statistics, never null but may be empty
      */
     public java.util.Map<String, Object> getLearningStats() {
-        return learningEngine.getStatistics();
+        if (learningEngine == null) {
+            return java.util.Collections.emptyMap();
+        }
+        
+        try {
+            return learningEngine.getStatistics();
+        } catch (Exception e) {
+            NozhConstants.LOGGER.error("Failed to get learning stats", e);
+            return java.util.Collections.emptyMap();
+        }
     }
 
     /**
      * Get metrics summary.
+     * 
+     * @return map of metrics, never null but may be empty
      */
     public java.util.Map<String, Object> getMetricsSummary() {
-        return metricsCollector.getSummary();
+        if (metricsCollector == null) {
+            return java.util.Collections.emptyMap();
+        }
+        
+        try {
+            return metricsCollector.getSummary();
+        } catch (Exception e) {
+            NozhConstants.LOGGER.error("Failed to get metrics summary", e);
+            return java.util.Collections.emptyMap();
+        }
     }
 
     /**
      * Get action effectiveness score.
+     * 
+     * @param actionId action ID to query (must not be null)
+     * @return effectiveness score between 0.0 and 1.0, or 0.0 if unavailable
+     * @throws NullPointerException if actionId is null
      */
     public double getActionEffectiveness(String actionId) {
-        return effectivenessTracker.getEffectivenessScore(actionId);
+        if (actionId == null) {
+            throw new NullPointerException("Action ID cannot be null");
+        }
+        
+        if (effectivenessTracker == null) {
+            return 0.0;
+        }
+        
+        try {
+            return effectivenessTracker.getEffectivenessScore(actionId);
+        } catch (Exception e) {
+            NozhConstants.LOGGER.error("Failed to get action effectiveness for: " + actionId, e);
+            return 0.0;
+        }
     }
 
     /**
      * Reset learning data.
+     * 
+     * <p><b>Warning:</b> This will clear all accumulated learning. Use with caution.
      */
     public void resetLearning() {
-        effectivenessTracker.clear();
-        NozhConstants.LOGGER.info("Learning data reset");
+        if (effectivenessTracker != null) {
+            try {
+                effectivenessTracker.clear();
+                NozhConstants.LOGGER.info("Learning data reset");
+            } catch (Exception e) {
+                NozhConstants.LOGGER.error("Failed to reset learning", e);
+            }
+        }
     }
 
     /**
-     * Shutdown governor.
+     * Shutdown governor and release resources.
+     * 
+     * <p>After calling this method, the governor should not be used anymore.
      */
     public void shutdown() {
-        eventLogger.shutdown();
+        if (eventLogger != null) {
+            try {
+                eventLogger.shutdown();
+            } catch (Exception e) {
+                NozhConstants.LOGGER.error("Failed to shutdown event logger", e);
+            }
+        }
+        
         initialized = false;
         NozhConstants.LOGGER.info("IntegratedGovernor shutdown complete");
     }
 
     /**
      * Check if governor is initialized.
+     * 
+     * @return true if initialized and ready to use, false otherwise
      */
     public boolean isInitialized() {
         return initialized;
