@@ -78,10 +78,13 @@ public class PerfManager implements CriticalEventSink {
             // Correcting logic:
             sampler.onFrame();
         }
-        gcPauseWatcher.update().ifPresent(event -> traceBuffer.record(PerfTraceEvent.gc(
-                event.timestampMillis(),
-                event.pauseMs(),
-                String.format("GC %.0fms", event.pauseMs()))));
+        GcPauseEvent event = gcPauseWatcher.update();
+        if (event != null) {
+            traceBuffer.record(PerfTraceEvent.gc(
+                    event.timestampMillis(),
+                    event.pauseMs(),
+                    String.format("GC %.0fms", event.pauseMs())));
+        }
     }
 
     public PerfSnapshot getSnapshot() {
