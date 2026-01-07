@@ -1,7 +1,9 @@
 package dev.nozh.core.monitoring;
 
 import org.junit.jupiter.api.*;
-import java.util.concurrent.*;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
@@ -31,28 +33,31 @@ class SystemHealthMonitorTest {
         SystemHealthMonitor monitor = new SystemHealthMonitor();
         int threadCount = 100;
         CountDownLatch latch = new CountDownLatch(threadCount);
+        AtomicInteger errors = new AtomicInteger(0);
         
-        ExecutorService executor = Executors.newFixedThreadPool(10);
-        
+        // Create and start threads manually instead of using ExecutorService
+        Thread[] threads = new Thread[threadCount];
         for (int i = 0; i < threadCount; i++) {
-            executor.submit(() -> {
+            threads[i] = new Thread(() -> {
                 try {
                     monitor.recordError("concurrent_test");
+                } catch (Exception e) {
+                    errors.incrementAndGet();
                 } finally {
                     latch.countDown();
                 }
             });
+            threads[i].start();
         }
         
-        assertTrue(latch.await(5, TimeUnit.SECONDS));
+        assertTrue(latch.await(5, TimeUnit.SECONDS), "Threads did not complete in time");
+        assertEquals(0, errors.get(), "Some threads encountered errors");
         
         double healthScore = monitor.getHealthScore();
         assertTrue(healthScore >= 0.0 && healthScore <= 1.0);
         
         int errorCount = monitor.getRecentErrorCount();
-        assertTrue(errorCount >= threadCount * 0.9); // Allow 10% margin
-        
-        executor.shutdown();
+        assertTrue(errorCount >= threadCount * 0.9, "Expected at least 90 errors, got: " + errorCount);
     }
     
     @Test
@@ -191,7 +196,7 @@ class SystemHealthMonitorTest {
     
     @Test
     @DisplayName("Should reset circuit breaker after timeout")
-    void testCircuitBreakerTimeout() throws InterruptedException {
+    void testCircuitBreakerTimeout() {
         SystemHealthMonitor monitor = new SystemHealthMonitor();
         
         // Trigger circuit breaker
