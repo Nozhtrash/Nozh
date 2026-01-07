@@ -697,7 +697,18 @@ public final class GovernorRunner {
             return SpikeCausalityReport.unknown();
         }
         SpikeCausalityReport report = perfManager.getSpikeCausality();
-        return report != null ? report : SpikeCausalityReport.unknown();
+        if (report == null) {
+            return SpikeCausalityReport.unknown();
+        }
+        if (sessionLearning != null && report.cause() != null) {
+            double learnedConfidence = sessionLearning.getCausalityConfidence(report.cause());
+            if (learnedConfidence > 0.0 && report.confidence() > 0.0) {
+                double blended = Math.min(0.95, report.confidence() * 0.7 + learnedConfidence * 0.3);
+                report = new SpikeCausalityReport(report.cause(), blended, report.detail());
+            }
+            sessionLearning.recordCausality(report.cause(), report.confidence());
+        }
+        return report;
     }
 
     private String applyCausalityBound(String detectedBound, SpikeCausalityReport report) {

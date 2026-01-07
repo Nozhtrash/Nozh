@@ -19,8 +19,9 @@ public final class RingTelemetryBuffer implements TelemetryBuffer {
 
     private final TelemetrySample[] buffer;
     private final int capacity;
+    private final double[] frametimeScratch;
 
-    private volatile int writeIndex = 0;
+    private volatile int startIndex = 0;
     private volatile int size = 0;
     private volatile int droppedCount = 0;
 
@@ -32,6 +33,7 @@ public final class RingTelemetryBuffer implements TelemetryBuffer {
         }
         this.capacity = capacity;
         this.buffer = new TelemetrySample[capacity];
+        this.frametimeScratch = new double[capacity];
     }
 
     /**
@@ -49,13 +51,13 @@ public final class RingTelemetryBuffer implements TelemetryBuffer {
 
         try {
             synchronized (buffer) {
-                buffer[writeIndex] = sample;
-                writeIndex = (writeIndex + 1) % capacity;
-
                 if (size < capacity) {
+                    int index = (startIndex + size) % capacity;
+                    buffer[index] = sample;
                     size++;
                 } else {
-                    // Buffer full, we're dropping oldest (implicit by overwrite)
+                    buffer[startIndex] = sample;
+                    startIndex = (startIndex + 1) % capacity;
                     droppedCount++;
                 }
             }
@@ -67,7 +69,6 @@ public final class RingTelemetryBuffer implements TelemetryBuffer {
 
     @Override
     public TelemetrySnapshot snapshot() {
-        TelemetrySample[] copy;
         int currentSize;
         int currentDropped;
 
@@ -98,11 +99,20 @@ public final class RingTelemetryBuffer implements TelemetryBuffer {
                 sumSquares += ft * ft;
                 frametimeSamples++;
 
-                if (ft > SPIKE_THRESHOLD_MS) {
-                    spikes++;
+            for (int i = 0; i < currentSize; i++) {
+                int index = (startIndex + i) % capacity;
+                TelemetrySample s = buffer[index];
+                if (s != null && s.hasFrametimeData()) {
+                    double ft = s.frametimeMs();
+                    frametimeScratch[frametimeCount++] = ft;
+                    sumFrametime += ft;
+                    frametimeSamples++;
+
+                    if (ft > SPIKE_THRESHOLD_MS) {
+                        spikes++;
+                    }
                 }
             }
-        }
 
         if (frametimeSamples == 0) {
             return TelemetrySnapshot.EMPTY;
@@ -126,7 +136,7 @@ public final class RingTelemetryBuffer implements TelemetryBuffer {
     public void clear() {
         synchronized (buffer) {
             Arrays.fill(buffer, null);
-            writeIndex = 0;
+            startIndex = 0;
             size = 0;
             droppedCount = 0;
         }
@@ -141,12 +151,11 @@ public final class RingTelemetryBuffer implements TelemetryBuffer {
         }
 
         // Sort only the valid portion
-        double[] sorted = Arrays.copyOf(values, count);
-        Arrays.sort(sorted);
+        Arrays.sort(values, 0, count);
 
         int p95Index = (int) Math.ceil(count * 0.95) - 1;
         p95Index = Math.max(0, Math.min(p95Index, count - 1));
 
-        return sorted[p95Index];
+        return values[p95Index];
     }
 }
