@@ -62,8 +62,11 @@ public final class CausalityPriorityResolver {
         if (prioritySet.isEmpty()) {
             return;
         }
-        candidates.sort(Comparator.comparingInt(candidate -> prioritySet.contains(candidate.capabilityId()) ? 1 : 0)
-                .reversed());
+        candidates.sort((ActionCandidate left, ActionCandidate right) -> {
+            boolean leftPreferred = prioritySet.contains(left.capabilityId());
+            boolean rightPreferred = prioritySet.contains(right.capabilityId());
+            return Boolean.compare(rightPreferred, leftPreferred);
+        });
     }
 
     private static EnumSet<CapabilityId> resolvePrioritySet(SpikeCauseType cause) {
