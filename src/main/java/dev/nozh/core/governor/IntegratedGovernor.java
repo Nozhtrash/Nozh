@@ -393,7 +393,7 @@ public final class IntegratedGovernor {
      * @return safe default ScenarioSnapshot
      */
     private ScenarioSnapshot createDefaultScenarioSnapshot() {
-        return new ScenarioSnapshot(Scenario.STANDARD, 0.5, System.currentTimeMillis());
+        return new ScenarioSnapshot(Scenario.STANDARD, 0.5);
     }
 
     /**
