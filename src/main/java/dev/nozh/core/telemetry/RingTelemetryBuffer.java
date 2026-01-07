@@ -83,6 +83,7 @@ public final class RingTelemetryBuffer implements TelemetryBuffer {
 
         // Calculate aggregates
         double sumFrametime = 0;
+        double sumSquares = 0;
         int frametimeSamples = 0;
         int spikes = 0;
 
@@ -96,6 +97,7 @@ public final class RingTelemetryBuffer implements TelemetryBuffer {
                 double ft = s.frametimeMs();
                 frametimes[frametimeCount++] = ft;
                 sumFrametime += ft;
+                sumSquares += ft * ft;
                 frametimeSamples++;
 
                 if (ft > SPIKE_THRESHOLD_MS) {
@@ -109,11 +111,13 @@ public final class RingTelemetryBuffer implements TelemetryBuffer {
         }
 
         double avg = sumFrametime / frametimeSamples;
+        double variance = (sumSquares / frametimeSamples) - (avg * avg);
+        double stddev = Math.sqrt(Math.max(0.0, variance));
 
         // Calculate P95
         double p95 = calculateP95(frametimes, frametimeCount);
 
-        return TelemetrySnapshot.of(avg, p95, spikes, currentSize, currentDropped);
+        return TelemetrySnapshot.of(avg, p95, stddev, spikes, currentSize, currentDropped);
     }
 
     @Override

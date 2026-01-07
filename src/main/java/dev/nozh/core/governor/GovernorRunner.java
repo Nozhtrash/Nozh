@@ -32,6 +32,7 @@ import dev.nozh.core.preset.ModpackProfile;
 import dev.nozh.core.preset.ModpackRegistry;
 import dev.nozh.core.preset.PresetTuningResolver;
 import dev.nozh.core.capability.RollbackGuarantee;
+import dev.nozh.core.telemetry.TelemetryManager;
 
 import dev.nozh.core.monitoring.ChunkLoadMonitor;
 import dev.nozh.core.monitoring.SystemMonitor;
@@ -65,6 +66,7 @@ public final class GovernorRunner {
     private final ActionSuccessTracker successTracker;
     private final PerfManager perfManager;
     private final Supplier<PerfSnapshot> perfSnapshotSupplier;
+    private final TelemetryManager telemetryManager;
     private final Map<dev.nozh.core.bus.CapabilityId, Long> rollbackCooldowns = new HashMap<>();
 
     // Intelligent components
@@ -104,6 +106,7 @@ public final class GovernorRunner {
             SessionLearning sessionLearning,
             PerfManager perfManager,
             ScenarioDetector scenarioDetector,
+            TelemetryManager telemetryManager,
             Supplier<PerfSnapshot> perfSnapshotSupplier) {
         ActionMatrix matrix = new ActionMatrix(
                 registry,
@@ -122,6 +125,7 @@ public final class GovernorRunner {
         this.successTracker = successTracker;
         this.perfManager = perfManager;
         this.scenarioDetector = scenarioDetector;
+        this.telemetryManager = telemetryManager;
         this.perfSnapshotSupplier = perfSnapshotSupplier != null ? perfSnapshotSupplier : PerfSnapshot::empty;
 
         this.predictiveAnalyzer = new PredictiveAnalyzer();
@@ -884,6 +888,7 @@ public final class GovernorRunner {
 
         boolean rollbackRequested = false;
         boolean rollbackApplied = false;
+        double measuredImpactMs = 0.0;
         if (outcome != ActionOutcome.POSITIVE && sufficientData) {
             if (config.rollbackEnabled) {
                 Long lastRollback = rollbackCooldowns.get(pending.capability());
@@ -899,16 +904,19 @@ public final class GovernorRunner {
             sessionLearning.recordOutcome(pending.capability(), pending.scenario(), ActionOutcome.NEGATIVE, 0.0,
                     p95Delta, spikeDelta);
             successTracker.recordFailure(pending.capability());
+            measuredImpactMs = p95Delta;
         } else if (outcome == ActionOutcome.POSITIVE) {
             double gainAvg = resolveGain(pending.baselineAvgMs(), currentSnapshot != null ? currentSnapshot.avgFrametimeMs() : Double.NaN);
             double gainP95 = resolveGain(pending.baselineP95Ms(), currentSnapshot != null ? currentSnapshot.p95FrametimeMs() : Double.NaN);
+            measuredImpactMs = Math.max(gainAvg, gainP95);
             sessionLearning.recordOutcome(pending.capability(), pending.scenario(), ActionOutcome.POSITIVE,
-                    Math.max(gainAvg, gainP95), p95Delta, spikeDelta);
+                    measuredImpactMs, p95Delta, spikeDelta);
             successTracker.recordSuccess(pending.capability());
         } else {
             sessionLearning.recordOutcome(pending.capability(), pending.scenario(), ActionOutcome.NEUTRAL, 0.0,
                     p95Delta, spikeDelta);
         }
+        recordEffectivenessOutcome(pending.capability(), outcome, measuredImpactMs);
 
         logger.debug(String.format(
                 "Governor action evaluation action=%s impact=%s decision=%s p95Delta=%.2fms spikesDelta=%d window=%ds",
@@ -950,6 +958,14 @@ public final class GovernorRunner {
             }
         }
         successTracker.clearDecisionSnapshot(pending.capability());
+    }
+
+    private void recordEffectivenessOutcome(dev.nozh.core.bus.CapabilityId capability, ActionOutcome outcome,
+            double measuredImpactMs) {
+        if (telemetryManager == null || capability == null || outcome == null) {
+            return;
+        }
+        telemetryManager.recordDecisionOutcome(capability, outcome, measuredImpactMs);
     }
 
     private double resolvePreP95(PendingAction pending) {
