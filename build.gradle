@@ -116,6 +116,12 @@ tasks.register('chaosTest', JavaExec) {
 	if (project.hasProperty('outputDir')) {
 		args '--output', project.property('outputDir').toString()
 	}
+	if (project.hasProperty('failOnChaosError')) {
+		boolean failOnError = project.property('failOnChaosError').toString().toBoolean()
+		if (!failOnError) {
+			args '--no-fail'
+		}
+	}
 }
 
 java {

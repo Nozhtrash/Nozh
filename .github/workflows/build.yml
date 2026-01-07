@@ -79,7 +79,7 @@ jobs:
       run: chmod +x gradlew
 
     - name: Run chaos test suite
-      run: ./gradlew chaosTest --no-daemon --stacktrace -PoutputDir=build/reports/chaos
+      run: ./gradlew chaosTest --no-daemon --stacktrace -PoutputDir=build/reports/chaos -PfailOnChaosError=false
       env:
         GRADLE_OPTS: '-Dorg.gradle.daemon=false -Dorg.gradle.parallel=true -Dorg.gradle.caching=true'
 

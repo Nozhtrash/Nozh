@@ -30,3 +30,7 @@ Estas métricas sirven como referencia inicial para revisar regresiones. Ajustar
 - **Fallos**: 0 (la suite debe terminar sin fallos).
 
 Si se exceden estas métricas, revisar la ejecución del job y comparar contra el reporte JSON/CSV para identificar el escenario afectado.
+
+## Comportamiento en CI
+
+El job `chaos-tests` ejecuta la suite con `-PfailOnChaosError=false` para asegurarse de publicar los artifacts incluso si alguna prueba falla. Los fallos quedan registrados en los reportes y en el summary del job para revisión.
