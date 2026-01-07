@@ -1,6 +1,7 @@
 package dev.nozh.core.governor;
 
 import dev.nozh.core.state.RuntimeState;
+import dev.nozh.core.state.StabilityStats;
 
 /**
  * Adaptive observation window calculator.
@@ -20,6 +21,12 @@ public final class AdaptiveWindowCalculator {
     private static final long SHORT_WINDOW = 10_000; // 10s - fast response
     private static final long NORMAL_WINDOW = 20_000; // 20s - balanced
     private static final long LONG_WINDOW = 30_000; // 30s - cautious
+    private static final double UNSTABLE_SCORE_THRESHOLD = 0.4;
+    private static final int FLAP_COUNT_THRESHOLD = 3;
+    private static final long FLAP_WINDOW_MS = 30_000L;
+    private static final double UNSTABLE_MULTIPLIER = 1.25;
+    private static final double FLAP_MULTIPLIER = 1.6;
+    private static final double SEVERE_FLAP_MULTIPLIER = 2.0;
 
     /**
      * Calculate adaptive observation window based on FPS variance.
@@ -29,17 +36,19 @@ public final class AdaptiveWindowCalculator {
      */
     public long calculateWindow(RuntimeState state) {
         double variance = calculateVariance(state);
+        long baseWindow;
 
         if (variance > HIGH_VARIANCE_THRESHOLD) {
             // Chaotic FPS → act quickly
-            return SHORT_WINDOW;
+            baseWindow = SHORT_WINDOW;
         } else if (variance < LOW_VARIANCE_THRESHOLD) {
             // Stable FPS → be cautious, avoid unnecessary changes
-            return LONG_WINDOW;
+            baseWindow = LONG_WINDOW;
         } else {
             // Normal variance → default behavior
-            return NORMAL_WINDOW;
+            baseWindow = NORMAL_WINDOW;
         }
+        return scaleWindowForStability(state, baseWindow);
     }
 
     /**
@@ -59,6 +68,27 @@ public final class AdaptiveWindowCalculator {
         // P95 much higher than avg → high variance
         double spread = p95Ms - avgMs;
         return spread * spread; // Variance ≈ spread²
+    }
+
+    private long scaleWindowForStability(RuntimeState state, long baseWindow) {
+        StabilityStats stats = state.stabilityStats() != null ? state.stabilityStats() : StabilityStats.defaults();
+        long scaled = baseWindow;
+        if (stats.score() > 0 && stats.score() <= UNSTABLE_SCORE_THRESHOLD) {
+            scaled = Math.round(scaled * UNSTABLE_MULTIPLIER);
+        }
+        if (isFlapping(stats)) {
+            double multiplier = stats.flapCount() >= 5 ? SEVERE_FLAP_MULTIPLIER : FLAP_MULTIPLIER;
+            scaled = Math.round(scaled * multiplier);
+        }
+        return Math.max(baseWindow, scaled);
+    }
+
+    private boolean isFlapping(StabilityStats stats) {
+        if (stats.flapCount() < FLAP_COUNT_THRESHOLD || stats.lastFlapTimestamp() <= 0) {
+            return false;
+        }
+        long now = System.currentTimeMillis();
+        return now - stats.lastFlapTimestamp() <= FLAP_WINDOW_MS;
     }
 
     /**

@@ -184,6 +184,11 @@ public final class GovernorRunner {
             return;
         }
 
+        if (actionBus.hasPendingCommands()) {
+            logger.debug("Skipping governor decision - action bus pending");
+            return;
+        }
+
         int suggestionQueueSize = state.suggestedActions() != null ? state.suggestedActions().size() : 0;
         if (suggestionQueueSize >= MAX_SUGGESTED_QUEUE) {
             logger.debug("Suggestion queue full, awaiting confirmations");

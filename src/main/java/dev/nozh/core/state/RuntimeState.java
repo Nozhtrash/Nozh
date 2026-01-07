@@ -55,6 +55,7 @@ public record RuntimeState(
         double tickTimeAvg,
         double tickTimeP95,
         int spikeCount,
+        StabilityStats stabilityStats,
         String lastDecisionReason,
         long lastDecisionTimestamp,
         double lastImpactMs,
@@ -71,7 +72,7 @@ public record RuntimeState(
         List<ScenarioHistoryEntry> scenarioHistory,
         Map<CapabilityId, CapabilityValue> baselineSettings,
         Map<CapabilityId, CapabilityValue> currentSettings) {
-    private static final int CURRENT_VERSION = 9; // Bump version
+    private static final int CURRENT_VERSION = 10; // Bump version
     private static final long SCENARIO_HISTORY_WINDOW_MS = 20_000L;
     private static final double SCENARIO_DOMINANCE_THRESHOLD = 0.55;
     private static final long RAPID_SCENARIO_CHANGE_WINDOW_MS = 5_000L;
@@ -105,6 +106,7 @@ public record RuntimeState(
                 -1.0, // tickTimeAvg
                 -1.0, // tickTimeP95
                 0, // spikeCount
+                StabilityStats.defaults(),
                 "", 0L, // lastDecisionReason, lastDecisionTimestamp
                 0.0, // lastImpactMs
                 ActionOutcome.NEUTRAL, // lastOutcome
@@ -142,6 +144,7 @@ public record RuntimeState(
                 sessionChangesCount + 1, // increment changes
                 avgFrametimeMs, p95FrametimeMs, p99FrametimeMs, frametimeStddevMs, tickTimeAvg, tickTimeP95,
                 spikeCount,
+                stabilityStats,
                 lastDecisionReason, lastDecisionTimestamp,
                 lastImpactMs, lastOutcome, lastDecisionAccepted,
                 sessionStartTime, stateVersion,
@@ -175,6 +178,7 @@ public record RuntimeState(
                 sessionChangesCount + 1,
                 avgFrametimeMs, p95FrametimeMs, p99FrametimeMs, frametimeStddevMs, tickTimeAvg, tickTimeP95,
                 spikeCount,
+                stabilityStats,
                 lastDecisionReason, lastDecisionTimestamp,
                 lastImpactMs, lastOutcome, lastDecisionAccepted,
                 sessionStartTime, stateVersion,
@@ -203,6 +207,7 @@ public record RuntimeState(
                 sessionChangesCount,
                 avgFrametimeMs, p95FrametimeMs, p99FrametimeMs, frametimeStddevMs, tickTimeAvg, tickTimeP95,
                 spikeCount,
+                stabilityStats,
                 lastDecisionReason, lastDecisionTimestamp,
                 lastImpactMs, lastOutcome, lastDecisionAccepted,
                 sessionStartTime, stateVersion,
@@ -235,6 +240,7 @@ public record RuntimeState(
                 sessionChangesCount,
                 avgFrametimeMs, p95FrametimeMs, p99FrametimeMs, frametimeStddevMs, tickTimeAvg, tickTimeP95,
                 spikeCount,
+                stabilityStats,
                 lastDecisionReason, lastDecisionTimestamp,
                 lastImpactMs, lastOutcome, lastDecisionAccepted,
                 sessionStartTime, stateVersion,
@@ -263,6 +269,7 @@ public record RuntimeState(
                 sessionChangesCount,
                 avgFrametimeMs, p95FrametimeMs, p99FrametimeMs, frametimeStddevMs, tickTimeAvg, tickTimeP95,
                 spikeCount,
+                stabilityStats,
                 lastDecisionReason, lastDecisionTimestamp,
                 lastImpactMs, lastOutcome, lastDecisionAccepted,
                 sessionStartTime, stateVersion,
@@ -293,6 +300,7 @@ public record RuntimeState(
                 sessionChangesCount,
                 avgFrametimeMs, p95FrametimeMs, p99FrametimeMs, frametimeStddevMs, tickTimeAvg, tickTimeP95,
                 spikeCount,
+                stabilityStats,
                 lastDecisionReason, lastDecisionTimestamp,
                 lastImpactMs, lastOutcome, lastDecisionAccepted,
                 sessionStartTime, stateVersion,
@@ -307,6 +315,14 @@ public record RuntimeState(
      */
     public RuntimeState withTelemetry(double avg, double p95, double p99, double stddev, int spikes, double tickAvg,
             double tickP95) {
+        StabilityStats updatedStability = stabilityStats != null ? stabilityStats : StabilityStats.defaults();
+        updatedStability = updatedStability.update(
+                avg,
+                p95,
+                stddev,
+                spikes,
+                scenarioConfidenceInfo().stability(),
+                System.currentTimeMillis());
         return new RuntimeState(
                 enabled, safeMode, autoTuning, debugLogs,
                 governorDisabled, governorCooldownActive, governorLastActionTimestamp,
@@ -315,6 +331,7 @@ public record RuntimeState(
                 actionHistory,
                 sessionChangesCount,
                 avg, p95, p99, stddev, tickAvg, tickP95, spikes,
+                updatedStability,
                 lastDecisionReason, lastDecisionTimestamp,
                 lastImpactMs, lastOutcome, lastDecisionAccepted,
                 sessionStartTime, stateVersion,
@@ -339,6 +356,7 @@ public record RuntimeState(
                 sessionChangesCount,
                 avgFrametimeMs, p95FrametimeMs, p99FrametimeMs, frametimeStddevMs, tickTimeAvg, tickTimeP95,
                 spikeCount,
+                stabilityStats,
                 lastDecisionReason, lastDecisionTimestamp,
                 lastImpactMs, lastOutcome, lastDecisionAccepted,
                 sessionStartTime, stateVersion,
@@ -361,6 +379,7 @@ public record RuntimeState(
                 sessionChangesCount,
                 avgFrametimeMs, p95FrametimeMs, p99FrametimeMs, frametimeStddevMs, tickTimeAvg, tickTimeP95,
                 spikeCount,
+                stabilityStats,
                 lastDecisionReason, lastDecisionTimestamp,
                 lastImpactMs, lastOutcome, lastDecisionAccepted,
                 sessionStartTime, stateVersion,
@@ -394,6 +413,7 @@ public record RuntimeState(
                 sessionChangesCount,
                 avgFrametimeMs, p95FrametimeMs, p99FrametimeMs, frametimeStddevMs, tickTimeAvg, tickTimeP95,
                 spikeCount,
+                stabilityStats,
                 lastDecisionReason, lastDecisionTimestamp,
                 lastImpactMs, lastOutcome, lastDecisionAccepted,
                 sessionStartTime, stateVersion,
@@ -427,6 +447,7 @@ public record RuntimeState(
                 sessionChangesCount,
                 avgFrametimeMs, p95FrametimeMs, p99FrametimeMs, frametimeStddevMs, tickTimeAvg, tickTimeP95,
                 spikeCount,
+                stabilityStats,
                 lastDecisionReason, lastDecisionTimestamp,
                 lastImpactMs, lastOutcome, lastDecisionAccepted,
                 sessionStartTime, stateVersion,
@@ -451,6 +472,7 @@ public record RuntimeState(
                 sessionChangesCount,
                 avgFrametimeMs, p95FrametimeMs, p99FrametimeMs, frametimeStddevMs, tickTimeAvg, tickTimeP95,
                 spikeCount,
+                stabilityStats,
                 reason != null ? reason : "",
                 timestamp,
                 lastImpactMs, lastOutcome, lastDecisionAccepted,
@@ -477,6 +499,7 @@ public record RuntimeState(
                 sessionChangesCount,
                 avgFrametimeMs, p95FrametimeMs, p99FrametimeMs, frametimeStddevMs, tickTimeAvg, tickTimeP95,
                 spikeCount,
+                stabilityStats,
                 lastDecisionReason, lastDecisionTimestamp,
                 lastImpactMs, lastOutcome, lastDecisionAccepted,
                 sessionStartTime, stateVersion,
@@ -498,6 +521,7 @@ public record RuntimeState(
                 sessionChangesCount,
                 avgFrametimeMs, p95FrametimeMs, p99FrametimeMs, frametimeStddevMs, tickTimeAvg, tickTimeP95,
                 spikeCount,
+                stabilityStats,
                 lastDecisionReason, lastDecisionTimestamp,
                 lastImpactMs, lastOutcome, lastDecisionAccepted,
                 sessionStartTime, stateVersion,
@@ -536,6 +560,7 @@ public record RuntimeState(
                 -1.0, // tickTimeAvg
                 -1.0, // tickTimeP95
                 0, // spikeCount
+                StabilityStats.defaults(),
                 "", 0L, // lastDecisionReason, lastDecisionTimestamp
                 0.0, // lastImpactMs
                 ActionOutcome.NEUTRAL, // lastOutcome
@@ -563,6 +588,7 @@ public record RuntimeState(
                 sessionChangesCount,
                 avgFrametimeMs, p95FrametimeMs, p99FrametimeMs, frametimeStddevMs, tickTimeAvg, tickTimeP95,
                 spikeCount,
+                stabilityStats,
                 lastDecisionReason, lastDecisionTimestamp,
                 lastImpactMs, lastOutcome, lastDecisionAccepted,
                 sessionStartTime, stateVersion,
@@ -590,6 +616,7 @@ public record RuntimeState(
                 sessionChangesCount,
                 avgFrametimeMs, p95FrametimeMs, p99FrametimeMs, frametimeStddevMs, tickTimeAvg, tickTimeP95,
                 spikeCount,
+                stabilityStats,
                 lastDecisionReason, lastDecisionTimestamp,
                 lastImpactMs, lastOutcome, lastDecisionAccepted,
                 sessionStartTime, stateVersion,
@@ -621,6 +648,7 @@ public record RuntimeState(
                 sessionChangesCount,
                 avgFrametimeMs, p95FrametimeMs, p99FrametimeMs, frametimeStddevMs, tickTimeAvg, tickTimeP95,
                 spikeCount,
+                stabilityStats,
                 lastDecisionReason, lastDecisionTimestamp,
                 updatedEntry.p95DeltaMs(),
                 updatedEntry.outcome(),
