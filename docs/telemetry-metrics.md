@@ -152,3 +152,64 @@ Este documento define un checklist operativo de métricas, su origen dentro de N
   - `eventos de cuarentena + safe mode en 7d / total sesiones staging en 7d`.
 - **Crash por capability (30d, qa):**
   - `crash_events agrupados por capabilityId / total sesiones qa en 30d`.
+
+## 7) Límites numéricos, alertas y rollback operativo
+
+### 7.1 Límites numéricos (crash-free)
+
+**Objetivo base (prod):**
+- **Crash-free sessions ≥ 99.5% en 24h**.
+- **Crash-free sessions ≥ 99.5% en 7d**.
+
+**Definición de crash-free session:**
+- Sesión sin eventos de crash (ver 6.2) ni crash loop recovery (ver 6.3).
+
+### 7.2 Criterios de rollback (caídas sostenidas o picos)
+
+**Rollback inmediato (pico severo):**
+- Crash-free en 24h **< 99.0%** en prod, o
+- Crash loop rate en 24h **≥ 0.5%** del total de sesiones.
+
+**Rollback por degradación sostenida:**
+- Crash-free en 24h **< 99.5%** durante **3 ventanas consecutivas** (p. ej., 3 reportes horarios), o
+- Crash-free en 7d **< 99.5%** con tendencia descendente **≥ 0.3 pp** semana a semana.
+
+**Exclusiones antes de rollback:**
+- Validar que no haya campaña de QA/experimentos de estrés que explique el spike.
+- Confirmar ausencia de cambio externo (driver/OS) que afecte al baseline.
+
+### 7.3 Alertas y notificaciones automáticas
+
+**Alertas críticas (pager):**
+- Crash-free 24h **< 99.0%**.
+- Crash loop rate 24h **≥ 0.5%**.
+
+**Alertas de advertencia (canal #ops):**
+- Crash-free 24h **< 99.5%**.
+- Crash-free 7d **< 99.5%**.
+
+**Notificaciones automáticas:**
+- Publicar resumen con:
+  - Ventana, entorno, versión, delta vs baseline.
+  - Recomendación automática: *rollback* si se cumple criterio 7.2.
+  - Enlace a export CSV/JSON correspondiente.
+
+### 7.4 Procedimiento operativo de rollback y responsables
+
+**Responsables:**
+- **DRI Operaciones (on-call):** ejecución del rollback y comunicación.
+- **DRI Ingeniería:** análisis de causa raíz y validación post-rollback.
+- **QA:** verificación rápida en staging/qa si aplica.
+
+**Pasos:**
+1. Confirmar alerta (7.3) con métricas en 24h/7d y revisar logs.
+2. Verificar exclusiones (7.2) y consistencia del spike.
+3. Ejecutar rollback según el entorno:
+   - **Prod:** revertir a la última versión estable y reiniciar despliegue.
+   - **Staging/QA:** revertir build y fijar versión para evitar auto-update.
+4. Registrar incidente:
+   - Versión afectada, ventana, métricas, y decisión tomada.
+5. Validar recuperación:
+   - Crash-free vuelve a **≥ 99.5%** en 24h y crash loop rate < 0.5%.
+6. Abrir acción correctiva:
+   - Ticket con sospechas, logs y diff de cambios.
