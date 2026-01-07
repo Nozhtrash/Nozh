@@ -77,7 +77,7 @@ public final class ChaosTestRunner {
         int passed = (int) results.stream().filter(ChaosScenarioResult::passed).count();
         int failed = results.size() - passed;
 
-        return new ChaosTestReport(results, results.size(), passed, failed, totalDuration);
+        return new ChaosTestReport(results, results.size(), passed, failed, totalDuration, buildReportMetadata());
     }
 
     /**
@@ -108,6 +108,12 @@ public final class ChaosTestRunner {
                     return testHudSnapshotCorruption(start);
                 case CRASH_LOOP_RECOVERY:
                     return testCrashLoopRecovery(start);
+                case ENTITY_SWARM:
+                    return testEntitySwarm(start);
+                case CHUNK_SPAM:
+                    return testChunkSpam(start);
+                case SHADER_LOAD:
+                    return testShaderLoad(start);
                 default:
                     return ChaosScenarioResult.fail(scenario, "Unknown scenario", 0);
             }
@@ -437,6 +443,103 @@ public final class ChaosTestRunner {
         return ChaosScenarioResult.pass(ChaosScenario.CRASH_LOOP_RECOVERY, duration);
     }
 
+    private static ChaosScenarioResult testEntitySwarm(long start) {
+        int entityCount = 350;
+        int ticks = 240;
+        List<SimulatedEntity> entities = new ArrayList<>(entityCount);
+        for (int i = 0; i < entityCount; i++) {
+            entities.add(new SimulatedEntity(i, i % 23, i % 17));
+        }
+
+        int updates = 0;
+        double accumulatedMotion = 0.0;
+        for (int tick = 0; tick < ticks; tick++) {
+            for (SimulatedEntity entity : entities) {
+                entity.step(tick);
+                accumulatedMotion += entity.energy();
+                updates++;
+            }
+        }
+
+        if (updates != entityCount * ticks) {
+            long duration = System.currentTimeMillis() - start;
+            return ChaosScenarioResult.fail(ChaosScenario.ENTITY_SWARM,
+                    "Entity updates mismatch: " + updates, duration);
+        }
+
+        if (!Double.isFinite(accumulatedMotion) || accumulatedMotion <= 0.0) {
+            long duration = System.currentTimeMillis() - start;
+            return ChaosScenarioResult.fail(ChaosScenario.ENTITY_SWARM,
+                    "Entity simulation produced invalid motion", duration);
+        }
+
+        long duration = System.currentTimeMillis() - start;
+        return ChaosScenarioResult.pass(ChaosScenario.ENTITY_SWARM, duration);
+    }
+
+    private static ChaosScenarioResult testChunkSpam(long start) {
+        int requests = 5000;
+        int processed = 0;
+        int maxQueue = 0;
+        java.util.ArrayDeque<ChunkRequest> queue = new java.util.ArrayDeque<>();
+
+        for (int i = 0; i < requests; i++) {
+            queue.add(new ChunkRequest(i, i % 2 == 0));
+            maxQueue = Math.max(maxQueue, queue.size());
+            if (i % 3 == 0) {
+                processed += drainQueue(queue, 5);
+            }
+        }
+
+        processed += drainQueue(queue, queue.size());
+
+        if (processed != requests) {
+            long duration = System.currentTimeMillis() - start;
+            return ChaosScenarioResult.fail(ChaosScenario.CHUNK_SPAM,
+                    "Chunk requests processed mismatch: " + processed, duration);
+        }
+
+        if (maxQueue < 500) {
+            long duration = System.currentTimeMillis() - start;
+            return ChaosScenarioResult.fail(ChaosScenario.CHUNK_SPAM,
+                    "Chunk spam did not reach stress threshold", duration);
+        }
+
+        long duration = System.currentTimeMillis() - start;
+        return ChaosScenarioResult.pass(ChaosScenario.CHUNK_SPAM, duration);
+    }
+
+    private static ChaosScenarioResult testShaderLoad(long start) {
+        String[] shaderPacks = {"OFF", "RAIN_STORM", "CINEMATIC", "PERFORMANCE"};
+        String current = shaderPacks[0];
+        int toggles = 0;
+        double shaderCost = 0.0;
+
+        for (int i = 0; i < 240; i++) {
+            String next = shaderPacks[i % shaderPacks.length];
+            if (!next.equals(current)) {
+                toggles++;
+                current = next;
+            }
+            shaderCost += simulateShaderFrameCost(current, i);
+        }
+
+        if (toggles < 100) {
+            long duration = System.currentTimeMillis() - start;
+            return ChaosScenarioResult.fail(ChaosScenario.SHADER_LOAD,
+                    "Shader toggling did not occur frequently enough", duration);
+        }
+
+        if (!Double.isFinite(shaderCost) || shaderCost <= 0.0) {
+            long duration = System.currentTimeMillis() - start;
+            return ChaosScenarioResult.fail(ChaosScenario.SHADER_LOAD,
+                    "Shader load simulation produced invalid cost", duration);
+        }
+
+        long duration = System.currentTimeMillis() - start;
+        return ChaosScenarioResult.pass(ChaosScenario.SHADER_LOAD, duration);
+    }
+
     private ChaosTestRunner() {
         // Static utility
     }
@@ -498,6 +601,82 @@ public final class ChaosTestRunner {
                 state.scenarioHistory(),
                 state.baselineSettings(),
                 state.currentSettings());
+    }
+
+    private static ChaosReportMetadata buildReportMetadata() {
+        int renderDistance = Integer.getInteger("nozh.chaos.renderDistance", 16);
+        int simulationDistance = Integer.getInteger("nozh.chaos.simulationDistance", 12);
+        String shaderPack = System.getProperty("nozh.chaos.shaderPack", "OFF");
+        return new ChaosReportMetadata(renderDistance, simulationDistance, shaderPack);
+    }
+
+    private static int drainQueue(java.util.ArrayDeque<ChunkRequest> queue, int max) {
+        int drained = 0;
+        int entropy = 0;
+        while (!queue.isEmpty() && drained < max) {
+            ChunkRequest request = queue.removeFirst();
+            entropy ^= request.id();
+            if (request.isLoad()) {
+                drained++;
+            } else {
+                drained++;
+            }
+        }
+        if (entropy == Integer.MIN_VALUE) {
+            return drained;
+        }
+        return drained;
+    }
+
+    private static double simulateShaderFrameCost(String shaderPack, int frame) {
+        double base = 2.5;
+        double packMultiplier = switch (shaderPack) {
+            case "RAIN_STORM" -> 3.5;
+            case "CINEMATIC" -> 3.0;
+            case "PERFORMANCE" -> 1.5;
+            default -> 1.0;
+        };
+        return base * packMultiplier + (frame % 7) * 0.1;
+    }
+
+    private static final class SimulatedEntity {
+        private double x;
+        private double y;
+        private double z;
+
+        private SimulatedEntity(double x, double y, double z) {
+            this.x = x;
+            this.y = y;
+            this.z = z;
+        }
+
+        private void step(int tick) {
+            x += Math.sin(tick * 0.05 + x) * 0.1;
+            y += Math.cos(tick * 0.03 + y) * 0.1;
+            z += Math.sin(tick * 0.04 + z) * 0.1;
+        }
+
+        private double energy() {
+            return x * x + y * y + z * z;
+        }
+    }
+
+    private static final class ChunkRequest {
+        private final int id;
+        private final boolean load;
+
+        private ChunkRequest(int id, boolean load) {
+            this.id = id;
+            this.load = load;
+        }
+
+        private boolean isLoad() {
+            return load;
+        }
+
+        private int id() {
+            return id;
+        }
     }
 
     private static final class IntermittentChaosProvider implements CapabilityProvider {
