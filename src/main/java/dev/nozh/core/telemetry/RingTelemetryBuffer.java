@@ -25,6 +25,16 @@ public final class RingTelemetryBuffer implements TelemetryBuffer {
     private volatile int droppedCount = 0;
 
     private static final double SPIKE_THRESHOLD_MS = 50.0; // Configurable
+    private static final int SPIKE_BURST_SAMPLES = 120;
+    private static final int STABLE_SAMPLE_WINDOW = 180;
+    private static final int BASE_SAMPLE_STRIDE = 4;
+
+    private int sampleStride = 1;
+    private int sampleCounter = 0;
+    private int stableSampleCount = 0;
+    private int spikeBurstRemaining = 0;
+    private int overheadSampleCounter = 0;
+    private volatile long averageAddNanos = 0;
 
     public RingTelemetryBuffer(int capacity) {
         if (capacity <= 0) {
@@ -43,8 +53,38 @@ public final class RingTelemetryBuffer implements TelemetryBuffer {
 
     @Override
     public void add(TelemetrySample sample) {
+        long startNanos = 0;
+        boolean trackOverhead = (overheadSampleCounter++ & 0xF) == 0;
+        if (trackOverhead) {
+            startNanos = System.nanoTime();
+        }
+
         if (sample == null) {
+            recordOverheadIfNeeded(trackOverhead, startNanos);
             return; // Fail silently per Contract 4
+        }
+
+        boolean spike = sample.hasFrametimeData() && sample.frametimeMs() > SPIKE_THRESHOLD_MS;
+        if (spike) {
+            spikeBurstRemaining = SPIKE_BURST_SAMPLES;
+        }
+
+        if (spikeBurstRemaining > 0) {
+            if (!spike) {
+                spikeBurstRemaining--;
+            }
+            sampleStride = 1;
+            stableSampleCount = 0;
+        } else {
+            stableSampleCount++;
+            sampleStride = stableSampleCount >= STABLE_SAMPLE_WINDOW ? BASE_SAMPLE_STRIDE : 1;
+        }
+
+        if (!spike && spikeBurstRemaining == 0 && sampleStride > 1) {
+            if ((sampleCounter++ % sampleStride) != 0) {
+                recordOverheadIfNeeded(trackOverhead, startNanos);
+                return;
+            }
         }
 
         try {
@@ -62,6 +102,8 @@ public final class RingTelemetryBuffer implements TelemetryBuffer {
         } catch (Exception e) {
             // NEVER throw - Contract 4.7
             droppedCount++;
+        } finally {
+            recordOverheadIfNeeded(trackOverhead, startNanos);
         }
     }
 
@@ -132,6 +174,20 @@ public final class RingTelemetryBuffer implements TelemetryBuffer {
     }
 
     /**
+     * Average sampled add() overhead in microseconds.
+     */
+    public double getAverageAddOverheadMicros() {
+        return averageAddNanos / 1000.0;
+    }
+
+    /**
+     * Check if average sampled add() overhead is within budget in milliseconds.
+     */
+    public boolean isOverheadWithinBudget(double maxMs) {
+        return averageAddNanos <= (long) (maxMs * 1_000_000.0);
+    }
+
+    /**
      * Calculate P95 from sorted array segment.
      */
     private double calculateP95(double[] values, int count) {
@@ -147,5 +203,20 @@ public final class RingTelemetryBuffer implements TelemetryBuffer {
         p95Index = Math.max(0, Math.min(p95Index, count - 1));
 
         return sorted[p95Index];
+    }
+
+    private void recordOverheadIfNeeded(boolean trackOverhead, long startNanos) {
+        if (!trackOverhead) {
+            return;
+        }
+        long duration = System.nanoTime() - startNanos;
+        if (duration <= 0) {
+            return;
+        }
+        if (averageAddNanos == 0) {
+            averageAddNanos = duration;
+        } else {
+            averageAddNanos = (averageAddNanos * 15 + duration) / 16;
+        }
     }
 }

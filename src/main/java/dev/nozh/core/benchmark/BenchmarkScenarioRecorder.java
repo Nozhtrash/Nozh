@@ -117,7 +117,7 @@ public final class BenchmarkScenarioRecorder {
             Path decisionLatencyJson = null;
             for (TelemetryExportFormat format : formats) {
                 Path export = perfManager != null ? perfManager.exportTelemetry(sessionDir, format) : null;
-                if (format == TelemetryExportFormat.CSV) {
+                if (format.isCsv()) {
                     csv = export;
                 } else {
                     json = export;
