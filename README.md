@@ -67,6 +67,15 @@
 - Some capabilities are **DEGRADED or no-op** in vanilla; NOZH will back off in those cases.
 - External mod updates can break reflection-based adapters (Sodium/Iris APIs are not stable).
 
+## Configuration (recommended defaults)
+
+These defaults are tuned for **real hardware baselines** and common 60–144 Hz panels:
+
+- `targetFps = 60` (set to 120/144/240 if your monitor and GPU can sustain it).
+- `observationWindowSeconds = 5` (enough samples to smooth spikes without lagging reactions).
+- `cooldownActionMillis = 120000` (per-action cooldown to avoid churn).
+- `cooldownGlobalMinIntervalMillis = 60000` (global guardrail between any actions).
+
 ## Rough progress estimate (subjective)
 
 - **Core loop + telemetry + HUD:** ~70–80% complete.
@@ -128,6 +137,15 @@ Overall: **~45–55% of the “full vision”** described in `future.txt` + extr
 - La detección de escenarios es heurística y puede fallar (p. ej. construcción con inventario puede parecer AFK).
 - Algunas capacidades están **DEGRADED o no-op** en vanilla; NOZH retrocede en esos casos.
 - Actualizaciones de mods externos pueden romper adapters basados en reflection.
+
+## Configuración (defaults recomendados)
+
+Estos defaults están afinados para **hardware real** y paneles comunes de 60–144 Hz:
+
+- `targetFps = 60` (sube a 120/144/240 si tu monitor y GPU lo sostienen).
+- `observationWindowSeconds = 5` (suficientes muestras sin retrasar la reacción).
+- `cooldownActionMillis = 120000` (cooldown por acción para evitar oscilaciones).
+- `cooldownGlobalMinIntervalMillis = 60000` (mínimo global entre acciones).
 
 ## Estimación de progreso (subjetiva)
 

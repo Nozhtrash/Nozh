@@ -61,6 +61,13 @@ public final class ConfigManager {
                         config = migrated;
 
                         boolean corrected = config.validate();
+                        if (corrected) {
+                            java.util.List<String> criticalCorrections = config.consumeCriticalCorrections();
+                            if (!criticalCorrections.isEmpty()) {
+                                NozhConstants.LOGGER.warn("CRITICAL config corrections applied: {}",
+                                        String.join("; ", criticalCorrections));
+                            }
+                        }
                         boolean hardwareUpdated = ensureHardwareProfile(config);
                         if (corrected || migrated != loaded) {
                             NozhConstants.LOGGER.warn("Config had invalid values or was migrated, re-saving");
