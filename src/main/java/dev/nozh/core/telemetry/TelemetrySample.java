@@ -1,7 +1,5 @@
 package dev.nozh.core.telemetry;
 
-import com.google.errorprone.annotations.CanIgnoreReturnValue;
-
 /**
  * Telemetry sample (Contract 4).
  * 
@@ -95,7 +93,6 @@ public record TelemetrySample(
      * @param droppedSamples dropped sample count
      * @return valid TelemetrySample for testing
      */
-    @CanIgnoreReturnValue
     public static TelemetrySample forTesting(
             double frametimeMs,
             double tickMs,
