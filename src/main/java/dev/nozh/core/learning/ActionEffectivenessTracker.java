@@ -4,7 +4,11 @@ import dev.nozh.NozhConstants;
 import dev.nozh.core.governor.DecisionReasoning;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.concurrent.*;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
+import java.util.Iterator;
 
 /**
  * Tracks effectiveness of actions to enable learning.
@@ -17,31 +21,27 @@ import java.util.concurrent.*;
  * 
  * Uses this data to improve future decisions.
  * 
- * MEMORY-SAFETY: Fixed in audit - automatic cleanup of stale pending actions.
- * 
  * TASK 9: Performance learning - outcome tracking
+ * AUDIT FIX #20: Implemented timeout cleanup for stale pending actions to prevent memory leak.
  */
 public final class ActionEffectivenessTracker {
 
     private static final long PENDING_ACTION_TIMEOUT_MS = 30000; // 30 seconds
-    private static final int MAX_PENDING_ACTIONS = 100; // Prevent unbounded growth
+    private static final int MAX_PENDING_ACTIONS = 100;
     
     private final Map<String, ActionStats> actionStats = new ConcurrentHashMap<>();
     private final Map<String, PendingAction> pendingActions = new ConcurrentHashMap<>();
     
-    // Cleanup thread to prevent memory leaks
-    private final ScheduledExecutorService cleanupExecutor;
-    private volatile boolean shutdown = false;
-
-    public ActionEffectivenessTracker() {
-        // Initialize cleanup daemon thread
-        this.cleanupExecutor = Executors.newSingleThreadScheduledExecutor(r -> {
+    // AUDIT FIX #20: Cleanup thread for stale pending actions
+    private final ScheduledExecutorService cleanupExecutor = 
+        Executors.newSingleThreadScheduledExecutor(r -> {
             Thread t = new Thread(r, "ActionTracker-Cleanup");
-            t.setDaemon(true); // Won't prevent JVM shutdown
+            t.setDaemon(true);
             return t;
         });
-        
-        // Schedule periodic cleanup every 30 seconds
+
+    public ActionEffectivenessTracker() {
+        // AUDIT FIX #20: Start periodic cleanup of stale pending actions
         cleanupExecutor.scheduleAtFixedRate(
             this::cleanupStalePendingActions,
             30, 30, TimeUnit.SECONDS
@@ -50,21 +50,22 @@ public final class ActionEffectivenessTracker {
 
     /**
      * Record action execution start.
-     * 
-     * @throws IllegalStateException if too many pending actions (> MAX_PENDING_ACTIONS)
+     * AUDIT FIX #20: Added limit check to prevent unbounded growth.
      */
     public void recordActionStart(String actionId, double expectedFpsDelta, DecisionReasoning reasoning) {
-        // Check capacity limit to prevent unbounded growth
+        // Check limit to prevent memory issues
         if (pendingActions.size() >= MAX_PENDING_ACTIONS) {
-            // Try cleanup first
+            NozhConstants.LOGGER.warn(
+                "Too many pending actions ({}), cleaning up before adding: {}",
+                pendingActions.size(), actionId
+            );
             cleanupStalePendingActions();
             
-            // If still over limit, warn and reject
+            // If still at limit after cleanup, reject the new action
             if (pendingActions.size() >= MAX_PENDING_ACTIONS) {
-                NozhConstants.LOGGER.warn(
-                    "Too many pending actions ({}), action {} not tracked. " +
-                    "This may indicate actions not being completed properly.",
-                    pendingActions.size(), actionId
+                NozhConstants.LOGGER.error(
+                    "Cannot track action {}: pending actions limit reached ({})",
+                    actionId, MAX_PENDING_ACTIONS
                 );
                 return;
             }
@@ -85,8 +86,7 @@ public final class ActionEffectivenessTracker {
     public void recordActionResult(String actionId, double actualFpsDelta, boolean success) {
         PendingAction pending = pendingActions.remove(actionId);
         if (pending == null) {
-            // Action not tracked or already completed/timed out
-            return;
+            return; // Action not tracked or already completed
         }
 
         long duration = System.currentTimeMillis() - pending.startTime;
@@ -98,6 +98,52 @@ public final class ActionEffectivenessTracker {
                 success,
                 duration
         );
+    }
+
+    /**
+     * AUDIT FIX #20: Clean up stale pending actions that have timed out.
+     * This prevents memory leaks when actions start but never complete.
+     */
+    private void cleanupStalePendingActions() {
+        long now = System.currentTimeMillis();
+        int removedCount = 0;
+        
+        Iterator<Map.Entry<String, PendingAction>> iterator = pendingActions.entrySet().iterator();
+        while (iterator.hasNext()) {
+            Map.Entry<String, PendingAction> entry = iterator.next();
+            PendingAction pending = entry.getValue();
+            
+            if (now - pending.startTime > PENDING_ACTION_TIMEOUT_MS) {
+                iterator.remove();
+                removedCount++;
+                
+                // Record as failed action
+                ActionStats stats = actionStats.computeIfAbsent(
+                    pending.actionId, 
+                    k -> new ActionStats(pending.actionId)
+                );
+                stats.recordExecution(
+                    pending.expectedFpsDelta,
+                    0.0, // No FPS improvement
+                    false, // Failed due to timeout
+                    PENDING_ACTION_TIMEOUT_MS
+                );
+                
+                NozhConstants.LOGGER.warn(
+                    "Cleaned up stale pending action: {} (age: {}ms)",
+                    pending.actionId,
+                    now - pending.startTime
+                );
+            }
+        }
+        
+        if (removedCount > 0) {
+            NozhConstants.LOGGER.info(
+                "Cleanup removed {} stale pending actions. Remaining: {}",
+                removedCount,
+                pendingActions.size()
+            );
+        }
     }
 
     /**
@@ -139,10 +185,9 @@ public final class ActionEffectivenessTracker {
     public Map<String, ActionStats> getAllStats() {
         return new HashMap<>(actionStats);
     }
-    
+
     /**
-     * Get count of pending actions.
-     * Useful for monitoring and detecting issues.
+     * Get count of currently pending actions.
      */
     public int getPendingActionCount() {
         return pendingActions.size();
@@ -155,74 +200,20 @@ public final class ActionEffectivenessTracker {
         actionStats.clear();
         pendingActions.clear();
     }
-    
+
     /**
-     * Shutdown cleanup thread and release resources.
-     * Should be called when tracker is no longer needed.
+     * Shutdown the cleanup executor.
+     * AUDIT FIX #20: Proper resource cleanup.
      */
     public void shutdown() {
-        if (shutdown) {
-            return;
-        }
-        shutdown = true;
-        
+        cleanupExecutor.shutdown();
         try {
-            cleanupExecutor.shutdown();
             if (!cleanupExecutor.awaitTermination(5, TimeUnit.SECONDS)) {
                 cleanupExecutor.shutdownNow();
             }
         } catch (InterruptedException e) {
             cleanupExecutor.shutdownNow();
             Thread.currentThread().interrupt();
-        }
-        
-        NozhConstants.LOGGER.info("ActionEffectivenessTracker shutdown complete");
-    }
-    
-    /**
-     * Clean up stale pending actions that have timed out.
-     * Prevents memory leak from actions that never complete.
-     * 
-     * Called periodically by cleanup thread and on-demand when hitting limits.
-     */
-    private void cleanupStalePendingActions() {
-        if (shutdown) {
-            return;
-        }
-        
-        long now = System.currentTimeMillis();
-        int removedCount = 0;
-        
-        // Find and remove timed-out actions
-        for (Map.Entry<String, PendingAction> entry : pendingActions.entrySet()) {
-            PendingAction pending = entry.getValue();
-            long age = now - pending.startTime;
-            
-            if (age > PENDING_ACTION_TIMEOUT_MS) {
-                if (pendingActions.remove(entry.getKey()) != null) {
-                    removedCount++;
-                    
-                    // Record as failed execution
-                    ActionStats stats = actionStats.computeIfAbsent(
-                        pending.actionId, 
-                        k -> new ActionStats(pending.actionId)
-                    );
-                    stats.recordExecution(
-                        pending.expectedFpsDelta,
-                        0.0, // No actual delta since it timed out
-                        false, // Failed
-                        age
-                    );
-                }
-            }
-        }
-        
-        if (removedCount > 0) {
-            NozhConstants.LOGGER.warn(
-                "Cleaned up {} stale pending actions (timeout: {}ms). " +
-                "This may indicate actions hanging or not completing properly.",
-                removedCount, PENDING_ACTION_TIMEOUT_MS
-            );
         }
     }
 
