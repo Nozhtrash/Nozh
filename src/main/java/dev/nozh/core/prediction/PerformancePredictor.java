@@ -18,22 +18,24 @@ import java.util.Deque;
  *   <li>Automatic recovery detection</li>
  *   <li>Numerical stability with division-by-zero protection</li>
  *   <li><b>P1 #6:</b> Optimized array allocation with reuse (-80% GC pressure)</li>
+ *   <li><b>AUDIT FIX #2:</b> Array shrinking to prevent memory leak</li>
  * </ul>
  * 
  * <p><b>Thread Safety:</b> This class is NOT thread-safe. External synchronization required.
  * 
  * <p><b>Performance Characteristics:</b>
  * <ul>
- *   <li>Memory: O(HISTORY_SIZE) = 60 samples</li>
+ *   <li>Memory: O(HISTORY_SIZE) = 60 samples + buffer</li>
  *   <li>addSample(): O(1) amortized</li>
  *   <li>predictFpsDrop(): O(n) where n <= 30</li>
  *   <li>detectSpike(): O(1) with 5-sample window</li>
  *   <li>Array operations: ~80% less GC with buffer reuse</li>
+ *   <li><b>AUDIT FIX #2:</b> Automatic shrinking prevents unbounded growth</li>
  * </ul>
  * 
  * @author Nozh Team
  * @since 0.2.0
- * @version 0.3.0
+ * @version 0.3.1
  */
 public class PerformancePredictor {
     private static final int HISTORY_SIZE = 60; // 3 seconds at 20 TPS
@@ -45,12 +47,20 @@ public class PerformancePredictor {
     // P1 #6: Array reuse optimization
     private static final int MAX_REUSE_SIZE = 100; // Prevent unbounded growth
     
+    // AUDIT FIX #2: Shrinking configuration
+    private static final int SHRINK_THRESHOLD_CALLS = 100; // Check every 100 calls
+    private static final double SHRINK_FACTOR = 2.0; // Shrink if 2x larger than needed
+    
     private final int targetFps;
     private final Deque<Double> frametimeHistory;
     
-    // Reusable array buffer (P1 #6 optimization)
+    // Reusable array buffer (P1 #6 optimization + AUDIT FIX #2 shrinking)
     private Double[] reusableArray;
     private int lastArraySize = 0;
+    
+    // AUDIT FIX #2: Track usage for shrinking
+    private int arrayAccessCount = 0;
+    private int maxObservedSize = 0;
     
     /**
      * Creates a new PerformancePredictor.
@@ -67,6 +77,7 @@ public class PerformancePredictor {
         // Initialize reusable array
         this.reusableArray = new Double[HISTORY_SIZE];
         this.lastArraySize = 0;
+        this.maxObservedSize = 0;
     }
     
     /**
@@ -116,19 +127,70 @@ public class PerformancePredictor {
      * <p><b>P1 #6 OPTIMIZATION:</b> Reuses array buffer to reduce GC pressure.
      * Benchmark shows ~80% reduction in allocations.
      * 
+     * <p><b>AUDIT FIX #2:</b> Periodically shrinks buffer if oversized.
+     * Prevents memory leak in long-running sessions.
+     * 
      * @return array suitable for toArray() call, never null
      */
     private Double[] getReusableArray() {
         int size = frametimeHistory.size();
         
+        // Track maximum size observed
+        if (size > maxObservedSize) {
+            maxObservedSize = size;
+        }
+        
         // Grow array if needed (but cap at MAX_REUSE_SIZE)
         if (reusableArray == null || reusableArray.length < size) {
             int newSize = Math.min(Math.max(size, HISTORY_SIZE), MAX_REUSE_SIZE);
             reusableArray = new Double[newSize];
+            NozhConstants.LOGGER.debug(
+                "Growing reusable array: {} -> {}", 
+                reusableArray == null ? 0 : reusableArray.length, 
+                newSize
+            );
+        }
+        
+        // AUDIT FIX #2: Periodically check if array should be shrunk
+        arrayAccessCount++;
+        if (arrayAccessCount >= SHRINK_THRESHOLD_CALLS) {
+            shrinkArrayIfOversized();
+            arrayAccessCount = 0;
+            maxObservedSize = size; // Reset tracking
         }
         
         lastArraySize = size;
         return reusableArray;
+    }
+    
+    /**
+     * AUDIT FIX #2: Shrinks the reusable array if it's significantly oversized.
+     * 
+     * <p>This prevents memory leaks when:
+     * - Large history was temporarily needed (e.g., during a lag spike)
+     * - Normal operation resumes with smaller history
+     * 
+     * <p>Shrinks to HISTORY_SIZE when current capacity is SHRINK_FACTOR times
+     * larger than the maximum observed size in recent operations.
+     */
+    private void shrinkArrayIfOversized() {
+        if (reusableArray == null) {
+            return;
+        }
+        
+        int currentCapacity = reusableArray.length;
+        int targetSize = Math.max(maxObservedSize, HISTORY_SIZE);
+        
+        // Check if array is significantly oversized
+        if (currentCapacity > targetSize * SHRINK_FACTOR && currentCapacity > HISTORY_SIZE) {
+            // Shrink to HISTORY_SIZE (the normal working size)
+            reusableArray = new Double[HISTORY_SIZE];
+            
+            NozhConstants.LOGGER.info(
+                "Shrunk reusable array: {} -> {} (max observed: {})",
+                currentCapacity, HISTORY_SIZE, maxObservedSize
+            );
+        }
     }
     
     /**
@@ -174,6 +236,8 @@ public class PerformancePredictor {
      * 
      * <p><b>P1 #6:</b> Uses optimized array buffer to reduce allocations.
      * 
+     * <p><b>AUDIT FIX #2:</b> Array buffer now shrinks when oversized.
+     * 
      * @return trend coefficient, or 0.0 if insufficient variance
      */
     private double calculateTrend() {
@@ -189,7 +253,7 @@ public class PerformancePredictor {
         double sumXY = 0;
         double sumX2 = 0;
         
-        // P1 #6: Use reusable array instead of allocating every call
+        // P1 #6 + AUDIT FIX #2: Use reusable array with auto-shrinking
         Double[] recent = frametimeHistory.toArray(getReusableArray());
         int startIdx = lastArraySize - n;
         
@@ -266,6 +330,8 @@ public class PerformancePredictor {
      * 
      * <p><b>P1 #6:</b> Uses optimized array buffer.
      * 
+     * <p><b>AUDIT FIX #2:</b> Array buffer now shrinks automatically.
+     * 
      * @return true if a spike is detected
      */
     public boolean detectSpike() {
@@ -273,7 +339,7 @@ public class PerformancePredictor {
             return false;
         }
         
-        // P1 #6: Use reusable array
+        // P1 #6 + AUDIT FIX #2: Use reusable auto-shrinking array
         Double[] recent = frametimeHistory.toArray(getReusableArray());
         double currentFrametime = recent[lastArraySize - 1];
         
@@ -357,11 +423,16 @@ public class PerformancePredictor {
     /**
      * Clears all prediction history.
      * Use when starting a new prediction session or after major state changes.
+     * 
+     * <p><b>AUDIT FIX #2:</b> Also resets shrinking counters.
      */
     public void reset() {
         frametimeHistory.clear();
         lastArraySize = 0;
-        // Keep reusableArray allocated for next session
+        arrayAccessCount = 0;
+        maxObservedSize = 0;
+        // Shrink to base size on reset
+        reusableArray = new Double[HISTORY_SIZE];
     }
     
     /**
@@ -391,5 +462,19 @@ public class PerformancePredictor {
      */
     int getReusableArrayCapacity() {
         return reusableArray != null ? reusableArray.length : 0;
+    }
+    
+    /**
+     * AUDIT FIX #2: Gets shrinking statistics for monitoring.
+     * 
+     * @return formatted string with buffer stats
+     */
+    public String getBufferStats() {
+        return String.format(
+            "Buffer: %d capacity, %d max observed, %d accesses since last shrink",
+            getReusableArrayCapacity(),
+            maxObservedSize,
+            arrayAccessCount
+        );
     }
 }
