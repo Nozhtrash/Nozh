@@ -62,7 +62,7 @@ class SystemHealthMonitorTest {
     
     @Test
     @DisplayName("Should activate circuit breaker after 5 critical states")
-    void testCircuitBreaker() {
+    void testCircuitBreaker() throws InterruptedException {
         SystemHealthMonitor monitor = new SystemHealthMonitor();
         
         // Circuit breaker opens when health score < 0.2 for 5 consecutive checks
@@ -76,15 +76,19 @@ class SystemHealthMonitorTest {
         
         // Force health score calculations that should trigger circuit breaker
         // Need to call getHealthScore() multiple times to increment critical counter
-        for (int i = 0; i < 10; i++) {
+        // Wait between calls to ensure cache expires
+        for (int i = 0; i < 6; i++) {
+            // Wait for cache to expire (1 second base cache time)
+            Thread.sleep(1100);
             double score = monitor.getHealthScore();
             // Verify score is critical (< 0.2)
-            assertTrue(score < 0.3, "Health score should be critical after 100 errors, got: " + score);
+            assertTrue(score < 0.3, 
+                "Health score should be critical after 100 errors, got: " + score + " on iteration " + i);
         }
         
-        // After multiple critical readings, circuit should be open
+        // After 6 critical readings (> 5 threshold), circuit should be open
         assertTrue(monitor.isCircuitOpen(), 
-            "Circuit breaker should be open after multiple critical health checks");
+            "Circuit breaker should be open after 6 critical health checks");
         
         // Verify circuit open behavior
         assertEquals(0.0, monitor.getHealthScore(), 
@@ -207,7 +211,7 @@ class SystemHealthMonitorTest {
     
     @Test
     @DisplayName("Should reset circuit breaker after timeout")
-    void testCircuitBreakerTimeout() {
+    void testCircuitBreakerTimeout() throws InterruptedException {
         SystemHealthMonitor monitor = new SystemHealthMonitor();
         
         // Force circuit breaker open by creating critical conditions
@@ -215,8 +219,9 @@ class SystemHealthMonitorTest {
             monitor.recordError("critical_timeout_" + i);
         }
         
-        // Trigger multiple health checks to open circuit
-        for (int i = 0; i < 10; i++) {
+        // Trigger multiple health checks to open circuit (wait for cache expiry)
+        for (int i = 0; i < 6; i++) {
+            Thread.sleep(1100); // Wait for cache to expire
             monitor.getHealthScore();
         }
         
