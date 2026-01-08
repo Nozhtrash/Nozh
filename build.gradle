@@ -12,9 +12,8 @@ base {
 
 repositories {
 	// Primary repositories
-	maven {
-		url = 'https://repo1.maven.org/maven2/'
-	}
+	mavenLocal()
+	mavenCentral()
 	maven { 
 		url = 'https://maven.fabricmc.net/'
 		content {
@@ -39,9 +38,6 @@ repositories {
 	}
 	
 	// Fallback repositories (in case of Maven Central issues)
-	maven { 
-		url = 'https://repo.maven.apache.org/maven2/' 
-	}
 	maven { 
 		url = 'https://jitpack.io' 
 	}
