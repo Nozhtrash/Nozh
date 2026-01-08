@@ -7,7 +7,6 @@ import dev.nozh.core.monitoring.*;
 import dev.nozh.core.safety.*;
 import dev.nozh.core.telemetry.*;
 import dev.nozh.core.prediction.PerformancePredictor;
-import dev.nozh.core.intelligence.*;
 import dev.nozh.core.config.AdaptiveConfigManager;
 import dev.nozh.fabric.context.EnhancedFabricScenarioDetector;
 import net.minecraft.client.MinecraftClient;
@@ -62,7 +61,6 @@ public final class IntegratedGovernor {
     
     // Intelligence
     private final PerformancePredictor predictor;
-    private final UtilityScorer utilityScorer;
     
     // Learning & Adaptation
     private final ActionEffectivenessTracker effectivenessTracker;
@@ -127,7 +125,6 @@ public final class IntegratedGovernor {
         // Initialize intelligence
         double targetFps = 60.0; // TODO AUDIT FIX #6: Get from config
         this.predictor = new PerformancePredictor((int) targetFps);
-        this.utilityScorer = new UtilityScorer();
         
         // Initialize learning
         this.effectivenessTracker = new ActionEffectivenessTracker();
@@ -285,9 +282,7 @@ public final class IntegratedGovernor {
      * 4. Determine if optimization is needed
      * 5. Get available actions (filtered by blacklist)
      * 6. Select best action using Q-learning
-     * 7. Calculate utility score for selected action
-     * 8. Validate utility meets minimum threshold
-     * 9. Execute action with full reasoning
+     * 7. Execute action with full reasoning
      * 
      * @param snapshot current telemetry data
      */
@@ -299,14 +294,13 @@ public final class IntegratedGovernor {
         
         try {
             // STEP 1: Detect scenario
-            ScenarioSnapshot scenarioSnapshot = detectScenario();
-            if (scenarioSnapshot == null) {
+            Scenario detected = detectScenario();
+            if (detected == null) {
                 NozhConstants.LOGGER.warn("Scenario detection failed, using default");
-                scenarioSnapshot = createDefaultScenarioSnapshot();
+                detected = Scenario.STANDARD;
             }
             
-            currentScenario = scenarioSnapshot.scenario();
-            double scenarioConfidence = scenarioSnapshot.confidence();
+            currentScenario = detected;
             
             // STEP 2: Calculate current FPS
             double currentFps = 1000.0 / snapshot.avgFrametimeMs();
@@ -383,30 +377,7 @@ public final class IntegratedGovernor {
                 return;
             }
             
-            // STEP 7: Calculate utility score - FIX: Correct signature
-            double utilityScore = 0.0;
-            if (utilityScorer != null) {
-                try {
-                    utilityScore = utilityScorer.calculateUtility(
-                        selectedAction,
-                        scenarioSnapshot,
-                        snapshot
-                    );
-                } catch (Exception e) {
-                    NozhConstants.LOGGER.error("Utility calculation failed", e);
-                }
-            }
-            
-            // STEP 8: Validate utility threshold - FIX: Use meetsThreshold()
-            if (utilityScorer != null && !utilityScorer.meetsThreshold(utilityScore)) {
-                NozhConstants.LOGGER.info(String.format(
-                    "Action '%s' utility too low (%.3f < %.3f), skipping",
-                    selectedAction, utilityScore, utilityScorer.getMinThreshold()
-                ));
-                return;
-            }
-            
-            // STEP 9: Get Q-value for logging
+            // STEP 7: Get Q-value for logging
             double qValue = 0.0;
             if (learningEngine != null) {
                 try {
@@ -416,12 +387,12 @@ public final class IntegratedGovernor {
                 }
             }
             
-            // Create detailed reasoning
+            // Create detailed reasoning (without utility score for now)
             DecisionReasoning reasoning = DecisionReasoning.create(
                 currentScenario,
                 currentFps,
                 targetFps,
-                utilityScore,
+                0.0, // utilityScore - disabled for now
                 qValue,
                 predictedDrop,
                 snapshot.spikeCount()
@@ -437,7 +408,7 @@ public final class IntegratedGovernor {
                 reasoning
             ));
             
-            // STEP 10: Execute action
+            // STEP 8: Execute action
             executeAction(
                 selectedAction, 
                 reasoning, 
@@ -456,26 +427,19 @@ public final class IntegratedGovernor {
     
     /**
      * Detect current scenario using scenario detector.
-     * FIX: Use detect() method instead of detectScenario()
+     * FIX: Return Scenario directly, not ScenarioSnapshot
      */
-    private ScenarioSnapshot detectScenario() {
+    private Scenario detectScenario() {
         if (scenarioDetector == null) {
-            return null;
+            return Scenario.STANDARD;
         }
         
         try {
             Scenario detected = scenarioDetector.detect();
-            if (detected == null) {
-                return null;
-            }
-            
-            // Calculate confidence (simplified for now)
-            double confidence = 0.8; // TODO: Get real confidence from detector
-            
-            return new ScenarioSnapshot(detected, confidence);
+            return detected != null ? detected : Scenario.STANDARD;
         } catch (Exception e) {
             NozhConstants.LOGGER.error("Scenario detection failed", e);
-            return null;
+            return Scenario.STANDARD;
         }
     }
 
@@ -739,10 +703,6 @@ public final class IntegratedGovernor {
             this.executionSuccess = executionSuccess;
             this.startTime = startTime;
         }
-    }
-    
-    private ScenarioSnapshot createDefaultScenarioSnapshot() {
-        return new ScenarioSnapshot(Scenario.STANDARD, 0.5);
     }
     
     private String[] getAvailableActions() {
