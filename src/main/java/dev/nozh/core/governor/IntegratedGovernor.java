@@ -427,7 +427,7 @@ public final class IntegratedGovernor {
     
     /**
      * Detect current scenario using scenario detector.
-     * FIX: Return Scenario directly, not ScenarioSnapshot
+     * FIX: Properly extract Scenario from ScenarioSnapshot.
      */
     private Scenario detectScenario() {
         if (scenarioDetector == null) {
@@ -435,8 +435,11 @@ public final class IntegratedGovernor {
         }
         
         try {
-            Scenario detected = scenarioDetector.detect();
-            return detected != null ? detected : Scenario.STANDARD;
+            ScenarioSnapshot snapshot = scenarioDetector.detect();
+            if (snapshot == null) {
+                return Scenario.STANDARD;
+            }
+            return snapshot.scenario();
         } catch (Exception e) {
             NozhConstants.LOGGER.error("Scenario detection failed", e);
             return Scenario.STANDARD;
