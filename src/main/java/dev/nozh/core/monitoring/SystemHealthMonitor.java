@@ -52,7 +52,10 @@ public class SystemHealthMonitor {
     private final AtomicLong totalGCTime;
     private final AtomicInteger gcCount;
     private final AtomicInteger criticalCounter;
-    
+
+    private volatile TelemetrySnapshot latestTelemetry;
+    private volatile long lastTelemetryAt;
+
     // Cached health score (volatile for visibility)
     private volatile double lastHealthScore;
     private volatile long lastHealthCheckTime;
@@ -70,6 +73,8 @@ public class SystemHealthMonitor {
         this.totalGCTime = new AtomicLong(0);
         this.gcCount = new AtomicInteger(0);
         this.criticalCounter = new AtomicInteger(0);
+        this.latestTelemetry = TelemetrySnapshot.EMPTY;
+        this.lastTelemetryAt = 0;
         this.lastHealthScore = 1.0;
         this.lastHealthCheckTime = 0;
         this.circuitOpen = false;
@@ -89,7 +94,11 @@ public class SystemHealthMonitor {
         if (snapshot == null) {
             throw new NullPointerException("Telemetry snapshot cannot be null");
         }
-        
+
+        latestTelemetry = snapshot;
+        lastTelemetryAt = System.currentTimeMillis();
+        lastHealthCheckTime = 0;
+
         // Trigger health recalculation
         getHealthScore();
         
@@ -118,10 +127,7 @@ public class SystemHealthMonitor {
     public double getHealthScore() {
         // Check circuit breaker first
         if (circuitOpen) {
-            long now = System.currentTimeMillis();
-            if (now - circuitOpenedAt > CIRCUIT_RESET_TIMEOUT) {
-                // Try to reset circuit after timeout
-                resetCircuitBreaker();
+            if (ensureCircuitBreakerTimeout()) {
                 NozhConstants.LOGGER.info("Health monitor circuit breaker reset after timeout");
             } else {
                 return 0.0; // Fast fail during crisis
@@ -182,7 +188,7 @@ public class SystemHealthMonitor {
      * @param score current health score
      */
     private void updateCircuitBreaker(double score) {
-        if (score < 0.2) {
+        if (score <= 0.2) {
             int count = criticalCounter.incrementAndGet();
             if (count >= CRITICAL_THRESHOLD_TRIGGERS && !circuitOpen) {
                 circuitOpen = true;
@@ -192,10 +198,24 @@ public class SystemHealthMonitor {
                     count
                 );
             }
-        } else if (score > 0.4) {
+        } else if (score >= 0.4) {
             // Reset counter if health improves significantly
             criticalCounter.set(0);
         }
+    }
+
+    private boolean ensureCircuitBreakerTimeout() {
+        if (!circuitOpen) {
+            return false;
+        }
+
+        long now = System.currentTimeMillis();
+        if (now - circuitOpenedAt > CIRCUIT_RESET_TIMEOUT) {
+            resetCircuitBreaker();
+            return true;
+        }
+
+        return false;
     }
     
     /**
@@ -290,6 +310,11 @@ public class SystemHealthMonitor {
      * @return performance health score between 0.0 and 1.0
      */
     private double calculatePerformanceHealth() {
+        TelemetrySnapshot snapshot = latestTelemetry;
+        if (snapshot != null && snapshot.sampleCount() > 0) {
+            return calculateTelemetryPerformanceHealth(snapshot);
+        }
+
         try {
             MinecraftClient client = MinecraftClient.getInstance();
             if (client == null) {
@@ -314,6 +339,45 @@ public class SystemHealthMonitor {
             NozhConstants.LOGGER.warn("Error calculating performance health", e);
             return 1.0;
         }
+    }
+
+    private double calculateTelemetryPerformanceHealth(TelemetrySnapshot snapshot) {
+        double avgFrametime = snapshot.avgFrametimeMs();
+        if (avgFrametime <= 0) {
+            return 1.0;
+        }
+
+        double targetFrametime = 1000.0 / 60.0;
+        double criticalFrametime = 1000.0 / 10.0;
+        double health;
+
+        if (avgFrametime <= targetFrametime) {
+            health = 1.0;
+        } else if (avgFrametime >= criticalFrametime) {
+            health = 0.0;
+        } else {
+            health = 1.0 - ((avgFrametime - targetFrametime)
+                    / (criticalFrametime - targetFrametime));
+        }
+
+        double p95Frametime = snapshot.p95FrametimeMs();
+        if (p95Frametime > avgFrametime) {
+            double jitterRatio = p95Frametime / avgFrametime;
+            if (jitterRatio > 1.5) {
+                double jitterPenalty = Math.min(0.25, (jitterRatio - 1.5) * 0.1);
+                health -= jitterPenalty;
+            }
+        }
+
+        int sampleCount = snapshot.sampleCount();
+        if (sampleCount > 0) {
+            double spikeRatio = (double) snapshot.spikeCount() / sampleCount;
+            double dropRatio = (double) snapshot.droppedSamples() / sampleCount;
+            health -= Math.min(0.2, spikeRatio * 0.5);
+            health -= Math.min(0.25, dropRatio * 0.6);
+        }
+
+        return Math.max(0.0, Math.min(1.0, health));
     }
     
     /**
@@ -404,6 +468,9 @@ public class SystemHealthMonitor {
      * @return true if circuit breaker is activated
      */
     public boolean isCircuitOpen() {
+        if (circuitOpen) {
+            ensureCircuitBreakerTimeout();
+        }
         return circuitOpen;
     }
     
@@ -443,6 +510,9 @@ public class SystemHealthMonitor {
      * @return current health status
      */
     public HealthStatus getStatus() {
+        if (circuitOpen) {
+            ensureCircuitBreakerTimeout();
+        }
         if (circuitOpen) {
             return HealthStatus.CRITICAL;
         }
@@ -572,6 +642,8 @@ public class SystemHealthMonitor {
         gcCount.set(0);
         lastGCTime.set(0);
         criticalCounter.set(0);
+        latestTelemetry = TelemetrySnapshot.EMPTY;
+        lastTelemetryAt = 0;
         lastHealthScore = 1.0;
         lastHealthCheckTime = 0;
         resetCircuitBreaker();
