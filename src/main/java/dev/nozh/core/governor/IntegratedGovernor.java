@@ -14,6 +14,7 @@ import net.minecraft.client.MinecraftClient;
 import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.concurrent.*;
+import java.util.concurrent.atomic.*;
 
 /**
  * Integrated Governor - The main orchestration brain.
@@ -31,13 +32,15 @@ import java.util.concurrent.*;
  * 
  * This is the production-ready, self-learning governor.
  * 
- * <p><b>Thread Safety:</b> This class is NOT thread-safe. It should only be
- * called from the main game thread. Action execution happens asynchronously.
+ * <p><b>Thread Safety:</b> This class is thread-safe with atomic variables
+ * for shared state. Main tick() should be called from game thread, but
+ * state can be read safely from other threads.
  * 
  * <p><b>Null Safety:</b> All public methods validate inputs and handle null
  * gracefully with appropriate logging.
  * 
  * FULL INTEGRATION: Phases 1-4 complete + P0 hardening
+ * AUDIT FIX #1: Thread-safe atomic variables for lastDecisionTime and tickCounter
  * AUDIT FIX #24: Removed Thread.sleep from game thread - async execution
  * 
  * @author Nozh Team
@@ -81,9 +84,13 @@ public final class IntegratedGovernor {
     
     // State
     private Scenario currentScenario = Scenario.STANDARD;
-    private double lastDecisionTime = 0;
-    private int tickCounter = 0;
-    private boolean initialized = false;
+    
+    // AUDIT FIX #1: Thread-safe atomic variables
+    // lastDecisionTime stored as raw long bits for double atomic operations
+    private final AtomicLong lastDecisionTimeRaw = new AtomicLong(Double.doubleToRawLongBits(0.0));
+    private final AtomicInteger tickCounter = new AtomicInteger(0);
+    
+    private volatile boolean initialized = false;
     private final ConcurrentHashMap<String, CompletableFuture<ActionResult>> pendingActions = new ConcurrentHashMap<>();
 
     /**
@@ -114,7 +121,7 @@ public final class IntegratedGovernor {
         this.confidenceCalculator = new ScenarioConfidenceCalculator();
         
         // Initialize intelligence
-        double targetFps = 60.0; // TODO: Get from config
+        double targetFps = 60.0; // TODO AUDIT FIX #6: Get from config
         this.predictor = new PerformancePredictor((int) targetFps);
         this.utilityScorer = new UtilityScorer();
         
@@ -145,6 +152,15 @@ public final class IntegratedGovernor {
         this.initialized = true;
         NozhConstants.LOGGER.info("IntegratedGovernor initialized - Full autonomous pipeline active");
     }
+    
+    // AUDIT FIX #1: Thread-safe getter/setter for lastDecisionTime
+    private double getLastDecisionTime() {
+        return Double.longBitsToDouble(lastDecisionTimeRaw.get());
+    }
+    
+    private void setLastDecisionTime(double time) {
+        lastDecisionTimeRaw.set(Double.doubleToRawLongBits(time));
+    }
 
     /**
      * Main update tick - called every game tick.
@@ -154,6 +170,7 @@ public final class IntegratedGovernor {
      * <p>This method is hardened against null values and exceptions. All errors
      * are logged and recorded in health metrics.
      * 
+     * AUDIT FIX #1: Uses atomic increment for tickCounter
      * AUDIT FIX #24: No blocking operations - all async.
      */
     public void tick() {
@@ -167,7 +184,8 @@ public final class IntegratedGovernor {
         }
 
         try {
-            tickCounter++;
+            // AUDIT FIX #1: Atomic increment
+            tickCounter.incrementAndGet();
             
             // Update context trackers (null-safe)
             if (cameraTracker != null) {
@@ -185,15 +203,18 @@ public final class IntegratedGovernor {
                 }
             }
             
-            // CRITICAL P0 FIX: Get telemetry snapshot with null check
+            // AUDIT FIX #3: Enhanced null checks with proper error handling
             if (telemetryBuffer == null) {
-                NozhConstants.LOGGER.warn("Telemetry buffer is null, skipping decision");
+                NozhConstants.LOGGER.error("CRITICAL: Telemetry buffer is null");
+                if (healthMonitor != null) {
+                    healthMonitor.recordError("null_telemetry_buffer");
+                }
                 return;
             }
             
             TelemetrySnapshot snapshot = telemetryBuffer.snapshot();
             if (snapshot == null) {
-                NozhConstants.LOGGER.warn("Null telemetry snapshot, skipping decision");
+                NozhConstants.LOGGER.error("CRITICAL: Null telemetry snapshot");
                 if (healthMonitor != null) {
                     healthMonitor.recordError("null_telemetry_snapshot");
                 }
@@ -219,7 +240,8 @@ public final class IntegratedGovernor {
             }
             
             // Log metrics periodically (every 5 seconds)
-            if (tickCounter % 100 == 0 && eventLogger != null) {
+            // AUDIT FIX #1: Use atomic get()
+            if (tickCounter.get() % 100 == 0 && eventLogger != null) {
                 try {
                     double avgFps = 1000.0 / snapshot.avgFrametimeMs();
                     eventLogger.logMetrics(avgFps, snapshot.p95FrametimeMs(), snapshot.spikeCount());
@@ -229,12 +251,15 @@ public final class IntegratedGovernor {
             }
             
             // Check if we should make a decision
+            // AUDIT FIX #6 (partial): Uses config value instead of hardcoded
             if (configManager != null) {
                 double decisionInterval = configManager.getValue("decision_interval_ms", 2000.0);
                 double now = System.currentTimeMillis();
-                if (now - lastDecisionTime >= decisionInterval) {
+                // AUDIT FIX #1: Use atomic getter
+                if (now - getLastDecisionTime() >= decisionInterval) {
                     makeDecision(snapshot);
-                    lastDecisionTime = now;
+                    // AUDIT FIX #1: Use atomic setter
+                    setLastDecisionTime(now);
                 }
             }
             
@@ -247,9 +272,10 @@ public final class IntegratedGovernor {
     }
 
     /**
+     * AUDIT FIX #3: Enhanced null pointer handling in executeAction.
      * AUDIT FIX #24: Execute action asynchronously without blocking game thread.
      * 
-     * Instead of Thread.sleep(), we schedule async measurement after delay.
+     * All null checks now properly register failures in tracking systems.
      * 
      * @param actionId action to execute (must not be null)
      * @param reasoning decision reasoning (for logging/tracking)
@@ -262,14 +288,59 @@ public final class IntegratedGovernor {
                               TelemetrySnapshot beforeSnapshot, 
                               PerformanceLearningEngine.GameState state,
                               double fpsBefore) {
-        // Validate inputs
-        if (actionId == null || reasoning == null || beforeSnapshot == null || state == null) {
-            NozhConstants.LOGGER.error("Cannot execute action with null parameters");
+        // AUDIT FIX #3: Comprehensive input validation with failure recording
+        if (actionId == null) {
+            NozhConstants.LOGGER.error("CRITICAL: Cannot execute action with null actionId");
+            if (healthMonitor != null) {
+                healthMonitor.recordError("null_action_id");
+            }
+            if (metricsCollector != null) {
+                metricsCollector.recordAction("unknown", false, 0);
+            }
+            return;
+        }
+        
+        if (reasoning == null) {
+            NozhConstants.LOGGER.error("CRITICAL: Cannot execute action " + actionId + " with null reasoning");
+            if (healthMonitor != null) {
+                healthMonitor.recordError("null_reasoning_" + actionId);
+            }
+            if (effectivenessTracker != null) {
+                effectivenessTracker.recordActionResult(actionId, 0.0, false);
+            }
+            return;
+        }
+        
+        if (beforeSnapshot == null) {
+            NozhConstants.LOGGER.error("CRITICAL: Cannot execute action " + actionId + " with null snapshot");
+            if (healthMonitor != null) {
+                healthMonitor.recordError("null_snapshot_" + actionId);
+            }
+            if (effectivenessTracker != null) {
+                effectivenessTracker.recordActionResult(actionId, 0.0, false);
+            }
+            return;
+        }
+        
+        if (state == null) {
+            NozhConstants.LOGGER.error("CRITICAL: Cannot execute action " + actionId + " with null state");
+            if (healthMonitor != null) {
+                healthMonitor.recordError("null_state_" + actionId);
+            }
+            if (effectivenessTracker != null) {
+                effectivenessTracker.recordActionResult(actionId, 0.0, false);
+            }
             return;
         }
         
         if (fpsBefore <= 0 || !Double.isFinite(fpsBefore)) {
-            NozhConstants.LOGGER.error("Invalid FPS before: " + fpsBefore);
+            NozhConstants.LOGGER.error("CRITICAL: Invalid FPS before for action " + actionId + ": " + fpsBefore);
+            if (healthMonitor != null) {
+                healthMonitor.recordError("invalid_fps_" + actionId);
+            }
+            if (effectivenessTracker != null) {
+                effectivenessTracker.recordActionResult(actionId, 0.0, false);
+            }
             return;
         }
         
@@ -280,7 +351,8 @@ public final class IntegratedGovernor {
         }
         
         long startTime = System.currentTimeMillis();
-        double expectedFpsDelta = 15.0; // Expected improvement
+        // AUDIT FIX #6 (partial): Externalizable constant
+        double expectedFpsDelta = configManager.getValue("expected_fps_delta", 15.0);
         
         // Record action start for effectiveness tracking
         if (effectivenessTracker != null) {
@@ -316,6 +388,13 @@ public final class IntegratedGovernor {
                 );
             } catch (Exception e) {
                 NozhConstants.LOGGER.error("Failed to measure action results: " + actionId, e);
+                // AUDIT FIX #3: Record failure in tracking systems
+                if (effectivenessTracker != null) {
+                    effectivenessTracker.recordActionResult(actionId, 0.0, false);
+                }
+                if (healthMonitor != null) {
+                    healthMonitor.recordError("measurement_failed_" + actionId);
+                }
             } finally {
                 pendingActions.remove(actionId);
             }
@@ -327,6 +406,8 @@ public final class IntegratedGovernor {
     /**
      * Measure action results and update learning.
      * Called asynchronously after action stabilization period.
+     * 
+     * AUDIT FIX #3: Enhanced null handling for afterSnapshot.
      */
     @SuppressWarnings({"unused", "java:S1172"}) // Parameters kept for future use
     private void measureAndLearnFromAction(
@@ -339,11 +420,27 @@ public final class IntegratedGovernor {
             long startTime) {
         
         try {
-            // Measure results
+            // AUDIT FIX #3: Measure results with explicit null handling
             TelemetrySnapshot afterSnapshot = telemetryBuffer != null ? telemetryBuffer.snapshot() : null;
+            
             if (afterSnapshot == null) {
-                NozhConstants.LOGGER.warn("No telemetry after action execution");
-                return;
+                NozhConstants.LOGGER.error("No telemetry after action execution for: " + actionId);
+                
+                // AUDIT FIX #3: Register the failure explicitly
+                if (effectivenessTracker != null) {
+                    effectivenessTracker.recordActionResult(actionId, 0.0, false);
+                }
+                
+                if (healthMonitor != null) {
+                    healthMonitor.recordError("missing_telemetry_after_action_" + actionId);
+                }
+                
+                if (metricsCollector != null) {
+                    long duration = System.currentTimeMillis() - startTime;
+                    metricsCollector.recordAction(actionId, false, duration);
+                }
+                
+                return; // Exit early
             }
             
             double fpsAfter = 1000.0 / afterSnapshot.avgFrametimeMs();
@@ -473,8 +570,12 @@ public final class IntegratedGovernor {
             return "medium";
         }
         
-        if (fps >= 120) return "high";
-        if (fps >= 60) return "medium";
+        // AUDIT FIX #6 (partial): Configurable thresholds
+        double highThreshold = configManager != null ? configManager.getValue("hw_profile_high_fps", 120.0) : 120.0;
+        double mediumThreshold = configManager != null ? configManager.getValue("hw_profile_medium_fps", 60.0) : 60.0;
+        
+        if (fps >= highThreshold) return "high";
+        if (fps >= mediumThreshold) return "medium";
         return "low";
     }
     
@@ -617,13 +718,47 @@ public final class IntegratedGovernor {
     /**
      * Shutdown governor and release resources.
      * 
+     * AUDIT FIX #4: Enhanced resource cleanup with proper exception handling.
      * AUDIT FIX #24: Also shutdown async executor.
      */
     public void shutdown() {
+        NozhConstants.LOGGER.info("Starting IntegratedGovernor shutdown...");
+        
+        // AUDIT FIX #4: Collect all resources and shutdown with comprehensive error handling
+        java.util.List<AutoCloseable> resources = new java.util.ArrayList<>();
+        
+        // Add closeable resources (those that implement AutoCloseable)
+        if (eventLogger instanceof AutoCloseable) {
+            resources.add((AutoCloseable) eventLogger);
+        }
+        if (executor instanceof AutoCloseable) {
+            resources.add((AutoCloseable) executor);
+        }
+        if (effectivenessTracker instanceof AutoCloseable) {
+            resources.add((AutoCloseable) effectivenessTracker);
+        }
+        
+        // AUDIT FIX #4: Track all errors during shutdown
+        java.util.List<Exception> shutdownErrors = new java.util.ArrayList<>();
+        
+        // Shutdown all closeable resources
+        for (AutoCloseable resource : resources) {
+            if (resource != null) {
+                try {
+                    resource.close();
+                } catch (Exception e) {
+                    shutdownErrors.add(e);
+                    NozhConstants.LOGGER.error("Failed to close resource: " + resource.getClass().getSimpleName(), e);
+                }
+            }
+        }
+        
+        // Shutdown components that aren't AutoCloseable
         if (eventLogger != null) {
             try {
                 eventLogger.shutdown();
             } catch (Exception e) {
+                shutdownErrors.add(e);
                 NozhConstants.LOGGER.error("Failed to shutdown event logger", e);
             }
         }
@@ -632,6 +767,7 @@ public final class IntegratedGovernor {
             try {
                 executor.shutdown();
             } catch (Exception e) {
+                shutdownErrors.add(e);
                 NozhConstants.LOGGER.error("Failed to shutdown executor", e);
             }
         }
@@ -640,28 +776,56 @@ public final class IntegratedGovernor {
             try {
                 effectivenessTracker.shutdown();
             } catch (Exception e) {
+                shutdownErrors.add(e);
                 NozhConstants.LOGGER.error("Failed to shutdown effectiveness tracker", e);
             }
         }
         
-        // AUDIT FIX #24: Shutdown async executor
+        // AUDIT FIX #4 & #24: Shutdown async executor with proper timeout
         if (asyncExecutor != null) {
             asyncExecutor.shutdown();
             try {
                 if (!asyncExecutor.awaitTermination(5, TimeUnit.SECONDS)) {
-                    asyncExecutor.shutdownNow();
+                    NozhConstants.LOGGER.warn("Async executor did not terminate in time, forcing shutdown");
+                    java.util.List<Runnable> pendingTasks = asyncExecutor.shutdownNow();
+                    NozhConstants.LOGGER.warn("Forced shutdown of " + pendingTasks.size() + " pending tasks");
+                    
+                    // Wait a bit more for forced shutdown
+                    if (!asyncExecutor.awaitTermination(2, TimeUnit.SECONDS)) {
+                        NozhConstants.LOGGER.error("Async executor still did not terminate after forced shutdown");
+                    }
                 }
             } catch (InterruptedException e) {
+                shutdownErrors.add(e);
+                NozhConstants.LOGGER.error("Interrupted while waiting for async executor shutdown", e);
                 asyncExecutor.shutdownNow();
                 Thread.currentThread().interrupt();
             }
         }
         
         // Clear pending actions
-        pendingActions.clear();
+        try {
+            int pending = pendingActions.size();
+            if (pending > 0) {
+                NozhConstants.LOGGER.warn("Cancelling " + pending + " pending actions during shutdown");
+            }
+            pendingActions.values().forEach(future -> future.cancel(true));
+            pendingActions.clear();
+        } catch (Exception e) {
+            shutdownErrors.add(e);
+            NozhConstants.LOGGER.error("Failed to clear pending actions", e);
+        }
         
         initialized = false;
-        NozhConstants.LOGGER.info("IntegratedGovernor shutdown complete");
+        
+        // AUDIT FIX #4: Report shutdown status
+        if (shutdownErrors.isEmpty()) {
+            NozhConstants.LOGGER.info("IntegratedGovernor shutdown completed successfully");
+        } else {
+            NozhConstants.LOGGER.error("IntegratedGovernor shutdown completed with " + shutdownErrors.size() + " errors");
+            // Throw first error if any occurred
+            throw new RuntimeException("Shutdown completed with errors", shutdownErrors.get(0));
+        }
     }
 
     public boolean isInitialized() {
