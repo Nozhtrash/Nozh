@@ -127,10 +127,7 @@ public class SystemHealthMonitor {
     public double getHealthScore() {
         // Check circuit breaker first
         if (circuitOpen) {
-            long now = System.currentTimeMillis();
-            if (now - circuitOpenedAt > CIRCUIT_RESET_TIMEOUT) {
-                // Try to reset circuit after timeout
-                resetCircuitBreaker();
+            if (ensureCircuitBreakerTimeout()) {
                 NozhConstants.LOGGER.info("Health monitor circuit breaker reset after timeout");
             } else {
                 return 0.0; // Fast fail during crisis
@@ -191,7 +188,7 @@ public class SystemHealthMonitor {
      * @param score current health score
      */
     private void updateCircuitBreaker(double score) {
-        if (score < 0.2) {
+        if (score <= 0.2) {
             int count = criticalCounter.incrementAndGet();
             if (count >= CRITICAL_THRESHOLD_TRIGGERS && !circuitOpen) {
                 circuitOpen = true;
@@ -201,10 +198,24 @@ public class SystemHealthMonitor {
                     count
                 );
             }
-        } else if (score > 0.4) {
+        } else if (score >= 0.4) {
             // Reset counter if health improves significantly
             criticalCounter.set(0);
         }
+    }
+
+    private boolean ensureCircuitBreakerTimeout() {
+        if (!circuitOpen) {
+            return false;
+        }
+
+        long now = System.currentTimeMillis();
+        if (now - circuitOpenedAt > CIRCUIT_RESET_TIMEOUT) {
+            resetCircuitBreaker();
+            return true;
+        }
+
+        return false;
     }
     
     /**
@@ -457,6 +468,9 @@ public class SystemHealthMonitor {
      * @return true if circuit breaker is activated
      */
     public boolean isCircuitOpen() {
+        if (circuitOpen) {
+            ensureCircuitBreakerTimeout();
+        }
         return circuitOpen;
     }
     
@@ -496,6 +510,9 @@ public class SystemHealthMonitor {
      * @return current health status
      */
     public HealthStatus getStatus() {
+        if (circuitOpen) {
+            ensureCircuitBreakerTimeout();
+        }
         if (circuitOpen) {
             return HealthStatus.CRITICAL;
         }
