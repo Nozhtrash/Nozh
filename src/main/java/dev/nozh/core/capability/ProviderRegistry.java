@@ -1,95 +1,132 @@
 package dev.nozh.core.capability;
 
-import dev.nozh.core.NozhConstants;
-import org.slf4j.Logger;
+import dev.nozh.core.bus.CapabilityId;
 
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.Map;
-import java.util.Collection;
-import java.util.Collections;
 
 /**
- * Registry for all optimization capability providers.
- * <p>
- * Thread-safe central storage for providers that can be queried
- * by ID to execute optimization actions.
+ * Provider registry (Contract 3).
+ * 
+ * Central registry for all CapabilityProviders.
+ * 
+ * CONTRACT RULES:
+ * - Explicit registration only (no reflection scan)
+ * - BROKEN providers excluded by default
+ * - Thread-safe registration and lookup
+ * - One broken provider MUST NOT crash registry
+ * 
+ * DETERMINISTIC BUILDS:
+ * Manual provider list prevents classpath surprises.
  */
 public final class ProviderRegistry {
 
-    private static final Logger LOGGER = NozhConstants.LOGGER;
-    private final Map<String, OptimizationProvider> providers = new ConcurrentHashMap<>();
+    private final Map<CapabilityId, CapabilityProvider> providers = new ConcurrentHashMap<>();
+    private final ProviderHealthTracker healthTracker;
+
+    public ProviderRegistry(ProviderHealthTracker healthTracker) {
+        this.healthTracker = healthTracker;
+    }
 
     /**
      * Register a provider.
-     *
+     * 
+     * If provider init throws, it is marked BROKEN and excluded.
+     * Registry continues to function.
+     * 
      * @param provider Provider to register
      */
-    public void register(OptimizationProvider provider) {
-        if (provider == null) {
-            LOGGER.warn("Attempted to register null provider");
-            return;
+    public void register(CapabilityProvider provider) {
+        try {
+            CapabilityId id = provider.id();
+
+            // Check availability
+            if (!provider.isAvailable()) {
+                healthTracker.markBroken(id, "Provider not available (mod/version check failed)");
+                return; // Don't register unavailable providers
+            }
+
+            // Check current status
+            ProviderStatus status = provider.status();
+            if (status == ProviderStatus.BROKEN) {
+                healthTracker.markBroken(id, provider.statusReason().orElse("Provider self-reported BROKEN"));
+                return; // Don't register broken providers
+            }
+
+            // Register
+            providers.put(id, provider);
+            healthTracker.markHealthy(id);
+
+        } catch (Exception e) {
+            // Provider threw during registration -> mark BROKEN, continue
+            try {
+                CapabilityId id = provider.id(); // May throw again, catch below
+                healthTracker.markBroken(id, "Registration threw: " + e.getMessage());
+            } catch (Exception idException) {
+                // Can't even get ID -> log and skip
+                // (In production, would use logger here)
+            }
+        }
+    }
+
+    /**
+     * Get a provider by capability ID.
+     * 
+     * @param id Capability ID
+     * @return Provider, or empty if not registered or BROKEN
+     */
+    public Optional<CapabilityProvider> get(CapabilityId id) {
+        // Exclude BROKEN providers
+        if (healthTracker.isBroken(id)) {
+            return Optional.empty();
         }
 
-        String id = provider.getId();
-        if (id == null || id.trim().isEmpty()) {
-            LOGGER.warn("Provider has null or empty ID: {}", provider.getClass().getSimpleName());
-            return;
-        }
-
-        if (providers.containsKey(id)) {
-            LOGGER.warn("Provider already registered: {} (overwriting)", id);
-        }
-
-        providers.put(id, provider);
-        LOGGER.debug("Registered provider: {} ({})", id, provider.getName());
+        return Optional.ofNullable(providers.get(id));
     }
 
     /**
-     * Get a provider by its ID.
-     *
-     * @param providerId Provider ID
-     * @return Provider, or null if not found
+     * Get all registered provider IDs (excluding BROKEN).
      */
-    public OptimizationProvider getProvider(String providerId) {
-        return providers.get(providerId);
+    public Set<CapabilityId> getRegisteredIds() {
+        return providers.keySet().stream()
+                .filter(id -> !healthTracker.isBroken(id))
+                .collect(java.util.stream.Collectors.toSet());
     }
 
     /**
-     * Check if a provider is registered.
-     *
-     * @param providerId Provider ID
-     * @return true if provider exists
+     * Get all providers (excluding BROKEN).
      */
-    public boolean hasProvider(String providerId) {
-        return providers.containsKey(providerId);
+    public Collection<CapabilityProvider> getAllProviders() {
+        return providers.entrySet().stream()
+                .filter(entry -> !healthTracker.isBroken(entry.getKey()))
+                .map(Map.Entry::getValue)
+                .toList();
     }
 
     /**
-     * Get all registered providers.
-     *
-     * @return Unmodifiable collection of providers
+     * Get effective provider coverage (what % of capabilities we control).
      */
-    public Collection<OptimizationProvider> getAllProviders() {
-        return Collections.unmodifiableCollection(providers.values());
+    public ProviderCoverage coverage() {
+        int totalCapabilities = CapabilityId.values().length;
+        int controlledCapabilities = getRegisteredIds().size();
+        return ProviderCoverage.of(totalCapabilities, controlledCapabilities);
     }
 
     /**
-     * Get count of registered providers.
-     *
-     * @return Number of providers
+     * Discover and register providers (manual list for determinism).
+     * 
+     * This is where you explicitly list all providers.
+     * NO reflection, NO classpath scanning.
+     * 
+     * Call this during mod initialization.
      */
-    public int getProviderCount() {
-        return providers.size();
-    }
+    public static void discoverProviders(ProviderRegistry registry) {
+        // Explicit provider list here
+        // Example:
+        // registry.register(new ParticlesProvider());
+        // registry.register(new CloudsProvider());
+        // ... etc
 
-    /**
-     * Clear all registered providers.
-     * <p>
-     * Primarily for testing.
-     */
-    public void clear() {
-        int count = providers.size();
-        providers.clear();
-        LOGGER.info("Cleared {} providers from registry", count);
+        // For now, empty (will be populated in canary phase)
     }
 }
