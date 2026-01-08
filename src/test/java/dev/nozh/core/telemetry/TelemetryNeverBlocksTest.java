@@ -22,13 +22,13 @@ class TelemetryNeverBlocksTest {
 
         // Spawn threads that hammer the buffer
         for (int i = 0; i < threadCount; i++) {
-            final int threadId = i;
             new Thread(() -> {
                 try {
                     startLatch.await(); // Wait for go signal
 
                     for (int j = 0; j < samplesPerThread; j++) {
-                        buffer.add(sample(threadId * 1000 + j, 16.0));
+                        // Use factory method with current timestamp
+                        buffer.add(TelemetrySample.forTesting(16.0));
                     }
                 } catch (Exception e) {
                     exceptions.incrementAndGet();
@@ -66,7 +66,8 @@ class TelemetryNeverBlocksTest {
         // Thread continuously adding
         Thread addThread = new Thread(() -> {
             for (int i = 0; i < 100; i++) {
-                buffer.add(sample(i, 16.0));
+                // Use factory method with current timestamp
+                buffer.add(TelemetrySample.forTesting(16.0));
                 addCount.incrementAndGet();
             }
         });
@@ -79,9 +80,5 @@ class TelemetryNeverBlocksTest {
 
         assertTrue(snapshotCount.get() > 0, "Snapshots should complete");
         assertTrue(addCount.get() > 0, "Adds should complete");
-    }
-
-    private TelemetrySample sample(long timestamp, double frametime) {
-        return new TelemetrySample(timestamp, frametime, 16.0, 60, 100, 50, 0, 0);
     }
 }
