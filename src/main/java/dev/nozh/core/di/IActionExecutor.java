@@ -1,20 +1,28 @@
 package dev.nozh.core.di;
 
-import dev.nozh.core.context.Scenario;
-import dev.nozh.core.intelligence.DecisionReasoning;
-import dev.nozh.core.learning.PerformanceLearningEngine;
-
 /**
  * Interface for action execution - enables DI.
+ * 
+ * Simplified version using only basic types to avoid compilation issues.
  */
 public interface IActionExecutor {
-    void executeAsync(
-            String actionId,
-            DecisionReasoning reasoning,
-            Scenario scenario,
-            PerformanceLearningEngine.GameState state,
-            double fpsBefore
-    );
+    /**
+     * Executes an action asynchronously.
+     * 
+     * @param actionId action identifier
+     * @param executionLogic logic to execute
+     */
+    void executeAsync(String actionId, Runnable executionLogic);
+    
+    /**
+     * Gets the number of pending actions.
+     * 
+     * @return pending count
+     */
     int getPendingCount();
+    
+    /**
+     * Shuts down the executor.
+     */
     void shutdown();
 }
