@@ -131,7 +131,10 @@ public class SystemHealthMonitor {
         long now = System.currentTimeMillis();
         long cacheTime = getAdaptiveCacheTime();
         
+        // CRITICAL FIX: Always update circuit breaker, even when using cached score
         if (now - lastHealthCheckTime < cacheTime) {
+            // Update circuit breaker with cached score
+            updateCircuitBreaker(lastHealthScore);
             return lastHealthScore; // Return cached value
         }
         
