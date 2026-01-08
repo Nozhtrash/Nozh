@@ -86,6 +86,9 @@ public final class IntegratedGovernor {
     // State
     private Scenario currentScenario = Scenario.STANDARD;
     
+    // Store last decision reasoning for /nozh explain command
+    private volatile DecisionReasoning lastDecisionReasoning = null;
+    
     // AUDIT FIX #1: Thread-safe atomic variables
     // lastDecisionTime stored as raw long bits for double atomic operations
     private final AtomicLong lastDecisionTimeRaw = new AtomicLong(Double.doubleToRawLongBits(0.0));
@@ -423,6 +426,9 @@ public final class IntegratedGovernor {
                 predictedDrop,
                 snapshot.spikeCount()
             );
+            
+            // Store for /nozh explain command
+            this.lastDecisionReasoning = reasoning;
             
             // Log decision
             NozhConstants.LOGGER.info(String.format(
@@ -813,6 +819,15 @@ public final class IntegratedGovernor {
     }
 
     // Public API methods
+    
+    /**
+     * Get the last decision reasoning (for /nozh explain command).
+     * 
+     * @return last decision reasoning, or null if no decisions made yet
+     */
+    public DecisionReasoning getLastDecisionReasoning() {
+        return lastDecisionReasoning;
+    }
     
     public boolean isHealthy() {
         return healthMonitor != null && !healthMonitor.isCritical();

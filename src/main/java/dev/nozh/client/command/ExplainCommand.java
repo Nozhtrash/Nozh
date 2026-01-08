@@ -4,7 +4,7 @@ import com.mojang.brigadier.Command;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.context.CommandContext;
 import dev.nozh.core.governor.DecisionReasoning;
-import dev.nozh.fabric.client.NozhClientMod;
+import dev.nozh.core.governor.IntegratedGovernor;
 import net.fabricmc.fabric.api.client.command.v2.FabricClientCommandSource;
 import net.minecraft.text.Text;
 
@@ -13,8 +13,22 @@ import static net.fabricmc.fabric.api.client.command.v2.ClientCommandManager.lit
 /**
  * Client command to explain the last governor decision.
  * Usage: /nozh explain
+ * 
+ * NOTE: This command requires a reference to IntegratedGovernor.
+ * In a real implementation, you'd get this from your mod's client entry point.
+ * For now, this is a placeholder that shows the structure.
  */
 public class ExplainCommand {
+    
+    // TODO: Replace with actual governor instance from your mod
+    private static IntegratedGovernor governor = null;
+    
+    /**
+     * Set the governor instance (call this from your mod initialization).
+     */
+    public static void setGovernor(IntegratedGovernor gov) {
+        governor = gov;
+    }
 
     public static void register(CommandDispatcher<FabricClientCommandSource> dispatcher) {
         dispatcher.register(
@@ -26,16 +40,19 @@ public class ExplainCommand {
     }
 
     private static int explain(CommandContext<FabricClientCommandSource> ctx) {
-        DecisionReasoning reasoning = NozhClientMod.getLastDecisionReasoning();
+        if (governor == null) {
+            ctx.getSource().sendFeedback(Text.literal("§cGovernor not initialized. Please start the game first."));
+            return Command.SINGLE_SUCCESS;
+        }
+        
+        DecisionReasoning reasoning = governor.getLastDecisionReasoning();
 
         if (reasoning == null) {
             ctx.getSource().sendFeedback(Text.literal("§cNo decisions made yet."));
             return Command.SINGLE_SUCCESS;
         }
 
-        // FIX: Adapt to new DecisionReasoning record structure
-        // Use record accessor methods: scenario(), currentFps(), etc.
-        
+        // Use record accessor methods
         ctx.getSource().sendFeedback(Text.literal("§6=== Last Decision Explanation ==="));
         ctx.getSource().sendFeedback(Text.literal("§7Scenario: §f" + reasoning.scenario()));
         ctx.getSource().sendFeedback(Text.literal(
@@ -64,26 +81,6 @@ public class ExplainCommand {
         // Show full rationale
         ctx.getSource().sendFeedback(Text.literal("§7Rationale: §f" + reasoning.rationale()));
         
-        return Command.SINGLE_SUCCESS;
-    }
-
-    private static int formatShort(CommandContext<FabricClientCommandSource> ctx) {
-        DecisionReasoning reasoning = NozhClientMod.getLastDecisionReasoning();
-
-        if (reasoning == null) {
-            ctx.getSource().sendFeedback(Text.literal("§cNo decisions made yet."));
-            return Command.SINGLE_SUCCESS;
-        }
-
-        // FIX: Use toString() which returns rationale
-        String summary = String.format(
-            "§7Last decision: %s §8(FPS: %.1f/%.0f)",
-            reasoning.scenario(),
-            reasoning.currentFps(),
-            reasoning.targetFps()
-        );
-
-        ctx.getSource().sendFeedback(Text.literal(summary));
         return Command.SINGLE_SUCCESS;
     }
 }
