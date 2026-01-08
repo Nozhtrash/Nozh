@@ -246,25 +246,22 @@ public final class IntegratedGovernor {
         }
     }
 
-    // ... (el resto del código continúa igual pero con executeActionAsync)
-
     /**
      * AUDIT FIX #24: Execute action asynchronously without blocking game thread.
      * 
      * Instead of Thread.sleep(), we schedule async measurement after delay.
      * 
      * @param actionId action to execute (must not be null)
-     * @param reasoning decision reasoning (must not be null)
      * @param beforeSnapshot snapshot before action (must not be null)
      * @param state game state (must not be null)
      * @param fpsBefore FPS before action (must be positive)
      */
-    private void executeAction(String actionId, DecisionReasoning reasoning, 
+    private void executeAction(String actionId,
                               TelemetrySnapshot beforeSnapshot, 
                               PerformanceLearningEngine.GameState state,
                               double fpsBefore) {
         // Validate inputs
-        if (actionId == null || reasoning == null || beforeSnapshot == null || state == null) {
+        if (actionId == null || beforeSnapshot == null || state == null) {
             NozhConstants.LOGGER.error("Cannot execute action with null parameters");
             return;
         }
@@ -274,12 +271,22 @@ public final class IntegratedGovernor {
             return;
         }
         
+        // CODEQL FIX: Check if action is already pending
+        if (pendingActions.containsKey(actionId)) {
+            NozhConstants.LOGGER.warn("Action already pending: " + actionId);
+            return;
+        }
+        
         long startTime = System.currentTimeMillis();
         double expectedFpsDelta = 15.0; // Expected improvement
         
         // Record action start for effectiveness tracking
         if (effectivenessTracker != null) {
             try {
+                // Create minimal reasoning for tracking
+                DecisionReasoning reasoning = new DecisionReasoning(
+                    "async_action", 0.0, expectedFpsDelta, false, 0.0
+                );
                 effectivenessTracker.recordActionStart(actionId, expectedFpsDelta, reasoning);
             } catch (Exception e) {
                 NozhConstants.LOGGER.error("Failed to record action start", e);
@@ -306,8 +313,8 @@ public final class IntegratedGovernor {
             try {
                 ActionResult result = future.get();
                 measureAndLearnFromAction(
-                    actionId, reasoning, state, fpsBefore, 
-                    expectedFpsDelta, result.executionSuccess, result.startTime
+                    actionId, state, fpsBefore, 
+                    result.executionSuccess, result.startTime
                 );
             } catch (Exception e) {
                 NozhConstants.LOGGER.error("Failed to measure action results: " + actionId, e);
@@ -322,13 +329,13 @@ public final class IntegratedGovernor {
     /**
      * Measure action results and update learning.
      * Called asynchronously after action stabilization period.
+     * 
+     * CODEQL FIX: Removed unused parameters
      */
     private void measureAndLearnFromAction(
             String actionId,
-            DecisionReasoning reasoning,
             PerformanceLearningEngine.GameState state,
             double fpsBefore,
-            double expectedFpsDelta,
             boolean executionSuccess,
             long startTime) {
         
@@ -430,19 +437,83 @@ public final class IntegratedGovernor {
         }
     }
 
-    // [... resto de métodos sin cambios: makeDecision, collectTelemetry, etc ...]
-    
     private void makeDecision(TelemetrySnapshot snapshot) {
-        // ... (código sin cambios)
+        // Detect scenario (null-safe)
+        ScenarioSnapshot scenarioSnapshot = null;
+        if (scenarioDetector != null) {
+            try {
+                scenarioSnapshot = scenarioDetector.detectScenario();
+            } catch (Exception e) {
+                NozhConstants.LOGGER.error("Scenario detection failed", e);
+            }
+        }
+        
+        if (scenarioSnapshot == null) {
+            scenarioSnapshot = createDefaultScenarioSnapshot();
+        }
+        
+        currentScenario = scenarioSnapshot.scenario();
+        
+        // Calculate confidence (null-safe)
+        double confidence = 0.5;
+        if (confidenceCalculator != null && environmentContext != null && cameraTracker != null) {
+            try {
+                confidence = confidenceCalculator.calculateConfidence(
+                        scenarioSnapshot,
+                        environmentContext.snapshot(),
+                        cameraTracker.snapshot()
+                );
+            } catch (Exception e) {
+                NozhConstants.LOGGER.error("Confidence calculation failed", e);
+            }
+        }
+        
+        // Predict future (null-safe)
+        PerformancePredictor.PredictionResult prediction = null;
+        if (predictor != null) {
+            try {
+                prediction = predictor.predict(30); // 30 ticks ahead
+            } catch (Exception e) {
+                NozhConstants.LOGGER.error("Performance prediction failed", e);
+            }
+        }
+        
+        // Select action (null-safe)
+        String[] availableActions = getAvailableActions();
+        if (availableActions == null || availableActions.length == 0) {
+            NozhConstants.LOGGER.warn("No available actions");
+            return;
+        }
+        
+        // Create game state
+        double avgFps = 1000.0 / snapshot.avgFrametimeMs();
+        String hardwareProfile = determineHardwareProfile(avgFps);
+        PerformanceLearningEngine.GameState state = new PerformanceLearningEngine.GameState(
+                currentScenario, avgFps, hardwareProfile
+        );
+        
+        // Get action from learning engine
+        String chosenAction = null;
+        if (learningEngine != null) {
+            try {
+                chosenAction = learningEngine.selectAction(state, availableActions);
+            } catch (Exception e) {
+                NozhConstants.LOGGER.error("Action selection failed", e);
+            }
+        }
+        
+        if (chosenAction == null && availableActions.length > 0) {
+            chosenAction = availableActions[0]; // Fallback
+        }
+        
+        if (chosenAction != null) {
+            // Execute asynchronously
+            executeAction(chosenAction, snapshot, state, avgFps);
+        }
     }
     
     private ScenarioSnapshot createDefaultScenarioSnapshot() {
         return new ScenarioSnapshot(Scenario.STANDARD, 0.5);
-    }
-    
-    private double calculateScenarioConfidence(Scenario scenario) {
-        // ... (código sin cambios)
-        return 0.5;
     }
     
     private String[] getAvailableActions() {
@@ -514,7 +585,7 @@ public final class IntegratedGovernor {
         }
     }
 
-    // Public API methods (sin cambios)
+    // Public API methods
     
     public boolean isHealthy() {
         return healthMonitor != null && !healthMonitor.isCritical();
@@ -608,6 +679,15 @@ public final class IntegratedGovernor {
     }
 
     /**
+     * Get pending actions count (for monitoring).
+     * 
+     * CODEQL FIX: Accessing container contents
+     */
+    public int getPendingActionsCount() {
+        return pendingActions.size();
+    }
+
+    /**
      * Shutdown governor and release resources.
      * 
      * AUDIT FIX #24: Also shutdown async executor.
@@ -649,6 +729,9 @@ public final class IntegratedGovernor {
                 Thread.currentThread().interrupt();
             }
         }
+        
+        // Clear pending actions
+        pendingActions.clear();
         
         initialized = false;
         NozhConstants.LOGGER.info("IntegratedGovernor shutdown complete");
