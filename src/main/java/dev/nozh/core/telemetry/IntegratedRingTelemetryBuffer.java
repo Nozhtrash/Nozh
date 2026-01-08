@@ -12,6 +12,8 @@ import java.util.Arrays;
  * 
  * This is the production-ready telemetry system with ~50% noise reduction.
  * 
+ * THREAD-SAFETY: Fixed in audit - all filter operations now synchronized.
+ * 
  * INTEGRATION: Tasks 2 complete
  */
 public final class IntegratedRingTelemetryBuffer implements TelemetryBuffer {
@@ -25,7 +27,7 @@ public final class IntegratedRingTelemetryBuffer implements TelemetryBuffer {
     private volatile int droppedCount = 0;
     private volatile long averageAddNanos = 0;
 
-    // Integrated filters
+    // Integrated filters - now protected by synchronization
     private final TelemetryNoiseFilter noiseFilter;
     private final OutlierDetector outlierDetector;
     private final WarmupTracker warmupTracker;
@@ -40,7 +42,7 @@ public final class IntegratedRingTelemetryBuffer implements TelemetryBuffer {
     private int stableSampleCount = 0;
     private int spikeBurstRemaining = 0;
     private int overheadSampleCounter = 0;
-    private int filteredCount = 0; // Count of samples filtered out
+    private int filteredCount = 0; // Now only accessed within synchronized block
 
     public IntegratedRingTelemetryBuffer(int capacity) {
         if (capacity <= 0) {
@@ -73,62 +75,65 @@ public final class IntegratedRingTelemetryBuffer implements TelemetryBuffer {
             return;
         }
 
-        // === FILTERING PIPELINE ===
-        if (sample.hasFrametimeData()) {
-            double rawFrametime = sample.frametimeMs();
-            
-            // Step 1: Check if outlier (skip if warmup)
-            if (warmupTracker.isStable() && outlierDetector.isOutlier(rawFrametime)) {
-                filteredCount++;
-                recordOverheadIfNeeded(trackOverhead, startNanos);
-                return; // Discard outlier
+        // ===== CRITICAL FIX: ALL PROCESSING INSIDE SYNCHRONIZED BLOCK =====
+        // This prevents race conditions when multiple threads call add()
+        synchronized (buffer) {
+            // === FILTERING PIPELINE ===
+            if (sample.hasFrametimeData()) {
+                double rawFrametime = sample.frametimeMs();
+                
+                // Step 1: Check if outlier (skip if warmup)
+                if (warmupTracker.isStable() && outlierDetector.isOutlier(rawFrametime)) {
+                    filteredCount++; // Thread-safe now - inside lock
+                    recordOverheadIfNeeded(trackOverhead, startNanos);
+                    return; // Discard outlier
+                }
+                
+                // Step 2: Apply noise filter
+                double filteredFrametime = noiseFilter.filter(rawFrametime);
+                
+                // Step 3: Record to warmup tracker
+                warmupTracker.recordSample(filteredFrametime);
+                
+                // Replace sample with filtered version (preserve all other fields)
+                sample = new TelemetrySample(
+                    sample.timestampMillis(),
+                    filteredFrametime,
+                    sample.tickMs(),
+                    sample.fps(),
+                    sample.entities(),
+                    sample.chunks(),
+                    sample.drawCalls(),
+                    sample.droppedSamples()
+                );
             }
-            
-            // Step 2: Apply noise filter
-            double filteredFrametime = noiseFilter.filter(rawFrametime);
-            
-            // Step 3: Record to warmup tracker
-            warmupTracker.recordSample(filteredFrametime);
-            
-            // Replace sample with filtered version (preserve all other fields)
-            sample = new TelemetrySample(
-                sample.timestampMillis(),
-                filteredFrametime,
-                sample.tickMs(),
-                sample.fps(),
-                sample.entities(),
-                sample.chunks(),
-                sample.drawCalls(),
-                sample.droppedSamples()
-            );
-        }
 
-        // === ADAPTIVE SAMPLING (original logic) ===
-        boolean spike = sample.hasFrametimeData() && sample.frametimeMs() > SPIKE_THRESHOLD_MS;
-        if (spike) {
-            spikeBurstRemaining = SPIKE_BURST_SAMPLES;
-        }
-
-        if (spikeBurstRemaining > 0) {
-            if (!spike) {
-                spikeBurstRemaining--;
+            // === ADAPTIVE SAMPLING ===
+            boolean spike = sample.hasFrametimeData() && sample.frametimeMs() > SPIKE_THRESHOLD_MS;
+            if (spike) {
+                spikeBurstRemaining = SPIKE_BURST_SAMPLES;
             }
-            sampleStride = 1;
-            stableSampleCount = 0;
-        } else {
-            stableSampleCount++;
-            sampleStride = stableSampleCount >= STABLE_SAMPLE_WINDOW ? BASE_SAMPLE_STRIDE : 1;
-        }
 
-        if (!spike && spikeBurstRemaining == 0 && sampleStride > 1) {
-            if ((sampleCounter++ % sampleStride) != 0) {
-                recordOverheadIfNeeded(trackOverhead, startNanos);
-                return;
+            if (spikeBurstRemaining > 0) {
+                if (!spike) {
+                    spikeBurstRemaining--;
+                }
+                sampleStride = 1;
+                stableSampleCount = 0;
+            } else {
+                stableSampleCount++;
+                sampleStride = stableSampleCount >= STABLE_SAMPLE_WINDOW ? BASE_SAMPLE_STRIDE : 1;
             }
-        }
 
-        try {
-            synchronized (buffer) {
+            if (!spike && spikeBurstRemaining == 0 && sampleStride > 1) {
+                if ((sampleCounter++ % sampleStride) != 0) {
+                    recordOverheadIfNeeded(trackOverhead, startNanos);
+                    return;
+                }
+            }
+
+            // Add to circular buffer
+            try {
                 if (size < capacity) {
                     int index = (startIndex + size) % capacity;
                     buffer[index] = sample;
@@ -138,12 +143,13 @@ public final class IntegratedRingTelemetryBuffer implements TelemetryBuffer {
                     startIndex = (startIndex + 1) % capacity;
                     droppedCount++;
                 }
+            } catch (Exception e) {
+                droppedCount++;
+                // Log but don't propagate - telemetry should never crash the game
+            } finally {
+                recordOverheadIfNeeded(trackOverhead, startNanos);
             }
-        } catch (Exception e) {
-            droppedCount++;
-        } finally {
-            recordOverheadIfNeeded(trackOverhead, startNanos);
-        }
+        } // End synchronized block
     }
 
     @Override
@@ -200,43 +206,57 @@ public final class IntegratedRingTelemetryBuffer implements TelemetryBuffer {
             size = 0;
             droppedCount = 0;
             filteredCount = 0;
+            
+            // Reset filters under lock
+            noiseFilter.reset();
+            outlierDetector.reset();
         }
-        noiseFilter.reset();
-        outlierDetector.reset();
     }
 
     /**
      * Get count of filtered samples (outliers + noise).
+     * Thread-safe read.
      */
     public int getFilteredCount() {
-        return filteredCount;
+        synchronized (buffer) {
+            return filteredCount;
+        }
     }
 
     /**
      * Get filter efficiency (% of samples filtered).
+     * Thread-safe calculation.
      */
     public double getFilterEfficiency() {
-        int total = size + filteredCount;
-        return total == 0 ? 0.0 : (filteredCount / (double) total) * 100.0;
+        synchronized (buffer) {
+            int total = size + filteredCount;
+            return total == 0 ? 0.0 : (filteredCount / (double) total) * 100.0;
+        }
     }
 
     /**
      * Check if warmup is complete.
+     * Thread-safe read.
      */
     public boolean isWarmupComplete() {
-        return warmupTracker.isStable();
+        synchronized (buffer) {
+            return warmupTracker.isStable();
+        }
     }
 
     /**
      * Get warmup progress info.
+     * Thread-safe read.
      */
     public String getWarmupInfo() {
-        if (warmupTracker.isStable()) {
-            return "Warmup complete";
+        synchronized (buffer) {
+            if (warmupTracker.isStable()) {
+                return "Warmup complete";
+            }
+            return String.format("Warmup: %dms elapsed, %d samples",
+                    warmupTracker.getElapsedMs(),
+                    warmupTracker.getSampleCount());
         }
-        return String.format("Warmup: %dms elapsed, %d samples",
-                warmupTracker.getElapsedMs(),
-                warmupTracker.getSampleCount());
     }
 
     public double getAverageAddOverheadMicros() {
@@ -266,6 +286,7 @@ public final class IntegratedRingTelemetryBuffer implements TelemetryBuffer {
         if (duration <= 0) {
             return;
         }
+        // Use simple exponential moving average (thread-safe for single writer)
         if (averageAddNanos == 0) {
             averageAddNanos = duration;
         } else {
