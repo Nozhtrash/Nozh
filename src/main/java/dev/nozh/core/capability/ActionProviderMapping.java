@@ -11,38 +11,48 @@ import java.util.Optional;
  * and the capability providers that execute those actions.
  * <p>
  * Action IDs come from QTable and DecisionMaking.
- * Provider IDs come from registered OptimizationProviders.
+ * Provider IDs come from registered OptimizationProviders (lowercased CapabilityId names).
+ * <p>
+ * MAPPING RULES:
+ * - Provider IDs = CapabilityId.name().toLowerCase()
+ * - Action IDs = descriptive names from learning engine
+ * - One action can map to one provider
  */
 public final class ActionProviderMapping {
 
     private static final Map<String, String> ACTION_TO_PROVIDER = new HashMap<>();
 
     static {
-        // High-impact rendering optimizations
+        // HIGH-IMPACT RENDERING (Tier 1)
         ACTION_TO_PROVIDER.put("reduce_render_distance", "render_distance");
         ACTION_TO_PROVIDER.put("reduce_simulation_distance", "simulation_distance");
-        ACTION_TO_PROVIDER.put("reduce_entity_distance", "entity_distance_scaling");
-        ACTION_TO_PROVIDER.put("lower_graphics_quality", "graphics_mode");
-        ACTION_TO_PROVIDER.put("reduce_shadows", "entity_shadows");
-        ACTION_TO_PROVIDER.put("disable_clouds", "clouds");
+        ACTION_TO_PROVIDER.put("reduce_entity_distance", "entity_distance");
         
-        // Particle and visual effects
+        // PARTICLES AND VISUAL EFFECTS (Tier 0 - Safe, no reload)
         ACTION_TO_PROVIDER.put("lower_particles", "particles");
-        ACTION_TO_PROVIDER.put("disable_fog", "fog");
-        ACTION_TO_PROVIDER.put("disable_distortion", "distortion_effects");
-        ACTION_TO_PROVIDER.put("disable_animations", "animation");
-        ACTION_TO_PROVIDER.put("lower_mipmap_levels", "mipmap_levels");
-        ACTION_TO_PROVIDER.put("reduce_biome_blend", "biome_blend_radius");
+        ACTION_TO_PROVIDER.put("disable_clouds", "clouds");
+        ACTION_TO_PROVIDER.put("reduce_shadows", "entity_shadows");
         
-        // Advanced optimizations (GOD MODE)
-        ACTION_TO_PROVIDER.put("disable_armor_stands", "armor_stand_renderer");
-        ACTION_TO_PROVIDER.put("disable_item_frames", "item_frame_renderer");
-        ACTION_TO_PROVIDER.put("disable_block_entities", "block_entity_renderer");
-        
-        // Performance tuning
-        ACTION_TO_PROVIDER.put("enable_vsync", "vsync");
+        // GRAPHICS QUALITY (Tier 2 - May require reload)
+        ACTION_TO_PROVIDER.put("lower_graphics_quality", "graphics_mode");
         ACTION_TO_PROVIDER.put("disable_smooth_lighting", "smooth_lighting");
+        ACTION_TO_PROVIDER.put("lower_mipmap_levels", "mipmap_level");
+        ACTION_TO_PROVIDER.put("reduce_biome_blend", "biome_blend");
+        ACTION_TO_PROVIDER.put("disable_fog", "fog");
+        
+        // PERFORMANCE TUNING
+        ACTION_TO_PROVIDER.put("enable_vsync", "vsync");
         ACTION_TO_PROVIDER.put("increase_fps_cap", "fps_cap");
+        
+        // ADVANCED EFFECTS (Mod-dependent)
+        ACTION_TO_PROVIDER.put("disable_distortion", "distortion_effect_scale");
+        ACTION_TO_PROVIDER.put("disable_dynamic_lighting", "dynamic_lighting");
+        
+        // GOD MODE (Phase 2 - Precise entity control)
+        ACTION_TO_PROVIDER.put("disable_armor_stands", "armor_stands");
+        ACTION_TO_PROVIDER.put("disable_item_frames", "item_frames");
+        ACTION_TO_PROVIDER.put("disable_block_entities", "block_entities");
+        ACTION_TO_PROVIDER.put("disable_animations", "animations");
     }
 
     /**
