@@ -1,6 +1,8 @@
 package dev.nozh.core.capability;
 
 import dev.nozh.core.NozhConstants;
+import dev.nozh.core.bus.CapabilityId;
+import dev.nozh.core.bus.CapabilityValue;
 import org.slf4j.Logger;
 
 import java.util.Optional;
@@ -10,13 +12,9 @@ import java.util.concurrent.Executor;
 /**
  * Executes optimization providers safely with error handling and logging.
  * <p>
- * This is the execution layer that connects decision-making to actual provider invocation.
- * <p>
- * Features:
- * - Async execution with fallback
- * - Comprehensive error handling
- * - Detailed logging for debugging
- * - Null-safety throughout
+ * Updated to support BOTH:
+ * - OptimizationProvider (new interface)
+ * - CapabilityProvider (legacy via adapter)
  */
 public final class ProviderExecutor {
 
@@ -76,6 +74,47 @@ public final class ProviderExecutor {
 
             } catch (Exception e) {
                 LOGGER.error("Exception during provider execution for action: {}", actionId, e);
+                return new ExecutionResult(false, startTime, "Exception: " + e.getMessage());
+            }
+        }, asyncExecutor);
+    }
+
+    /**
+     * Execute a CapabilityProvider directly with a specific value.
+     * <p>
+     * This is for advanced usage where you want to bypass the action mapping.
+     *
+     * @param provider CapabilityProvider to execute
+     * @param value    Value to apply
+     * @return CompletableFuture with execution result
+     */
+    public CompletableFuture<ExecutionResult> executeCapabilityProvider(
+            CapabilityProvider provider,
+            CapabilityValue value
+    ) {
+        return CompletableFuture.supplyAsync(() -> {
+            long startTime = System.nanoTime();
+
+            try {
+                String providerName = provider.id().name();
+
+                if (!provider.isAvailable()) {
+                    return new ExecutionResult(false, startTime, "Provider not available");
+                }
+
+                LOGGER.info("Executing capability provider: {}", providerName);
+                ApplyResult result = provider.apply(value);
+
+                if (result instanceof ApplyResult.Success) {
+                    LOGGER.info("✓ Capability provider executed successfully: {}", providerName);
+                    return new ExecutionResult(true, startTime, "Success");
+                } else {
+                    LOGGER.warn("✗ Capability provider failed: {}", providerName);
+                    return new ExecutionResult(false, startTime, "Apply failed");
+                }
+
+            } catch (Exception e) {
+                LOGGER.error("Exception during capability provider execution", e);
                 return new ExecutionResult(false, startTime, "Exception: " + e.getMessage());
             }
         }, asyncExecutor);
