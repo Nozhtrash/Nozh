@@ -351,8 +351,9 @@ public final class IntegratedGovernor {
         }
         
         long startTime = System.currentTimeMillis();
-        // AUDIT FIX #6 (partial): Externalizable constant
-        double expectedFpsDelta = configManager.getValue("expected_fps_delta", 15.0);
+        // AUDIT FIX #6: Fixed null check before getValue()
+        double expectedFpsDelta = configManager != null ? 
+            configManager.getValue("expected_fps_delta", 15.0) : 15.0;
         
         // Record action start for effectiveness tracking
         if (effectivenessTracker != null) {
