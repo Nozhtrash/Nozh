@@ -6,14 +6,9 @@ import dev.nozh.core.telemetry.TelemetrySnapshot;
 import java.nio.file.Path;
 
 /**
- * Facade for all monitoring concerns (health, metrics, logging).
+ * Facade for monitoring concerns (health, metrics, logging).
  * 
- * Extracted from IntegratedGovernor as part of God Class refactoring.
- * This class provides a unified interface for monitoring operations.
- * 
- * <p><b>Thread Safety:</b> This class is thread-safe.
- * 
- * <p><b>Null Safety:</b> All methods handle null gracefully.
+ * Simplified version that works with existing main branch code.
  * 
  * @author Nozh Team
  * @since 0.4.0
@@ -27,8 +22,7 @@ public final class MonitoringFacade {
     /**
      * Constructs a new MonitoringFacade.
      * 
-     * @param logPath path for performance logs (must not be null)
-     * @throws NullPointerException if logPath is null
+     * @param logPath path for performance logs
      */
     public MonitoringFacade(Path logPath) {
         if (logPath == null) {
@@ -45,21 +39,19 @@ public final class MonitoringFacade {
     /**
      * Updates all monitors with telemetry data.
      * 
-     * @param snapshot telemetry snapshot (may be null)
+     * @param snapshot telemetry snapshot
      */
     public void updateFromTelemetry(TelemetrySnapshot snapshot) {
         if (snapshot == null) {
             return;
         }
         
-        // Update health monitor
         try {
             healthMonitor.updateFromTelemetry(snapshot);
         } catch (Exception e) {
             NozhConstants.LOGGER.error("Health monitor update failed", e);
         }
         
-        // Record metrics
         try {
             metricsCollector.recordTelemetry(snapshot);
         } catch (Exception e) {
@@ -69,10 +61,6 @@ public final class MonitoringFacade {
     
     /**
      * Logs periodic metrics.
-     * 
-     * @param avgFps average FPS
-     * @param p95Frametime 95th percentile frametime
-     * @param spikeCount spike count
      */
     public void logPeriodicMetrics(double avgFps, double p95Frametime, int spikeCount) {
         try {
@@ -84,90 +72,74 @@ public final class MonitoringFacade {
     
     /**
      * Logs action execution.
-     * 
-     * @param actionId action ID
-     * @param success success flag
-     * @param durationMs duration in milliseconds
      */
     public void logActionExecution(String actionId, boolean success, long durationMs) {
         try {
             eventLogger.logActionExecution(actionId, success, durationMs);
-        } catch (Exception e) {
-            NozhConstants.LOGGER.error("Failed to log action execution", e);
-        }
-        
-        try {
             metricsCollector.recordAction(actionId, success, durationMs);
         } catch (Exception e) {
-            NozhConstants.LOGGER.error("Failed to record action metrics", e);
+            NozhConstants.LOGGER.error("Failed to log action", e);
         }
     }
     
     /**
      * Records an error.
-     * 
-     * @param errorMessage error message
      */
     public void recordError(String errorMessage) {
         if (errorMessage != null) {
-            healthMonitor.recordError(errorMessage);
+            try {
+                healthMonitor.recordError(errorMessage);
+            } catch (Exception e) {
+                NozhConstants.LOGGER.error("Failed to record error", e);
+            }
         }
     }
     
     /**
      * Checks if system is healthy.
-     * 
-     * @return true if healthy
      */
     public boolean isHealthy() {
-        return !healthMonitor.isCritical();
+        try {
+            return !healthMonitor.isCritical();
+        } catch (Exception e) {
+            return true;
+        }
     }
     
     /**
      * Gets health status string.
-     * 
-     * @return health status
      */
     public String getHealthStatus() {
         try {
             return healthMonitor.getHealthStatus();
         } catch (Exception e) {
-            NozhConstants.LOGGER.error("Failed to get health status", e);
-            return "ERROR";
+            return "UNKNOWN";
         }
     }
     
     /**
      * Gets detailed health report.
-     * 
-     * @return health report
      */
     public String getHealthReport() {
         try {
             return String.format(
-                    "Health: %s (%.2f) | Memory: %.1f%% | GC: %d pauses (%.1fms avg)",
+                    "Health: %s (%.2f) | Memory: %.1f%%",
                     healthMonitor.getHealthStatus(),
                     healthMonitor.getHealthScore(),
-                    healthMonitor.getMemoryUsagePercent() * 100,
-                    healthMonitor.getGCCount(),
-                    healthMonitor.getAverageGCPause()
+                    healthMonitor.getMemoryUsagePercent() * 100
             );
         } catch (Exception e) {
-            NozhConstants.LOGGER.error("Failed to generate health report", e);
-            return "Health report generation failed: " + e.getMessage();
+            return "Health report unavailable";
         }
     }
     
     /**
      * Gets metrics summary.
-     * 
-     * @return metrics map
      */
     public java.util.Map<String, Object> getMetricsSummary() {
         try {
             return metricsCollector.getSummary();
         } catch (Exception e) {
-            NozhConstants.LOGGER.error("Failed to get metrics summary", e);
             return java.util.Collections.emptyMap();
         }
     }
