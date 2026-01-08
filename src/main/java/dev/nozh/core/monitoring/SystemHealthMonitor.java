@@ -27,7 +27,7 @@ import java.util.concurrent.atomic.AtomicLong;
  * All mutable state uses atomic operations or proper synchronization.
  * 
  * <p><b>Performance:</b> Health score cached for 1 second (adaptive).
- * Circuit breaker activates after 5 consecutive critical states.
+ * Circuit breaker activates after 5 consecutive critical readings.
  * 
  * @author Nozh Team
  * @since 0.2.0
