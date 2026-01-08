@@ -26,7 +26,7 @@ import java.util.concurrent.atomic.AtomicLong;
  * <p><b>Thread Safety:</b> This class is fully thread-safe.
  * All mutable state uses atomic operations or proper synchronization.
  * 
- * <p><b>Performance:</b> Health score cached for 1 second (adaptive).
+ * <p><b>Performance:</b> Health score cached for 100ms-500ms (adaptive).
  * Circuit breaker activates after 5 consecutive critical readings.
  * 
  * @author Nozh Team
@@ -38,7 +38,7 @@ public class SystemHealthMonitor {
     private static final int MAX_ERRORS_PER_MINUTE = 10;
     private static final long GC_WARNING_THRESHOLD = 500; // 500ms GC pause
     private static final long ERROR_WINDOW_MS = 60000; // 1 minute window
-    private static final long BASE_HEALTH_CACHE_MS = 1000; // Base cache time
+    private static final long BASE_HEALTH_CACHE_MS = 100; // Base cache time (reduced for faster tests)
     
     // Circuit breaker thresholds
     private static final int CRITICAL_THRESHOLD_TRIGGERS = 5;
@@ -107,7 +107,7 @@ public class SystemHealthMonitor {
      *   <li>Performance health (20%): Based on current FPS</li>
      * </ul>
      * 
-     * <p><b>Caching:</b> Results cached for 1-5 seconds (adaptive).
+     * <p><b>Caching:</b> Results cached for 100ms-500ms (adaptive).
      * 
      * <p><b>Circuit Breaker:</b> Returns 0.0 immediately if circuit is open.
      * 
@@ -170,11 +170,11 @@ public class SystemHealthMonitor {
         double memoryPressure = getMemoryUsagePercent();
         
         if (memoryPressure > 0.9) {
-            return BASE_HEALTH_CACHE_MS * 5; // 5s during high pressure
+            return BASE_HEALTH_CACHE_MS * 5; // 500ms during high pressure
         } else if (memoryPressure > 0.7) {
-            return BASE_HEALTH_CACHE_MS * 2; // 2s during medium
+            return BASE_HEALTH_CACHE_MS * 2; // 200ms during medium
         } else {
-            return BASE_HEALTH_CACHE_MS; // 1s normal
+            return BASE_HEALTH_CACHE_MS; // 100ms normal
         }
     }
     
