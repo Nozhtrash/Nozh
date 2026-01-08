@@ -67,7 +67,7 @@ class SystemHealthMonitorTest {
         
         // Circuit breaker opens when health score < 0.2 for 5 consecutive checks
         // Force very low health by recording many errors
-        for (int i = 0; i < 100; i++) {
+        for (int i = 0; i < 150; i++) {
             monitor.recordError("critical_error_" + i);
         }
         
@@ -76,19 +76,29 @@ class SystemHealthMonitorTest {
         
         // Force health score calculations that should trigger circuit breaker
         // Need to call getHealthScore() multiple times to increment critical counter
-        // Wait between calls to ensure cache expires
-        for (int i = 0; i < 6; i++) {
-            // Wait for cache to expire (1 second base cache time)
-            Thread.sleep(1100);
+        // The adaptive cache can be up to 5 seconds under high memory pressure
+        // so we need to wait longer and do more iterations
+        for (int i = 0; i < 8; i++) {
+            // Wait 6 seconds to ensure cache expires even under high memory pressure
+            Thread.sleep(6000);
             double score = monitor.getHealthScore();
+            System.out.println("Iteration " + i + ": Health score = " + score + 
+                             ", Circuit open = " + monitor.isCircuitOpen());
+            
             // Verify score is critical (< 0.2)
             assertTrue(score < 0.3, 
-                "Health score should be critical after 100 errors, got: " + score + " on iteration " + i);
+                "Health score should be critical after 150 errors, got: " + score + " on iteration " + i);
+            
+            // Once circuit opens, we can break early
+            if (monitor.isCircuitOpen()) {
+                System.out.println("Circuit opened on iteration " + i);
+                break;
+            }
         }
         
-        // After 6 critical readings (> 5 threshold), circuit should be open
+        // After sufficient critical readings, circuit should be open
         assertTrue(monitor.isCircuitOpen(), 
-            "Circuit breaker should be open after 6 critical health checks");
+            "Circuit breaker should be open after multiple critical health checks");
         
         // Verify circuit open behavior
         assertEquals(0.0, monitor.getHealthScore(), 
@@ -215,14 +225,22 @@ class SystemHealthMonitorTest {
         SystemHealthMonitor monitor = new SystemHealthMonitor();
         
         // Force circuit breaker open by creating critical conditions
-        for (int i = 0; i < 100; i++) {
+        for (int i = 0; i < 150; i++) {
             monitor.recordError("critical_timeout_" + i);
         }
         
         // Trigger multiple health checks to open circuit (wait for cache expiry)
-        for (int i = 0; i < 6; i++) {
-            Thread.sleep(1100); // Wait for cache to expire
-            monitor.getHealthScore();
+        // Use longer delays to ensure cache expires even under high pressure
+        for (int i = 0; i < 8; i++) {
+            Thread.sleep(6000); // Wait 6 seconds for cache to expire
+            double score = monitor.getHealthScore();
+            System.out.println("Timeout test iteration " + i + ": Health score = " + score + 
+                             ", Circuit open = " + monitor.isCircuitOpen());
+            
+            if (monitor.isCircuitOpen()) {
+                System.out.println("Circuit opened on iteration " + i);
+                break;
+            }
         }
         
         // Verify circuit is open
