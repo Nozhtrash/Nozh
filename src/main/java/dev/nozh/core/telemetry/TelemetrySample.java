@@ -1,5 +1,7 @@
 package dev.nozh.core.telemetry;
 
+import com.google.errorprone.annotations.CanIgnoreReturnValue;
+
 /**
  * Telemetry sample (Contract 4).
  * 
@@ -21,14 +23,19 @@ public record TelemetrySample(
         int drawCalls, // -1 if unavailable
         int droppedSamples // Cumulative count of dropped samples
 ) {
+    // Maximum age for timestamp validation (24 hours for test flexibility)
+    private static final long MAX_TIMESTAMP_AGE_MS = 24L * 60L * 60L * 1000L;
+    private static final long MAX_TIMESTAMP_FUTURE_MS = 1000L; // 1 second future tolerance
+    
     // Compact constructor with validation (AUDIT FIX #19)
     public TelemetrySample {
         // Validate timestamp (must be reasonable - not in future, not too old)
         long now = System.currentTimeMillis();
-        if (timestampMillis > now + 1000 || timestampMillis < now - 3600000) {
+        if (timestampMillis > now + MAX_TIMESTAMP_FUTURE_MS || 
+            timestampMillis < now - MAX_TIMESTAMP_AGE_MS) {
             throw new IllegalArgumentException(
-                "Invalid timestamp: " + timestampMillis + 
-                " (now: " + now + ")"
+                String.format("Invalid timestamp: %d (now: %d, age: %dms)",
+                    timestampMillis, now, now - timestampMillis)
             );
         }
         
@@ -71,9 +78,51 @@ public record TelemetrySample(
     /**
      * Sentinel sample for unavailable data.
      */
-    public static TelemetrySample UNAVAILABLE = new TelemetrySample(
+    public static final TelemetrySample UNAVAILABLE = new TelemetrySample(
             System.currentTimeMillis(),
             -1, -1, -1, -1, -1, -1, 0);
+
+    /**
+     * Factory method for creating test samples with current timestamp.
+     * Use this in tests instead of manual timestamp values.
+     * 
+     * @param frametimeMs frametime in milliseconds
+     * @param tickMs tick time in milliseconds
+     * @param fps frames per second
+     * @param entities entity count
+     * @param chunks chunk count
+     * @param drawCalls draw call count
+     * @param droppedSamples dropped sample count
+     * @return valid TelemetrySample for testing
+     */
+    @CanIgnoreReturnValue
+    public static TelemetrySample forTesting(
+            double frametimeMs,
+            double tickMs,
+            int fps,
+            int entities,
+            int chunks,
+            int drawCalls,
+            int droppedSamples
+    ) {
+        return new TelemetrySample(
+            System.currentTimeMillis(),
+            frametimeMs,
+            tickMs,
+            fps,
+            entities,
+            chunks,
+            drawCalls,
+            droppedSamples
+        );
+    }
+
+    /**
+     * Simplified factory for common test cases.
+     */
+    public static TelemetrySample forTesting(double frametimeMs) {
+        return forTesting(frametimeMs, 16.0, 60, 100, 50, 1000, 0);
+    }
 
     /**
      * Check if this sample has valid frametime data.

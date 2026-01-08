@@ -13,20 +13,20 @@ class TelemetryDropTest {
         RingTelemetryBuffer buffer = new RingTelemetryBuffer(3);
 
         // Fill buffer
-        buffer.add(sample(1, 10.0));
-        buffer.add(sample(2, 20.0));
-        buffer.add(sample(3, 30.0));
+        buffer.add(TelemetrySample.forTesting(10.0));
+        buffer.add(TelemetrySample.forTesting(20.0));
+        buffer.add(TelemetrySample.forTesting(30.0));
 
         assertEquals(0, buffer.getDroppedCount(), "No drops yet");
 
         // Overflow - should drop
-        buffer.add(sample(4, 40.0));
+        buffer.add(TelemetrySample.forTesting(40.0));
 
         assertEquals(1, buffer.getDroppedCount(), "Should have dropped 1 sample");
 
         // More overflow
-        buffer.add(sample(5, 50.0));
-        buffer.add(sample(6, 60.0));
+        buffer.add(TelemetrySample.forTesting(50.0));
+        buffer.add(TelemetrySample.forTesting(60.0));
 
         assertEquals(3, buffer.getDroppedCount(), "Should have dropped 3 total");
     }
@@ -35,10 +35,10 @@ class TelemetryDropTest {
     void snapshotWorksAfterDrops() {
         RingTelemetryBuffer buffer = new RingTelemetryBuffer(2);
 
-        buffer.add(sample(1, 10.0));
-        buffer.add(sample(2, 20.0));
-        buffer.add(sample(3, 30.0)); // Drops oldest
-        buffer.add(sample(4, 40.0)); // Drops oldest
+        buffer.add(TelemetrySample.forTesting(10.0));
+        buffer.add(TelemetrySample.forTesting(20.0));
+        buffer.add(TelemetrySample.forTesting(30.0)); // Drops oldest
+        buffer.add(TelemetrySample.forTesting(40.0)); // Drops oldest
 
         TelemetrySnapshot snapshot = buffer.snapshot();
 
@@ -55,9 +55,5 @@ class TelemetryDropTest {
 
         TelemetrySnapshot snapshot = buffer.snapshot();
         assertEquals(TelemetrySnapshot.EMPTY, snapshot);
-    }
-
-    private TelemetrySample sample(long timestamp, double frametime) {
-        return new TelemetrySample(timestamp, frametime, 16.0, 60, 100, 50, 0, 0);
     }
 }
