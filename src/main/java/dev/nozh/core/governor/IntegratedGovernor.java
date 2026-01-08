@@ -719,47 +719,21 @@ public final class IntegratedGovernor {
     /**
      * Shutdown governor and release resources.
      * 
-     * AUDIT FIX #4: Enhanced resource cleanup with proper exception handling.
+     * AUDIT FIX #4: Enhanced resource cleanup with comprehensive error tracking.
      * AUDIT FIX #24: Also shutdown async executor.
      */
     public void shutdown() {
         NozhConstants.LOGGER.info("Starting IntegratedGovernor shutdown...");
         
-        // AUDIT FIX #4: Collect all resources and shutdown with comprehensive error handling
-        java.util.List<AutoCloseable> resources = new java.util.ArrayList<>();
+        // AUDIT FIX #4: Track all errors during shutdown (but don't throw)
+        int errorCount = 0;
         
-        // Add closeable resources (those that implement AutoCloseable)
-        if (eventLogger instanceof AutoCloseable) {
-            resources.add((AutoCloseable) eventLogger);
-        }
-        if (executor instanceof AutoCloseable) {
-            resources.add((AutoCloseable) executor);
-        }
-        if (effectivenessTracker instanceof AutoCloseable) {
-            resources.add((AutoCloseable) effectivenessTracker);
-        }
-        
-        // AUDIT FIX #4: Track all errors during shutdown
-        java.util.List<Exception> shutdownErrors = new java.util.ArrayList<>();
-        
-        // Shutdown all closeable resources
-        for (AutoCloseable resource : resources) {
-            if (resource != null) {
-                try {
-                    resource.close();
-                } catch (Exception e) {
-                    shutdownErrors.add(e);
-                    NozhConstants.LOGGER.error("Failed to close resource: " + resource.getClass().getSimpleName(), e);
-                }
-            }
-        }
-        
-        // Shutdown components that aren't AutoCloseable
+        // Shutdown components
         if (eventLogger != null) {
             try {
                 eventLogger.shutdown();
             } catch (Exception e) {
-                shutdownErrors.add(e);
+                errorCount++;
                 NozhConstants.LOGGER.error("Failed to shutdown event logger", e);
             }
         }
@@ -768,7 +742,7 @@ public final class IntegratedGovernor {
             try {
                 executor.shutdown();
             } catch (Exception e) {
-                shutdownErrors.add(e);
+                errorCount++;
                 NozhConstants.LOGGER.error("Failed to shutdown executor", e);
             }
         }
@@ -777,7 +751,7 @@ public final class IntegratedGovernor {
             try {
                 effectivenessTracker.shutdown();
             } catch (Exception e) {
-                shutdownErrors.add(e);
+                errorCount++;
                 NozhConstants.LOGGER.error("Failed to shutdown effectiveness tracker", e);
             }
         }
@@ -789,15 +763,18 @@ public final class IntegratedGovernor {
                 if (!asyncExecutor.awaitTermination(5, TimeUnit.SECONDS)) {
                     NozhConstants.LOGGER.warn("Async executor did not terminate in time, forcing shutdown");
                     java.util.List<Runnable> pendingTasks = asyncExecutor.shutdownNow();
-                    NozhConstants.LOGGER.warn("Forced shutdown of " + pendingTasks.size() + " pending tasks");
+                    if (!pendingTasks.isEmpty()) {
+                        NozhConstants.LOGGER.warn("Forced shutdown of " + pendingTasks.size() + " pending tasks");
+                    }
                     
                     // Wait a bit more for forced shutdown
                     if (!asyncExecutor.awaitTermination(2, TimeUnit.SECONDS)) {
+                        errorCount++;
                         NozhConstants.LOGGER.error("Async executor still did not terminate after forced shutdown");
                     }
                 }
             } catch (InterruptedException e) {
-                shutdownErrors.add(e);
+                errorCount++;
                 NozhConstants.LOGGER.error("Interrupted while waiting for async executor shutdown", e);
                 asyncExecutor.shutdownNow();
                 Thread.currentThread().interrupt();
@@ -809,23 +786,21 @@ public final class IntegratedGovernor {
             int pending = pendingActions.size();
             if (pending > 0) {
                 NozhConstants.LOGGER.warn("Cancelling " + pending + " pending actions during shutdown");
+                pendingActions.values().forEach(future -> future.cancel(true));
             }
-            pendingActions.values().forEach(future -> future.cancel(true));
             pendingActions.clear();
         } catch (Exception e) {
-            shutdownErrors.add(e);
+            errorCount++;
             NozhConstants.LOGGER.error("Failed to clear pending actions", e);
         }
         
         initialized = false;
         
-        // AUDIT FIX #4: Report shutdown status
-        if (shutdownErrors.isEmpty()) {
+        // AUDIT FIX #4: Report shutdown status (without throwing)
+        if (errorCount == 0) {
             NozhConstants.LOGGER.info("IntegratedGovernor shutdown completed successfully");
         } else {
-            NozhConstants.LOGGER.error("IntegratedGovernor shutdown completed with " + shutdownErrors.size() + " errors");
-            // Throw first error if any occurred
-            throw new RuntimeException("Shutdown completed with errors", shutdownErrors.get(0));
+            NozhConstants.LOGGER.error("IntegratedGovernor shutdown completed with " + errorCount + " errors");
         }
     }
 
