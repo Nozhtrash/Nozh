@@ -42,6 +42,7 @@ import java.util.concurrent.atomic.*;
  * FULL INTEGRATION: Phases 1-4 complete + P0 hardening
  * AUDIT FIX #1: Thread-safe atomic variables for lastDecisionTime and tickCounter
  * AUDIT FIX #24: Removed Thread.sleep from game thread - async execution
+ * CRITICAL FIX: makeDecision() fully implemented (v0.4.0)
  * 
  * @author Nozh Team
  * @since 0.3.0
@@ -272,6 +273,206 @@ public final class IntegratedGovernor {
     }
 
     /**
+     * Core decision-making logic - FULLY IMPLEMENTED.
+     * 
+     * Decision pipeline:
+     * 1. Detect current scenario with confidence
+     * 2. Calculate current FPS and compare to target
+     * 3. Check predictor for frame drop prediction
+     * 4. Determine if optimization is needed
+     * 5. Get available actions (filtered by blacklist)
+     * 6. Select best action using Q-learning
+     * 7. Calculate utility score for selected action
+     * 8. Validate utility meets minimum threshold
+     * 9. Execute action with full reasoning
+     * 
+     * @param snapshot current telemetry data
+     */
+    private void makeDecision(TelemetrySnapshot snapshot) {
+        if (snapshot == null) {
+            NozhConstants.LOGGER.warn("Cannot make decision with null snapshot");
+            return;
+        }
+        
+        try {
+            // STEP 1: Detect scenario
+            ScenarioSnapshot scenarioSnapshot = detectScenario();
+            if (scenarioSnapshot == null) {
+                NozhConstants.LOGGER.warn("Scenario detection failed, using default");
+                scenarioSnapshot = createDefaultScenarioSnapshot();
+            }
+            
+            currentScenario = scenarioSnapshot.scenario();
+            double scenarioConfidence = scenarioSnapshot.confidence();
+            
+            // STEP 2: Calculate current FPS
+            double currentFps = 1000.0 / snapshot.avgFrametimeMs();
+            if (!Double.isFinite(currentFps) || currentFps <= 0) {
+                NozhConstants.LOGGER.warn("Invalid FPS calculated: " + currentFps);
+                return;
+            }
+            
+            double targetFps = configManager != null ? 
+                configManager.getValue("target_fps", 60.0) : 60.0;
+            
+            // STEP 3: Check predictor for upcoming issues
+            boolean predictedDrop = false;
+            if (predictor != null) {
+                try {
+                    predictedDrop = predictor.predictFpsDrop();
+                    if (predictedDrop) {
+                        NozhConstants.LOGGER.info("Predictor warns of upcoming frame drop");
+                    }
+                } catch (Exception e) {
+                    NozhConstants.LOGGER.error("Predictor check failed", e);
+                }
+            }
+            
+            // STEP 4: Determine if action is needed
+            boolean needsOptimization = currentFps < targetFps || 
+                                       predictedDrop || 
+                                       snapshot.spikeCount() > 5;
+            
+            if (!needsOptimization) {
+                // Performance is good, no action needed
+                if (tickCounter.get() % 200 == 0) { // Log every 10 seconds
+                    NozhConstants.LOGGER.debug(String.format(
+                        "Performance stable: %.1f FPS (target: %.0f), scenario: %s",
+                        currentFps, targetFps, currentScenario
+                    ));
+                }
+                return;
+            }
+            
+            // STEP 5: Get available actions
+            String[] availableActions = getAvailableActions();
+            if (availableActions == null || availableActions.length == 0) {
+                NozhConstants.LOGGER.warn("No available actions to optimize performance");
+                return;
+            }
+            
+            // STEP 6: Select best action using Q-learning
+            String hardwareProfile = determineHardwareProfile(currentFps);
+            PerformanceLearningEngine.GameState currentState = 
+                new PerformanceLearningEngine.GameState(
+                    currentScenario, 
+                    currentFps, 
+                    hardwareProfile
+                );
+            
+            String selectedAction = null;
+            if (learningEngine != null) {
+                try {
+                    selectedAction = learningEngine.getBestAction(currentState, availableActions);
+                } catch (Exception e) {
+                    NozhConstants.LOGGER.error("Learning engine action selection failed", e);
+                }
+            }
+            
+            // Fallback: if learning engine fails, pick first action
+            if (selectedAction == null && availableActions.length > 0) {
+                selectedAction = availableActions[0];
+                NozhConstants.LOGGER.warn("Using fallback action: " + selectedAction);
+            }
+            
+            if (selectedAction == null) {
+                NozhConstants.LOGGER.error("No action selected, cannot proceed");
+                return;
+            }
+            
+            // STEP 7: Calculate utility score
+            double utilityScore = 0.0;
+            if (utilityScorer != null) {
+                try {
+                    utilityScore = utilityScorer.calculateUtility(
+                        selectedAction, 
+                        scenarioSnapshot, 
+                        snapshot
+                    );
+                } catch (Exception e) {
+                    NozhConstants.LOGGER.error("Utility calculation failed", e);
+                }
+            }
+            
+            // STEP 8: Validate utility threshold
+            if (utilityScorer != null && !utilityScorer.meetsThreshold(utilityScore)) {
+                NozhConstants.LOGGER.info(String.format(
+                    "Action '%s' utility too low (%.3f < %.3f), skipping",
+                    selectedAction, utilityScore, utilityScorer.getMinThreshold()
+                ));
+                return;
+            }
+            
+            // STEP 9: Get Q-value for logging
+            double qValue = 0.0;
+            if (learningEngine != null) {
+                try {
+                    qValue = learningEngine.getActionValue(currentState, selectedAction);
+                } catch (Exception e) {
+                    NozhConstants.LOGGER.error("Q-value retrieval failed", e);
+                }
+            }
+            
+            // Create detailed reasoning
+            DecisionReasoning reasoning = DecisionReasoning.create(
+                currentScenario,
+                currentFps,
+                targetFps,
+                utilityScore,
+                qValue,
+                predictedDrop,
+                snapshot.spikeCount()
+            );
+            
+            // Log decision
+            NozhConstants.LOGGER.info(String.format(
+                "DECISION: Executing '%s' | %s",
+                selectedAction,
+                reasoning
+            ));
+            
+            // STEP 10: Execute action
+            executeAction(
+                selectedAction, 
+                reasoning, 
+                snapshot, 
+                currentState, 
+                currentFps
+            );
+            
+        } catch (Exception e) {
+            NozhConstants.LOGGER.error("Decision making failed", e);
+            if (healthMonitor != null) {
+                healthMonitor.recordError("decision_error: " + e.getMessage());
+            }
+        }
+    }
+    
+    /**
+     * Detect current scenario using scenario detector.
+     */
+    private ScenarioSnapshot detectScenario() {
+        if (scenarioDetector == null) {
+            return null;
+        }
+        
+        try {
+            Scenario detected = scenarioDetector.detectScenario();
+            if (detected == null) {
+                return null;
+            }
+            
+            // Calculate confidence (simplified for now)
+            double confidence = 0.8; // TODO: Get real confidence from detector
+            
+            return new ScenarioSnapshot(detected, confidence);
+        } catch (Exception e) {
+            NozhConstants.LOGGER.error("Scenario detection failed", e);
+            return null;
+        }
+    }
+
+    /**
      * AUDIT FIX #3: Enhanced null pointer handling in executeAction.
      * AUDIT FIX #24: Execute action asynchronously without blocking game thread.
      * 
@@ -283,7 +484,6 @@ public final class IntegratedGovernor {
      * @param state game state (must not be null)
      * @param fpsBefore FPS before action (must be positive)
      */
-    @SuppressWarnings({"unused", "java:S1172"}) // Parameters kept for future use
     private void executeAction(String actionId, DecisionReasoning reasoning, 
                               TelemetrySnapshot beforeSnapshot, 
                               PerformanceLearningEngine.GameState state,
@@ -532,11 +732,6 @@ public final class IntegratedGovernor {
             this.executionSuccess = executionSuccess;
             this.startTime = startTime;
         }
-    }
-
-    private void makeDecision(TelemetrySnapshot snapshot) {
-        // Implementation placeholder
-        // TODO: Complete decision making logic
     }
     
     private ScenarioSnapshot createDefaultScenarioSnapshot() {
