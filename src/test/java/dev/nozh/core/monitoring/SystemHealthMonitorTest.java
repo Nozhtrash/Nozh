@@ -74,8 +74,8 @@ class SystemHealthMonitorTest {
         // Initial state - circuit should be closed
         assertFalse(monitor.isCircuitOpen(), "Circuit should start closed");
         
-        // Now the circuit breaker updates even with cached values,
-        // so we can call getHealthScore() rapidly and it will work
+        // CRITICAL FIX: Sleep long enough (>1000ms) to bypass health cache
+        // This ensures updateCircuitBreaker() is called on each iteration
         for (int i = 0; i < 6; i++) {
             double score = monitor.getHealthScore();
             
@@ -83,8 +83,8 @@ class SystemHealthMonitorTest {
             assertTrue(score < 0.3, 
                 "Health score should be critical after 150 errors, got: " + score + " on iteration " + i);
             
-            // Small sleep to ensure different calls
-            Thread.sleep(100);
+            // Sleep 1100ms to ensure cache expires (BASE_HEALTH_CACHE_MS = 1000ms)
+            Thread.sleep(1100);
         }
         
         // After 6 critical readings (> 5 threshold), circuit should be open
@@ -221,9 +221,10 @@ class SystemHealthMonitorTest {
         }
         
         // Trigger multiple health checks to open circuit
+        // CRITICAL FIX: Use 1100ms sleeps to ensure cache expires
         for (int i = 0; i < 6; i++) {
             monitor.getHealthScore();
-            Thread.sleep(100); // Small sleep
+            Thread.sleep(1100); // Sleep long enough to expire cache
         }
         
         // Verify circuit is open
