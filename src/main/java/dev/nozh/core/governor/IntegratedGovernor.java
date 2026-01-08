@@ -380,13 +380,13 @@ public final class IntegratedGovernor {
                 return;
             }
             
-            // STEP 7: Calculate utility score
+            // STEP 7: Calculate utility score - FIX: Correct signature
             double utilityScore = 0.0;
             if (utilityScorer != null) {
                 try {
                     utilityScore = utilityScorer.calculateUtility(
-                        selectedAction, 
-                        scenarioSnapshot, 
+                        selectedAction,
+                        scenarioSnapshot,
                         snapshot
                     );
                 } catch (Exception e) {
@@ -394,7 +394,7 @@ public final class IntegratedGovernor {
                 }
             }
             
-            // STEP 8: Validate utility threshold
+            // STEP 8: Validate utility threshold - FIX: Use meetsThreshold()
             if (utilityScorer != null && !utilityScorer.meetsThreshold(utilityScore)) {
                 NozhConstants.LOGGER.info(String.format(
                     "Action '%s' utility too low (%.3f < %.3f), skipping",
@@ -450,6 +450,7 @@ public final class IntegratedGovernor {
     
     /**
      * Detect current scenario using scenario detector.
+     * FIX: Use detect() method instead of detectScenario()
      */
     private ScenarioSnapshot detectScenario() {
         if (scenarioDetector == null) {
@@ -457,7 +458,7 @@ public final class IntegratedGovernor {
         }
         
         try {
-            Scenario detected = scenarioDetector.detectScenario();
+            Scenario detected = scenarioDetector.detect();
             if (detected == null) {
                 return null;
             }

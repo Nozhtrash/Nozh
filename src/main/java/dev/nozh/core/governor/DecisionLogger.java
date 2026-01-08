@@ -1,106 +1,67 @@
 package dev.nozh.core.governor;
 
 import dev.nozh.NozhConstants;
-
-import java.util.ArrayDeque;
-import java.util.ArrayList;
-import java.util.Deque;
-import java.util.List;
+import dev.nozh.core.context.Scenario;
 
 /**
- * Structured logger for governor decisions with searchable history.
+ * Logs governor decisions for transparency and debugging.
  * 
- * Logs every decision with:
- * - Timestamp
- * - Reasoning
- * - Outcome
- * - Telemetry context
- * 
- * Keeps ring buffer of last 100 decisions for `/nozh explain`.
- * 
- * TASK 6: Explainable decisions - structured logging
+ * @author Nozh Team
+ * @since 0.4.0
  */
 public final class DecisionLogger {
 
-    private static final int HISTORY_SIZE = 100;
-    private static final Deque<DecisionEntry> history = new ArrayDeque<>(HISTORY_SIZE);
+    private DecisionLogger() {
+        // Utility class
+    }
 
     /**
-     * Log a decision.
+     * Log a decision with full reasoning.
+     * 
+     * @param actionId action taken
+     * @param reasoning decision reasoning
      */
-    public static void logDecision(DecisionReasoning reasoning) {
-        DecisionEntry entry = new DecisionEntry(
-                System.currentTimeMillis(),
-                reasoning
+    public static void logDecision(String actionId, DecisionReasoning reasoning) {
+        if (actionId == null || reasoning == null) {
+            return;
+        }
+
+        // FIX: Use toString() instead of non-existent toExplanation()
+        // toString() returns the rationale field
+        NozhConstants.LOGGER.info("GOVERNOR DECISION: [{}] - {}",
+            actionId,
+            reasoning.toString()
         );
-
-        synchronized (history) {
-            if (history.size() >= HISTORY_SIZE) {
-                history.pollFirst();
-            }
-            history.offer(entry);
-        }
-
-        // Also log to Minecraft logger
-        NozhConstants.LOGGER.info("[GOVERNOR] " + reasoning.toExplanation());
     }
 
     /**
-     * Get recent decision history (last N entries).
+     * Log decision with context.
      */
-    public static List<DecisionEntry> getRecentHistory(int count) {
-        List<DecisionEntry> result = new ArrayList<>();
-        synchronized (history) {
-            int toTake = Math.min(count, history.size());
-            int skip = Math.max(0, history.size() - toTake);
-            int i = 0;
-            for (DecisionEntry entry : history) {
-                if (i >= skip) {
-                    result.add(entry);
-                }
-                i++;
-            }
+    public static void logDecisionWithContext(
+            String actionId,
+            Scenario scenario,
+            double currentFps,
+            double targetFps,
+            DecisionReasoning reasoning) {
+        
+        if (actionId == null) {
+            return;
         }
-        return result;
+
+        NozhConstants.LOGGER.info(
+            "GOVERNOR: {} | Scenario={} | FPS={}/{} | Reasoning: {}",
+            actionId,
+            scenario,
+            String.format("%.1f", currentFps),
+            String.format("%.0f", targetFps),
+            reasoning != null ? reasoning.toString() : "N/A"
+        );
     }
 
     /**
-     * Get most recent decision.
+     * Log decision failure.
      */
-    public static DecisionEntry getLatest() {
-        synchronized (history) {
-            return history.isEmpty() ? null : history.peekLast();
-        }
-    }
-
-    /**
-     * Get all history.
-     */
-    public static List<DecisionEntry> getAllHistory() {
-        synchronized (history) {
-            return new ArrayList<>(history);
-        }
-    }
-
-    /**
-     * Clear history.
-     */
-    public static void clearHistory() {
-        synchronized (history) {
-            history.clear();
-        }
-        NozhConstants.LOGGER.info("Decision history cleared");
-    }
-
-    /**
-     * Decision entry record.
-     */
-    public record DecisionEntry(
-            long timestamp,
-            DecisionReasoning reasoning
-    ) {
-        public long getAgeMs() {
-            return System.currentTimeMillis() - timestamp;
-        }
+    public static void logDecisionFailure(String reason) {
+        NozhConstants.LOGGER.warn("GOVERNOR: Decision failed - {}", reason);
     }
 }

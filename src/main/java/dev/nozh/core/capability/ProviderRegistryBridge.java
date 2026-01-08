@@ -26,6 +26,8 @@ public final class ProviderRegistryBridge {
     /**
      * Default target values for each capability when optimizing for FPS.
      * These are conservative values that improve performance without drastic quality loss.
+     * 
+     * FIX: Use EnumValue instead of StringValue
      */
     private static final Map<CapabilityId, CapabilityValue> DEFAULT_OPTIMIZATION_VALUES = new HashMap<>();
 
@@ -36,12 +38,14 @@ public final class ProviderRegistryBridge {
         DEFAULT_OPTIMIZATION_VALUES.put(CapabilityId.ENTITY_DISTANCE, new CapabilityValue.IntValue(50));
         
         // Particle and visual effects (reduced/off)
-        DEFAULT_OPTIMIZATION_VALUES.put(CapabilityId.PARTICLES, new CapabilityValue.StringValue("minimal"));
+        // FIX: StringValue -> EnumValue
+        DEFAULT_OPTIMIZATION_VALUES.put(CapabilityId.PARTICLES, new CapabilityValue.EnumValue("minimal"));
         DEFAULT_OPTIMIZATION_VALUES.put(CapabilityId.CLOUDS, new CapabilityValue.BoolValue(false));
         DEFAULT_OPTIMIZATION_VALUES.put(CapabilityId.ENTITY_SHADOWS, new CapabilityValue.BoolValue(false));
         
         // Graphics quality
-        DEFAULT_OPTIMIZATION_VALUES.put(CapabilityId.GRAPHICS_MODE, new CapabilityValue.StringValue("fast"));
+        // FIX: StringValue -> EnumValue
+        DEFAULT_OPTIMIZATION_VALUES.put(CapabilityId.GRAPHICS_MODE, new CapabilityValue.EnumValue("fast"));
         DEFAULT_OPTIMIZATION_VALUES.put(CapabilityId.SMOOTH_LIGHTING, new CapabilityValue.BoolValue(false));
         DEFAULT_OPTIMIZATION_VALUES.put(CapabilityId.MIPMAP_LEVEL, new CapabilityValue.IntValue(0));
         DEFAULT_OPTIMIZATION_VALUES.put(CapabilityId.BIOME_BLEND, new CapabilityValue.IntValue(1));

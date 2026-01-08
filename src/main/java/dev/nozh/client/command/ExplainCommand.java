@@ -1,121 +1,89 @@
 package dev.nozh.client.command;
 
 import com.mojang.brigadier.Command;
-import com.mojang.brigadier.arguments.IntegerArgumentType;
-import com.mojang.brigadier.builder.LiteralArgumentBuilder;
+import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.context.CommandContext;
-import dev.nozh.core.governor.DecisionLogger;
 import dev.nozh.core.governor.DecisionReasoning;
+import dev.nozh.fabric.client.NozhClientMod;
 import net.fabricmc.fabric.api.client.command.v2.FabricClientCommandSource;
 import net.minecraft.text.Text;
 
-import java.util.List;
-
-import static net.fabricmc.fabric.api.client.command.v2.ClientCommandManager.argument;
 import static net.fabricmc.fabric.api.client.command.v2.ClientCommandManager.literal;
 
 /**
- * /nozh explain command - shows governor decision reasoning.
- * 
- * Usage:
- * - /nozh explain - Show latest decision
- * - /nozh explain latest - Same as above
- * - /nozh explain history - Show last 10 decisions
- * - /nozh explain history <count> - Show last N decisions
- * 
- * TASK 6: Explainable decisions - user interface
+ * Client command to explain the last governor decision.
+ * Usage: /nozh explain
  */
-public final class ExplainCommand {
+public class ExplainCommand {
 
-    public static LiteralArgumentBuilder<FabricClientCommandSource> register() {
-        return literal("explain")
-                .executes(ExplainCommand::executeLatest)
-                .then(literal("latest")
-                        .executes(ExplainCommand::executeLatest))
-                .then(literal("history")
-                        .executes(ctx -> executeHistory(ctx, 10))
-                        .then(argument("count", IntegerArgumentType.integer(1, 100))
-                                .executes(ctx -> executeHistory(ctx, 
-                                        IntegerArgumentType.getInteger(ctx, "count")))));
+    public static void register(CommandDispatcher<FabricClientCommandSource> dispatcher) {
+        dispatcher.register(
+                literal("nozh")
+                        .then(literal("explain")
+                                .executes(ExplainCommand::explain)
+                        )
+        );
     }
 
-    private static int executeLatest(CommandContext<FabricClientCommandSource> ctx) {
-        DecisionLogger.DecisionEntry latest = DecisionLogger.getLatest();
-        
-        if (latest == null) {
-            ctx.getSource().sendFeedback(Text.literal("§c[NOZH] No decisions recorded yet"));
+    private static int explain(CommandContext<FabricClientCommandSource> ctx) {
+        DecisionReasoning reasoning = NozhClientMod.getLastDecisionReasoning();
+
+        if (reasoning == null) {
+            ctx.getSource().sendFeedback(Text.literal("§cNo decisions made yet."));
             return Command.SINGLE_SUCCESS;
         }
 
-        DecisionReasoning reasoning = latest.reasoning();
+        // FIX: Adapt to new DecisionReasoning record structure
+        // Use record accessor methods: scenario(), currentFps(), etc.
         
-        ctx.getSource().sendFeedback(Text.literal("§e=== Latest Decision ==="));
-        ctx.getSource().sendFeedback(Text.literal("§7Age: §f" + formatAge(latest.getAgeMs())));
-        ctx.getSource().sendFeedback(Text.literal("§7Action: §a" + reasoning.getActionId()));
-        ctx.getSource().sendFeedback(Text.literal("§7Scenario: §b" + reasoning.getScenario()));
-        ctx.getSource().sendFeedback(Text.literal("§7Confidence: §f" + 
-                String.format("%.1f%%", reasoning.getConfidenceScore() * 100)));
-        
-        if (!reasoning.getTriggers().isEmpty()) {
-            ctx.getSource().sendFeedback(Text.literal("§7Triggers:"));
-            for (String trigger : reasoning.getTriggers()) {
-                ctx.getSource().sendFeedback(Text.literal("  §7• §f" + trigger));
-            }
-        }
-        
-        if (!reasoning.getSignals().isEmpty()) {
-            ctx.getSource().sendFeedback(Text.literal("§7Signals:"));
-            for (String signal : reasoning.getSignals()) {
-                ctx.getSource().sendFeedback(Text.literal("  §7• §f" + signal));
-            }
-        }
-        
-        ctx.getSource().sendFeedback(Text.literal("§7Expected: §a" + reasoning.getExpectedOutcome()));
-        
-        if (!reasoning.getAlternatives().isEmpty()) {
-            ctx.getSource().sendFeedback(Text.literal("§7Alternatives: §f" + 
-                    reasoning.getAlternatives().size() + " considered"));
-        }
-        
-        return Command.SINGLE_SUCCESS;
-    }
-
-    private static int executeHistory(CommandContext<FabricClientCommandSource> ctx, int count) {
-        List<DecisionLogger.DecisionEntry> history = DecisionLogger.getRecentHistory(count);
-        
-        if (history.isEmpty()) {
-            ctx.getSource().sendFeedback(Text.literal("§c[NOZH] No decision history"));
-            return Command.SINGLE_SUCCESS;
-        }
-
+        ctx.getSource().sendFeedback(Text.literal("§6=== Last Decision Explanation ==="));
+        ctx.getSource().sendFeedback(Text.literal("§7Scenario: §f" + reasoning.scenario()));
         ctx.getSource().sendFeedback(Text.literal(
-                "§e=== Decision History (§f" + history.size() + "§e) ==="));
+            String.format("§7Performance: §f%.1f FPS / %.0f target",
+                reasoning.currentFps(),
+                reasoning.targetFps()
+            )
+        ));
+        ctx.getSource().sendFeedback(Text.literal(
+            String.format("§7Utility Score: §f%.3f", reasoning.utilityScore())
+        ));
+        ctx.getSource().sendFeedback(Text.literal(
+            String.format("§7Q-Value: §f%.3f", reasoning.qValue())
+        ));
         
-        for (int i = 0; i < history.size(); i++) {
-            DecisionLogger.DecisionEntry entry = history.get(i);
-            DecisionReasoning reasoning = entry.reasoning();
-            
-            String prefix = (i == history.size() - 1) ? "§a▶" : "§7•";
-            
+        if (reasoning.predictedDrop()) {
+            ctx.getSource().sendFeedback(Text.literal("§e⚠ Frame drop predicted"));
+        }
+        
+        if (reasoning.spikeCount() > 0) {
             ctx.getSource().sendFeedback(Text.literal(
-                    prefix + " §f" + formatAge(entry.getAgeMs()) + " ago: " +
-                    "§a" + reasoning.getActionId() + " §7(§b" + 
-                    reasoning.getScenario() + "§7)"));
+                String.format("§e⚠ %d frame spikes detected", reasoning.spikeCount())
+            ));
         }
         
-        ctx.getSource().sendFeedback(Text.literal(
-                "§7Tip: Use §f/nozh explain latest§7 for details"));
+        // Show full rationale
+        ctx.getSource().sendFeedback(Text.literal("§7Rationale: §f" + reasoning.rationale()));
         
         return Command.SINGLE_SUCCESS;
     }
 
-    private static String formatAge(long ageMs) {
-        if (ageMs < 1000) {
-            return ageMs + "ms";
-        } else if (ageMs < 60000) {
-            return (ageMs / 1000) + "s";
-        } else {
-            return (ageMs / 60000) + "m" + ((ageMs % 60000) / 1000) + "s";
+    private static int formatShort(CommandContext<FabricClientCommandSource> ctx) {
+        DecisionReasoning reasoning = NozhClientMod.getLastDecisionReasoning();
+
+        if (reasoning == null) {
+            ctx.getSource().sendFeedback(Text.literal("§cNo decisions made yet."));
+            return Command.SINGLE_SUCCESS;
         }
+
+        // FIX: Use toString() which returns rationale
+        String summary = String.format(
+            "§7Last decision: %s §8(FPS: %.1f/%.0f)",
+            reasoning.scenario(),
+            reasoning.currentFps(),
+            reasoning.targetFps()
+        );
+
+        ctx.getSource().sendFeedback(Text.literal(summary));
+        return Command.SINGLE_SUCCESS;
     }
 }
