@@ -134,10 +134,12 @@ public class EnhancedTelemetryCollector {
     
     /**
      * Get count of loaded chunks.
+     * 
+     * @param world the client world to get chunk count from
+     * @return estimated number of loaded chunks based on render distance
      */
-    private int getLoadedChunksCount() {
+    private int getLoadedChunksCount(ClientWorld world) {
         try {
-            // Get MinecraftClient from world
             MinecraftClient client = MinecraftClient.getInstance();
             if (client == null || client.options == null) {
                 return 0;
