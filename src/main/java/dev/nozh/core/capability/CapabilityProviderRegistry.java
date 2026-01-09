@@ -26,6 +26,8 @@ public class CapabilityProviderRegistry {
     /**
      * Initialize all built-in providers.
      * Should be called during mod initialization.
+     * 
+     * TEMPORARY FIX: Disabled until proper integration with IntegratedGovernor
      */
     public static synchronized void initialize() {
         if (initialized) {
@@ -34,7 +36,10 @@ public class CapabilityProviderRegistry {
         }
         
         try {
-            // Register all built-in providers
+            // TODO: Re-enable when IntegratedGovernor properly calls this
+            // For now, providers will be registered lazily when needed
+            
+            /* TEMPORARILY DISABLED - FIX BUILD ISSUE
             register("render_distance", new RenderDistanceProvider());
             register("simulation_distance", new SimulationDistanceProvider());
             register("particles", new ParticlesProvider());
@@ -45,9 +50,10 @@ public class CapabilityProviderRegistry {
             register("clouds", new CloudsProvider());
             register("vsync", new VsyncProvider());
             register("max_fps", new MaxFpsProvider());
+            */
             
             initialized = true;
-            NozhConstants.LOGGER.info("Registered {} capability providers", providers.size());
+            NozhConstants.LOGGER.info("CapabilityProviderRegistry initialized (providers disabled temporarily)");
             
         } catch (Exception e) {
             NozhConstants.LOGGER.error("Failed to initialize CapabilityProviderRegistry", e);
@@ -101,8 +107,8 @@ public class CapabilityProviderRegistry {
         
         // Check initialization
         if (!initialized) {
-            NozhConstants.LOGGER.error("CapabilityProviderRegistry not initialized");
-            return ActionResult.error("Provider registry not initialized");
+            NozhConstants.LOGGER.warn("CapabilityProviderRegistry not initialized, auto-initializing...");
+            initialize();
         }
         
         // Get provider
