@@ -1,21 +1,32 @@
 package dev.nozh.core.scenario;
 
-import dev.nozh.NozhConstants;
+import net.minecraft.client.MinecraftClient;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.entity.Entity;
 
-import java.util.*;
+import java.util.ArrayDeque;
+import java.util.Deque;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 /**
- * Analyzes player actions over a temporal window (30 seconds).
- * Provides context for scenario detection.
+ * Analyzes player actions within a time window to detect activity patterns.
+ * 
+ * <p>Tracks recent player actions (30 seconds) and analyzes patterns
+ * to determine current activity type (combat, building, exploring, etc.).
+ * 
+ * @author Nozh Team
+ * @since 0.5.0 (Phase 2 Sprint 3)
  */
-public class ActionWindowAnalyzer {
+public final class ActionWindowAnalyzer {
+    private static final int WINDOW_SIZE = 600; // 30 seconds at 20 TPS
+    private static final long WINDOW_DURATION_MS = 30000; // 30 seconds
     
-    private static final int WINDOW_SIZE_TICKS = 600; // 30 seconds at 20 TPS
-    private final Deque<PlayerAction> recentActions = new ArrayDeque<>(WINDOW_SIZE_TICKS);
+    private final Deque<PlayerAction> recentActions = new ArrayDeque<>(WINDOW_SIZE);
     
+    /**
+     * Player action types for pattern detection.
+     */
     public enum ActionType {
         BLOCK_BREAK,
         BLOCK_PLACE,
@@ -24,56 +35,119 @@ public class ActionWindowAnalyzer {
         INVENTORY_OPEN,
         JUMP,
         SPRINT,
-        SNEAK,
-        CAMERA_MOVE
+        SNEAK
     }
     
+    /**
+     * Record of a single player action.
+     */
     public static class PlayerAction {
-        public final ActionType type;
-        public final long timestamp;
-        public final BlockPos position;
-        public final Entity target;
+        public ActionType type;
+        public long timestamp;
+        public BlockPos position;
+        public Entity target;
         
         public PlayerAction(ActionType type) {
-            this(type, null, null);
-        }
-        
-        public PlayerAction(ActionType type, BlockPos position, Entity target) {
             this.type = type;
             this.timestamp = System.currentTimeMillis();
-            this.position = position;
-            this.target = target;
         }
+    }
+    
+    /**
+     * Result of action window analysis.
+     */
+    public static class ScenarioAnalysis {
+        private final ScenarioType type;
+        private final double confidence;
+        
+        private ScenarioAnalysis(ScenarioType type, double confidence) {
+            this.type = type;
+            this.confidence = confidence;
+        }
+        
+        public static ScenarioAnalysis combat(double confidence) {
+            return new ScenarioAnalysis(ScenarioType.COMBAT, confidence);
+        }
+        
+        public static ScenarioAnalysis building(double confidence) {
+            return new ScenarioAnalysis(ScenarioType.BUILDING, confidence);
+        }
+        
+        public static ScenarioAnalysis exploring(double confidence) {
+            return new ScenarioAnalysis(ScenarioType.EXPLORING, confidence);
+        }
+        
+        public static ScenarioAnalysis organizing(double confidence) {
+            return new ScenarioAnalysis(ScenarioType.ORGANIZING, confidence);
+        }
+        
+        public static ScenarioAnalysis idle() {
+            return new ScenarioAnalysis(ScenarioType.IDLE, 1.0);
+        }
+        
+        public static ScenarioAnalysis standard() {
+            return new ScenarioAnalysis(ScenarioType.STANDARD, 0.5);
+        }
+        
+        public boolean isCombat() { return type == ScenarioType.COMBAT; }
+        public boolean isBuilding() { return type == ScenarioType.BUILDING; }
+        public boolean isExploring() { return type == ScenarioType.EXPLORING; }
+        public boolean isOrganizing() { return type == ScenarioType.ORGANIZING; }
+        
+        public double getConfidence() { return confidence; }
+        public int getTotalActions() { return 0; } // Placeholder
+    }
+    
+    private enum ScenarioType {
+        COMBAT, BUILDING, EXPLORING, ORGANIZING, IDLE, STANDARD
     }
     
     /**
      * Record a player action.
      */
     public void recordAction(ActionType type, Object... data) {
-        BlockPos pos = null;
-        Entity entity = null;
+        PlayerAction action = new PlayerAction(type);
         
-        for (Object obj : data) {
-            if (obj instanceof BlockPos) pos = (BlockPos) obj;
-            if (obj instanceof Entity) entity = (Entity) obj;
+        // Populate additional data if provided
+        if (data.length > 0 && data[0] instanceof BlockPos) {
+            action.position = (BlockPos) data[0];
+        }
+        if (data.length > 1 && data[1] instanceof Entity) {
+            action.target = (Entity) data[1];
         }
         
-        PlayerAction action = new PlayerAction(type, pos, entity);
         recentActions.addLast(action);
         
-        // Maintain window size
-        cleanOldActions();
+        // Maintain window size (remove old actions)
+        cleanupOldActions();
     }
     
     /**
-     * Analyze recent actions and determine scenario.
+     * Remove actions older than window duration.
+     */
+    private void cleanupOldActions() {
+        long cutoffTime = System.currentTimeMillis() - WINDOW_DURATION_MS;
+        
+        while (!recentActions.isEmpty() && 
+               recentActions.peekFirst().timestamp < cutoffTime) {
+            recentActions.pollFirst();
+        }
+        
+        // Also enforce max size
+        while (recentActions.size() > WINDOW_SIZE) {
+            recentActions.pollFirst();
+        }
+    }
+    
+    /**
+     * Analyze recent actions to determine activity pattern.
      */
     public ScenarioAnalysis analyze() {
+        cleanupOldActions();
+        
         if (recentActions.isEmpty()) {
             return ScenarioAnalysis.idle();
         }
-        
-        cleanOldActions();
         
         // Count action types
         Map<ActionType, Long> counts = recentActions.stream()
@@ -85,149 +159,45 @@ public class ActionWindowAnalyzer {
         long movement = counts.getOrDefault(ActionType.JUMP, 0L) + 
                        counts.getOrDefault(ActionType.SPRINT, 0L);
         long inventory = counts.getOrDefault(ActionType.INVENTORY_OPEN, 0L);
-        long cameraMovement = counts.getOrDefault(ActionType.CAMERA_MOVE, 0L);
         
         int totalActions = recentActions.size();
         
-        // COMBAT: Lots of attacks + movement
+        // Pattern analysis with confidence scoring
         if (attacks > 10 && movement > 20) {
-            double confidence = Math.min(0.95, (attacks + movement) / (double) totalActions);
-            return ScenarioAnalysis.combat(confidence, attacks, movement);
+            double confidence = Math.min(0.95, attacks / 20.0);
+            return ScenarioAnalysis.combat(confidence);
         }
         
-        // BUILDING: Many blocks, low movement
         if (blocks > 15 && movement < 10) {
-            double confidence = Math.min(0.90, blocks / (double) totalActions);
-            return ScenarioAnalysis.building(confidence, blocks);
+            double confidence = Math.min(0.90, blocks / 30.0);
+            return ScenarioAnalysis.building(confidence);
         }
         
-        // EXPLORING: High movement, low everything else
         if (movement > 30 && attacks < 3 && blocks < 3) {
-            double confidence = Math.min(0.85, movement / (double) totalActions);
-            return ScenarioAnalysis.exploring(confidence, movement);
+            double confidence = Math.min(0.85, movement / 50.0);
+            return ScenarioAnalysis.exploring(confidence);
         }
         
-        // ORGANIZING: Inventory management
         if (inventory > 5 && movement < 5) {
-            double confidence = Math.min(0.80, inventory / (double) totalActions);
-            return ScenarioAnalysis.organizing(confidence, inventory);
+            double confidence = Math.min(0.80, inventory / 10.0);
+            return ScenarioAnalysis.organizing(confidence);
         }
         
-        // AFK: Very few actions
-        if (totalActions < 5 && cameraMovement < 2) {
-            long idleTime = System.currentTimeMillis() - 
-                           (recentActions.isEmpty() ? 0 : recentActions.peekLast().timestamp);
-            if (idleTime > 30000) { // 30 seconds
-                double confidence = Math.min(0.95, idleTime / 60000.0); // grows with time
-                return ScenarioAnalysis.afk(confidence, idleTime);
-            }
-        }
-        
-        // STANDARD: No clear pattern
         return ScenarioAnalysis.standard();
     }
     
     /**
-     * Remove actions older than window size.
-     */
-    private void cleanOldActions() {
-        long cutoffTime = System.currentTimeMillis() - 30000; // 30 seconds
-        
-        while (!recentActions.isEmpty() && 
-               recentActions.peekFirst().timestamp < cutoffTime) {
-            recentActions.pollFirst();
-        }
-    }
-    
-    /**
-     * Get total action count in window.
+     * Get total action count in current window.
      */
     public int getActionCount() {
+        cleanupOldActions();
         return recentActions.size();
     }
     
     /**
-     * Clear all tracked actions.
+     * Clear all recorded actions.
      */
     public void clear() {
         recentActions.clear();
-    }
-    
-    public static class ScenarioAnalysis {
-        public final String scenarioType;
-        public final double confidence;
-        public final Map<String, Object> metrics;
-        
-        private ScenarioAnalysis(String type, double confidence, Map<String, Object> metrics) {
-            this.scenarioType = type;
-            this.confidence = confidence;
-            this.metrics = metrics;
-        }
-        
-        public static ScenarioAnalysis combat(double confidence, long attacks, long movement) {
-            Map<String, Object> metrics = new HashMap<>();
-            metrics.put("attacks", attacks);
-            metrics.put("movement", movement);
-            return new ScenarioAnalysis("COMBAT", confidence, metrics);
-        }
-        
-        public static ScenarioAnalysis building(double confidence, long blocks) {
-            Map<String, Object> metrics = new HashMap<>();
-            metrics.put("blocks", blocks);
-            return new ScenarioAnalysis("BUILDING", confidence, metrics);
-        }
-        
-        public static ScenarioAnalysis exploring(double confidence, long movement) {
-            Map<String, Object> metrics = new HashMap<>();
-            metrics.put("movement", movement);
-            return new ScenarioAnalysis("EXPLORING", confidence, metrics);
-        }
-        
-        public static ScenarioAnalysis organizing(double confidence, long inventory) {
-            Map<String, Object> metrics = new HashMap<>();
-            metrics.put("inventory_actions", inventory);
-            return new ScenarioAnalysis("ORGANIZING", confidence, metrics);
-        }
-        
-        public static ScenarioAnalysis afk(double confidence, long idleTimeMs) {
-            Map<String, Object> metrics = new HashMap<>();
-            metrics.put("idle_time_ms", idleTimeMs);
-            return new ScenarioAnalysis("AFK", confidence, metrics);
-        }
-        
-        public static ScenarioAnalysis standard() {
-            return new ScenarioAnalysis("STANDARD", 0.5, new HashMap<>());
-        }
-        
-        public static ScenarioAnalysis idle() {
-            return new ScenarioAnalysis("IDLE", 1.0, new HashMap<>());
-        }
-        
-        public boolean isBuilding() {
-            return "BUILDING".equals(scenarioType);
-        }
-        
-        public boolean isExploring() {
-            return "EXPLORING".equals(scenarioType);
-        }
-        
-        public boolean isOrganizing() {
-            return "ORGANIZING".equals(scenarioType);
-        }
-        
-        public boolean isCombat() {
-            return "COMBAT".equals(scenarioType);
-        }
-        
-        public double getConfidence() {
-            return confidence;
-        }
-        
-        public int getTotalActions() {
-            return metrics.values().stream()
-                .filter(v -> v instanceof Long)
-                .mapToInt(v -> ((Long) v).intValue())
-                .sum();
-        }
     }
 }
