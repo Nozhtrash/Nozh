@@ -72,6 +72,7 @@ public final class ProviderRegistry {
             // Register
             capabilityProviders.put(id, provider);
             healthTracker.markHealthy(id);
+            ProviderRegistryBridge.registerCapabilityProvider(this, provider);
 
         } catch (Exception e) {
             // Provider threw during registration -> mark BROKEN, continue
