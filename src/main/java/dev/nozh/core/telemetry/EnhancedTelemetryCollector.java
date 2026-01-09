@@ -150,6 +150,7 @@ public class EnhancedTelemetryCollector {
             return baseTickTime + entityOverhead;
             
         } catch (Exception e) {
+            NozhConstants.LOGGER.debug("Failed to estimate tick time", e);
             return 15.0; // Reasonable default if all else fails
         }
     }
