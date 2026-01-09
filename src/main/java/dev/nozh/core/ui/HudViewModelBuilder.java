@@ -6,10 +6,12 @@ import dev.nozh.core.capability.ProviderRegistry;
 import dev.nozh.core.capability.ProviderStatus;
 import dev.nozh.core.context.Scenario;
 import dev.nozh.core.compatibility.CompatibilityMatrix;
+import dev.nozh.api.compat.StewardshipMode;
 import dev.nozh.core.governor.ActionOutcome;
 import dev.nozh.core.issues.Issue;
 import dev.nozh.core.issues.IssueSeverity;
 import dev.nozh.core.preset.HardwareTier;
+import dev.nozh.core.profiler.PerfDiagnosticsSnapshot;
 import dev.nozh.core.state.RuntimeState;
 import dev.nozh.core.state.ActionHistoryEntry;
 import dev.nozh.core.telemetry.TelemetrySnapshot;
@@ -40,10 +42,11 @@ public final class HudViewModelBuilder {
     public static HudViewModel build(
             RuntimeState state,
             TelemetrySnapshot telemetry,
+            PerfDiagnosticsSnapshot diagnostics,
             List<Issue> issues,
             HardwareTier tier,
             ProviderRegistry registry) {
-        if (state == null || telemetry == null) {
+        if (state == null || telemetry == null || diagnostics == null) {
             return HudViewModel.EMPTY;
         }
 
@@ -102,7 +105,7 @@ public final class HudViewModelBuilder {
         String lastDecisionReason = "";
         long lastDecisionTimestamp = 0L;
         String directorSteward = "NOZH";
-        String currentBound = "BALANCED";
+        String currentBound = resolveBoundKey(state);
 
         boolean benchmarkRunning = state.benchmarkRunning();
         String benchmarkValidity = state.benchmarkValidity();
@@ -128,6 +131,23 @@ public final class HudViewModelBuilder {
         String scenarioKey = scenario.translationKey();
         double scenarioConfidence = state.scenarioConfidence();
 
+        List<HudViewModel.DirectorTrace> stewardshipTraces = new ArrayList<>();
+        if (compatibilityMatrix != null) {
+            for (var decision : compatibilityMatrix.getStewardshipTraces()) {
+                StewardshipMode mode = decision.mode();
+                if (mode == null || mode == StewardshipMode.NONE) {
+                    continue;
+                }
+                String modeKey = "nozh.hud.director.mode." + mode.name().toLowerCase();
+                String reason = decision.reason() == null ? "" : decision.reason();
+                stewardshipTraces.add(new HudViewModel.DirectorTrace(
+                        decision.capability().name(),
+                        decision.steward(),
+                        modeKey,
+                        reason));
+            }
+        }
+
         return new HudViewModel(
                 state.enabled(),
                 dev.nozh.core.governor.GovernorMode.AUTO_CONSERVATIVE, // Default
@@ -142,6 +162,17 @@ public final class HudViewModelBuilder {
                 telemetry.sampleCount(),
                 telemetry.droppedSamples(),
                 telemetry.sufficientData(),
+
+                diagnostics.recentGcMs(),
+                diagnostics.gcPressureScore(),
+                diagnostics.pauseCount(),
+                diagnostics.pauseMaxMs(),
+                diagnostics.stutterCauseKey(),
+                diagnostics.stutterDetail(),
+                diagnostics.stutterConfidence(),
+                diagnostics.hottestRenderPhaseKey(),
+                diagnostics.hottestRenderPhaseMs(),
+                diagnostics.hottestRenderPhaseTicks(),
 
                 total,
                 healthy,
@@ -167,6 +198,7 @@ public final class HudViewModelBuilder {
                 benchmarkRunning,
                 benchmarkValidity,
 
+                stewardshipTraces,
                 providerVMs,
                 issues != null ? new ArrayList<>(issues) : List.of(),
                 recentActions);
@@ -180,6 +212,40 @@ public final class HudViewModelBuilder {
             return "ROLLBACK";
         }
         return outcome.name();
+    }
+
+    private static String resolveBoundKey(RuntimeState state) {
+        if (state == null) {
+            return "nozh.hud.bound.unknown";
+        }
+        double avgMs = state.avgFrametimeMs();
+        double p95Ms = state.p95FrametimeMs();
+        double tickAvgMs = state.tickTimeAvg();
+        double tickP95Ms = state.tickTimeP95();
+
+        boolean frameAvailable = avgMs >= 0 || p95Ms >= 0;
+        boolean tickAvailable = tickAvgMs >= 0 || tickP95Ms >= 0;
+
+        if (!frameAvailable && !tickAvailable) {
+            return "nozh.hud.bound.unknown";
+        }
+
+        double frameMs = avgMs >= 0 ? avgMs : p95Ms;
+        double tickMs = tickAvgMs >= 0 ? tickAvgMs : tickP95Ms;
+
+        boolean frameHigh = frameAvailable && frameMs > 16.67;
+        boolean tickHigh = tickAvailable && tickMs > 50.0;
+
+        if (frameHigh && tickHigh) {
+            return "nozh.hud.bound.mixed";
+        }
+        if (tickHigh) {
+            return "nozh.hud.bound.cpu";
+        }
+        if (frameHigh) {
+            return "nozh.hud.bound.gpu";
+        }
+        return "nozh.hud.bound.balanced";
     }
 
     private HudViewModelBuilder() {

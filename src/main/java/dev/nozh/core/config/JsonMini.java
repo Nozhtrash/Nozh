@@ -1,5 +1,6 @@
 package dev.nozh.core.config;
 
+import dev.nozh.core.safety.CrashFailureContext;
 import dev.nozh.core.safety.NozhState;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -24,10 +25,12 @@ public final class JsonMini {
                 "  \"language\": \"" + (c.language == null ? "auto" : c.language) + "\",\n" +
                 "  \"showHud\": " + c.showHud + ",\n" +
                 "  \"showHudSuggestions\": " + c.showHudSuggestions + ",\n" +
+                "  \"hudMode\": \"" + (c.hudMode == null ? "ANALYST" : c.hudMode) + "\",\n" +
                 "  \"hudAnchor\": \"" + (c.hudAnchor == null ? "TOP_LEFT" : c.hudAnchor) + "\",\n" +
                 "  \"hudOffsetX\": " + c.hudOffsetX + ",\n" +
                 "  \"hudOffsetY\": " + c.hudOffsetY + ",\n" +
                 "  \"hudScale\": " + c.hudScale + ",\n" +
+                "  \"tutorialStep\": " + c.tutorialStep + ",\n" +
 
                 "  \"targetFps\": " + c.targetFps + ",\n" +
                 "  \"optimizationProfile\": \"" + (c.optimizationProfile == null ? "BALANCED" : c.optimizationProfile)
@@ -38,6 +41,7 @@ public final class JsonMini {
                 "  \"allowGameplayImpactActions\": " + c.allowGameplayImpactActions + ",\n" +
                 "  \"safeModeForce\": " + c.safeModeForce + ",\n" +
                 "  \"rollbackEnabled\": " + c.rollbackEnabled + ",\n" +
+                "  \"hybridModelEnabled\": " + c.hybridModelEnabled + ",\n" +
 
                 "  \"rollbackWindowMillis\": " + c.rollbackWindowMillis + ",\n" +
                 "  \"improvementEpsilonAvgMs\": " + c.improvementEpsilonAvgMs + ",\n" +
@@ -45,6 +49,8 @@ public final class JsonMini {
                 "  \"rollbackEvaluationTicks\": " + c.rollbackEvaluationTicks + ",\n" +
                 "  \"rollbackCooldownMillis\": " + c.rollbackCooldownMillis + ",\n" +
                 "  \"observationWindowSeconds\": " + c.observationWindowSeconds + ",\n" +
+                "  \"hybridModelBlockConfidence\": " + c.hybridModelBlockConfidence + ",\n" +
+                "  \"governorDecisionBudgetMs\": " + c.governorDecisionBudgetMs + ",\n" +
 
                 "  \"historyMaxEntries\": " + c.historyMaxEntries + ",\n" +
                 "  \"historyCommandLimit\": " + c.historyCommandLimit + ",\n" +
@@ -54,7 +60,12 @@ public final class JsonMini {
                 "  \"evalPeriodTicks\": " + c.evalPeriodTicks + ",\n" +
                 "  \"benchmarkModeEnabled\": " + c.benchmarkModeEnabled + ",\n" +
                 "  \"benchmarkMicroIntervalMillis\": " + c.benchmarkMicroIntervalMillis + ",\n" +
-                "  \"hardwareProfile\": \"" + (c.hardwareProfile == null ? "" : c.hardwareProfile) + "\"\n" +
+                "  \"hardwareProfile\": \"" + (c.hardwareProfile == null ? "" : c.hardwareProfile) + "\",\n" +
+
+                "  \"adaptiveVisualQualityEnabled\": " + c.adaptiveVisualQualityEnabled + ",\n" +
+                "  \"adaptiveVisualQualitySensitivityMs\": " + c.adaptiveVisualQualitySensitivityMs + ",\n" +
+                "  \"adaptiveVisualQualityMinStep\": " + c.adaptiveVisualQualityMinStep + ",\n" +
+                "  \"adaptiveVisualQualityMaxStep\": " + c.adaptiveVisualQualityMaxStep + "\n" +
                 "}\n";
     }
 
@@ -77,6 +88,40 @@ public final class JsonMini {
         sb.append("  \"sessionStable\": ").append(state.sessionStable).append(",\n");
         sb.append("  \"safeModeActivatedAt\": ").append(state.safeModeActivatedAt).append(",\n");
         sb.append("  \"sessionStartTime\": ").append(state.sessionStartTime).append(",\n");
+
+        sb.append("  \"lastFailureContext\": ");
+        if (state.lastFailureContext == null) {
+            sb.append("null,\n");
+        } else {
+            CrashFailureContext ctx = state.lastFailureContext;
+            sb.append("{ ");
+            sb.append("\"timestamp\": ").append(ctx.timestamp()).append(", ");
+            sb.append("\"source\": \"").append(ctx.source() == null ? "" : ctx.source()).append("\", ");
+            sb.append("\"capabilityId\": \"").append(ctx.capabilityId() == null ? "" : ctx.capabilityId())
+                    .append("\", ");
+            sb.append("\"commandType\": \"").append(ctx.commandType() == null ? "" : ctx.commandType()).append("\", ");
+            sb.append("\"requestedValue\": \"").append(ctx.requestedValue() == null ? "" : ctx.requestedValue())
+                    .append("\", ");
+            sb.append("\"errorMessage\": \"").append(ctx.errorMessage() == null ? "" : ctx.errorMessage())
+                    .append("\", ");
+            sb.append("\"exceptionType\": \"").append(ctx.exceptionType() == null ? "" : ctx.exceptionType())
+                    .append("\"");
+            sb.append(" },\n");
+        }
+
+        sb.append("  \"quarantinedCapabilities\": [\n");
+        boolean firstQuarantine = true;
+        for (var entry : state.quarantinedCapabilities.entrySet()) {
+            if (!firstQuarantine) {
+                sb.append(",\n");
+            }
+            sb.append("    { ");
+            sb.append("\"id\": \"").append(entry.getKey().name()).append("\", ");
+            sb.append("\"retryAt\": ").append(entry.getValue());
+            sb.append(" }");
+            firstQuarantine = false;
+        }
+        sb.append("\n  ],\n");
 
         sb.append("  \"executionHistory\": [\n");
         java.util.List<dev.nozh.core.executor.ExecutedAction> history = state.executionHistory;
@@ -116,10 +161,12 @@ public final class JsonMini {
             c.language = getString(json, "language", c.language);
             c.showHud = getBool(json, "showHud", c.showHud);
             c.showHudSuggestions = getBool(json, "showHudSuggestions", c.showHudSuggestions);
+            c.hudMode = getString(json, "hudMode", c.hudMode);
             c.hudAnchor = getString(json, "hudAnchor", c.hudAnchor);
             c.hudOffsetX = getInt(json, "hudOffsetX", c.hudOffsetX);
             c.hudOffsetY = getInt(json, "hudOffsetY", c.hudOffsetY);
             c.hudScale = getDouble(json, "hudScale", c.hudScale);
+            c.tutorialStep = getInt(json, "tutorialStep", c.tutorialStep);
 
             // Targets
             c.targetFps = getInt(json, "targetFps", c.targetFps);
@@ -131,6 +178,7 @@ public final class JsonMini {
             c.allowGameplayImpactActions = getBool(json, "allowGameplayImpactActions", c.allowGameplayImpactActions);
             c.safeModeForce = getBool(json, "safeModeForce", c.safeModeForce);
             c.rollbackEnabled = getBool(json, "rollbackEnabled", c.rollbackEnabled);
+            c.hybridModelEnabled = getBool(json, "hybridModelEnabled", c.hybridModelEnabled);
 
             // Rollback Tuning
             c.rollbackWindowMillis = getInt(json, "rollbackWindowMillis", c.rollbackWindowMillis);
@@ -139,6 +187,9 @@ public final class JsonMini {
             c.rollbackEvaluationTicks = getInt(json, "rollbackEvaluationTicks", c.rollbackEvaluationTicks);
             c.rollbackCooldownMillis = getInt(json, "rollbackCooldownMillis", c.rollbackCooldownMillis);
             c.observationWindowSeconds = getInt(json, "observationWindowSeconds", c.observationWindowSeconds);
+            c.hybridModelBlockConfidence = getDouble(json, "hybridModelBlockConfidence",
+                    c.hybridModelBlockConfidence);
+            c.governorDecisionBudgetMs = getInt(json, "governorDecisionBudgetMs", c.governorDecisionBudgetMs);
 
             // Limits
             c.historyMaxEntries = getInt(json, "historyMaxEntries", c.historyMaxEntries);
@@ -166,6 +217,14 @@ public final class JsonMini {
             c.benchmarkMicroIntervalMillis = getInt(json, "benchmarkMicroIntervalMillis",
                     c.benchmarkMicroIntervalMillis);
             c.hardwareProfile = getString(json, "hardwareProfile", c.hardwareProfile);
+            c.adaptiveVisualQualityEnabled = getBool(json, "adaptiveVisualQualityEnabled",
+                    c.adaptiveVisualQualityEnabled);
+            c.adaptiveVisualQualitySensitivityMs = getDouble(json, "adaptiveVisualQualitySensitivityMs",
+                    c.adaptiveVisualQualitySensitivityMs);
+            c.adaptiveVisualQualityMinStep = getInt(json, "adaptiveVisualQualityMinStep",
+                    c.adaptiveVisualQualityMinStep);
+            c.adaptiveVisualQualityMaxStep = getInt(json, "adaptiveVisualQualityMaxStep",
+                    c.adaptiveVisualQualityMaxStep);
 
         } catch (Exception e) {
             // Log if possible, otherwise rely on validate() default
@@ -211,6 +270,19 @@ public final class JsonMini {
             s.sessionStable = getBool(json, "sessionStable", s.sessionStable);
             s.safeModeActivatedAt = getLong(json, "safeModeActivatedAt", s.safeModeActivatedAt);
             s.sessionStartTime = getLong(json, "sessionStartTime", s.sessionStartTime);
+
+            String failureBlock = getObjectBlock(json, "lastFailureContext");
+            if (failureBlock != null) {
+                CrashFailureContext context = parseFailureContext(failureBlock);
+                if (context != null) {
+                    s.lastFailureContext = context;
+                }
+            }
+
+            String quarantineBlock = getArrayBlock(json, "quarantinedCapabilities");
+            if (quarantineBlock != null) {
+                parseQuarantinedCapabilities(quarantineBlock, s);
+            }
 
             String historyBlock = getArrayBlock(json, "executionHistory");
             if (historyBlock != null) {
@@ -259,6 +331,63 @@ public final class JsonMini {
                     dev.nozh.core.executor.ExecutedAction action = parseActionObject(objJson);
                     if (action != null)
                         state.executionHistory.add(action);
+                    start = -1;
+                }
+            }
+        }
+    }
+
+    private static CrashFailureContext parseFailureContext(String json) {
+        if (json == null || json.isBlank() || json.contains(": null")) {
+            return null;
+        }
+        long timestamp = getLong(json, "timestamp", 0L);
+        String source = getRawString(json, "source");
+        String capabilityId = getRawString(json, "capabilityId");
+        String commandType = getRawString(json, "commandType");
+        String requestedValue = getRawString(json, "requestedValue");
+        String errorMessage = getRawString(json, "errorMessage");
+        String exceptionType = getRawString(json, "exceptionType");
+        if (timestamp == 0L && source == null && capabilityId == null) {
+            return null;
+        }
+        return new CrashFailureContext(
+                timestamp,
+                source,
+                capabilityId,
+                commandType,
+                requestedValue,
+                errorMessage,
+                exceptionType);
+    }
+
+    private static void parseQuarantinedCapabilities(String block, NozhState state) {
+        if (block.length() < 2) {
+            return;
+        }
+        String content = block.substring(1, block.length() - 1);
+        int depth = 0;
+        int start = -1;
+        for (int i = 0; i < content.length(); i++) {
+            char c = content.charAt(i);
+            if (c == '{') {
+                if (depth == 0) {
+                    start = i;
+                }
+                depth++;
+            } else if (c == '}') {
+                depth--;
+                if (depth == 0 && start != -1) {
+                    String objJson = content.substring(start, i + 1);
+                    String id = getRawString(objJson, "id");
+                    long retryAt = getLong(objJson, "retryAt", 0L);
+                    if (id != null && retryAt > 0L) {
+                        try {
+                            dev.nozh.core.bus.CapabilityId capabilityId = dev.nozh.core.bus.CapabilityId.valueOf(id);
+                            state.quarantinedCapabilities.put(capabilityId, retryAt);
+                        } catch (IllegalArgumentException ignored) {
+                        }
+                    }
                     start = -1;
                 }
             }
@@ -365,6 +494,42 @@ public final class JsonMini {
                 depth--;
                 if (depth == 0)
                     return json.substring(openBracket, i + 1);
+            }
+        }
+        return null;
+    }
+
+    private static String getObjectBlock(String json, String key) {
+        int startIndex = json.indexOf("\"" + key + "\"");
+        if (startIndex == -1) {
+            return null;
+        }
+        int colonIndex = json.indexOf(":", startIndex);
+        if (colonIndex != -1) {
+            int cursor = colonIndex + 1;
+            while (cursor < json.length() && Character.isWhitespace(json.charAt(cursor))) {
+                cursor++;
+            }
+            if (json.startsWith("null", cursor)) {
+                return null;
+            }
+        }
+        int openBrace = json.indexOf("{", startIndex);
+        if (openBrace == -1) {
+            return null;
+        }
+
+        int depth = 0;
+        for (int i = openBrace; i < json.length(); i++) {
+            char c = json.charAt(i);
+            if (c == '{') {
+                depth++;
+            }
+            if (c == '}') {
+                depth--;
+                if (depth == 0) {
+                    return json.substring(openBrace, i + 1);
+                }
             }
         }
         return null;

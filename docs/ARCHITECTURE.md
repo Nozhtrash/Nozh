@@ -51,7 +51,48 @@ The "Hands" of the system.
 If the mod crashes or fails strictly, it enters **Safe Mode**.
 
 * **Effect**: All Governor/Executor logic is strictly bypassed.
-* **Persistence**: Stored in `nozh-state.json`. Requires user intervention or strict stability check to reset.
+* **Persistence**: Stored in `config/nozh/state.json`. Requires user intervention or strict stability check to reset.
+
+## Core Architecture Freeze
+
+**Freeze Date**: 2025-02-14  
+**Scope (Included)**: Core runtime loop, measurement pipeline, classification logic, decision engine, executor safety rails, rollback system, and safe mode persistence.  
+**Scope (Excluded)**: UI/UX surfaces, telemetry/analytics, external integrations, experimental action handlers, and build/packaging tooling.
+
+### Forward Compatibility Policy
+
+* **Supported Versions**: Latest stable release and one previous minor version (e.g., v0.2.x and v0.1.x).
+* **Breaking Changes Limit**: Only in minor releases with explicit migration notes; patch releases are strictly backward compatible.
+* **Compatibility Matrix**:
+
+| Core API Version | Supported Mod Releases | Notes |
+| --- | --- | --- |
+| v1 | v0.1.x – v0.2.x | Baseline core architecture freeze. |
+
+### Matrix Update Procedure
+
+* **Disparadores de actualización**: nueva versión de NOZH, nuevo minor de Minecraft, cambio de loader, o cualquier breaking change.
+* **Cómo proponer cambios**: abrir un PR con la tabla actualizada y evidencia de benchmarks que respalde los cambios.
+* **Revisión obligatoria**: aprobación del owner técnico y de QA/benchmark reviewer.
+
+#### Criterios de aceptación
+
+* Evidencia de que los escenarios críticos pasaron (coverage/pass % según la sección de métricas).
+* Notas de migración si hay breaking changes (alineado con “Migration Notes” en este documento).
+
+### Stable Public Interfaces
+
+The following interfaces are considered stable and part of the frozen core contract:
+
+* **APIs**: `SimulationGovernor`, `StandardActionExecutor`, `ExecutorGuard`, `FrameTimeSampler`, `RollingWindowStats`.
+* **Events**: `WorldRenderEvents.END` frametime sampling hook.
+* **Data Contracts**: `PerfSnapshot`, `Decision`, `ActionType`, and `state.json` persistence format.
+
+### Change Process (Deprecations & Versioning)
+
+* **Deprecation Window**: Deprecated interfaces remain supported for at least one minor release with warnings.
+* **Versioning**: Core API versions are incremented on breaking changes; new capabilities use additive, backward-compatible fields or methods.
+* **Migration Notes**: Required for all breaking changes and must include rationale, steps, and fallback behavior.
 
 ## Frametime Definition
 
@@ -65,4 +106,4 @@ In NOZH, **Frametime** is the wall-clock time elapsed between two consecutive `W
 `UNKNOWN` is not an error state; it is a valid and important informational state. It means the profiler is warming up or data is insufficient.
 
 ---
-*Document updated for v0.1.0 Release.*
+*Document updated for v0.2.0-alpha.*

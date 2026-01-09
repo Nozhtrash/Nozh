@@ -27,6 +27,8 @@ This document defines **how to measure frametime stability** for NOZH, the **rep
 - **Power mode** (e.g., High Performance, laptop plugged in).
 - **Background load** (close heavy apps; record unavoidable daemons).
 
+> **Note:** This matrix defines the supported runtime combinations. See **Compatibility Matrix (Runtime)** in `docs/ARCHITECTURE.md`.
+
 ### Graphics + Game Config (must be fixed)
 - **Render distance** (e.g., 12–16).
 - **Simulation distance** (e.g., 8–12).
@@ -69,6 +71,14 @@ Run **all three** scenarios if possible. Each scenario must be a **saved world**
   2. Walk a fixed 30s path loop, repeat 6 times.
   3. Measure for 180s.
 
+### Critical Scenarios (must-run)
+
+These scenarios are **critical** and required for any benchmark run:
+
+- **Critical A — Combat with Mobs:** Scenario A above.
+- **Critical B — Redstone Tick-Heavy:** Scenario B above.
+- **Critical C — Megabase with Entities:** Scenario C above.
+
 ## 3) Recording Configuration
 
 For each run, capture:
@@ -78,7 +88,27 @@ For each run, capture:
 - **NOZH config** (notably thresholds + target FPS)
 - **Any deviations** from the methodology
 
-## 4) Results Template (Table + Graphs)
+## 4) Scenario Coverage Metrics
+
+Use these metrics to summarize how much of the critical scenario set was executed and how many runs met the success threshold.
+
+**Definitions**
+- **Coverage %** = (critical scenarios executed / total critical scenarios) * 100.
+- **Pass %** = (critical scenarios with P95/P99 within threshold / critical scenarios executed) * 100.
+
+**Success threshold**
+- Use the **target FPS** and **frametime thresholds** defined in the NOZH config/policy when available.
+- If no explicit threshold is defined, treat a scenario as **pass** when **both P95 and P99 are <= 1.5x target frametime** (ms).
+
+**Example table**
+
+| scenario | executed (Y/N) | pass/fail | p95 | p99 | notes |
+| --- | --- | --- | --- | --- | --- |
+| Combat (mobs) | Y | pass | 14.2 | 17.8 | Within 1.5x target frametime |
+| Redstone | Y | fail | 18.5 | 26.1 | P99 exceeded threshold |
+| Megabase | N | n/a | -- | -- | Not run in this cycle |
+
+## 5) Results Template (Table + Graphs)
 
 > Replace placeholders with actual measurements. If multiple runs are performed, report **mean** and **std dev** per scenario.
 
@@ -108,7 +138,7 @@ xychart-beta
 1. Export CSV with columns: `scenario, avg_ms, p95_ms, p99_ms`.
 2. Generate chart using spreadsheet or plotting tool.
 
-## 5) Variability + Limits
+## 6) Variability + Limits
 
 Include a short note that captures:
 - **Run-to-run variance** (std dev or range) and potential causes (GC, background load).

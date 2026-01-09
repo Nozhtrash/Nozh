@@ -1,0 +1,179 @@
+name: Security Scan
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+  schedule:
+    # Run security scan every Monday at 00:00 UTC
+    - cron: '0 0 * * 1'
+  workflow_dispatch:
+
+jobs:
+  dependency-review:
+    name: Dependency Review
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Dependency Review
+        uses: actions/dependency-review-action@v4
+        with:
+          fail-on-severity: moderate
+        continue-on-error: true
+
+  secret-scanning:
+    name: Secret Scanning
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: TruffleHog Secret Scan (pull_request)
+        if: github.event_name == 'pull_request'
+        uses: trufflesecurity/trufflehog@main
+        with:
+          path: ./
+          base: ${{ github.event.pull_request.base.sha }}
+          head: ${{ github.event.pull_request.head.sha }}
+          extra_args: --debug --only-verified
+
+      - name: TruffleHog Secret Scan (push/schedule)
+        if: github.event_name != 'pull_request'
+        uses: trufflesecurity/trufflehog@main
+        with:
+          path: ./
+          base: HEAD~1
+          head: HEAD
+          extra_args: --debug --only-verified
+        continue-on-error: true
+
+  code-scanning:
+    name: CodeQL Analysis
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [ 'java' ]
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+          queries: security-and-quality
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+          cache: 'gradle'
+
+      - name: Build with Gradle
+        run: ./gradlew build -x test
+        env:
+          GRADLE_OPTS: "-Dorg.gradle.daemon=false"
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:${{matrix.language}}"
+
+  gradle-security:
+    name: Gradle Dependency Check
+    runs-on: ubuntu-latest
+    continue-on-error: true  # Don't block PR on network issues
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+          cache: 'gradle'
+
+      - name: Make gradlew executable
+        run: chmod +x ./gradlew
+
+      - name: Validate Gradle Wrapper
+        uses: gradle/actions/wrapper-validation@v4
+        continue-on-error: true  # Network issues are common, don't block
+        timeout-minutes: 5
+
+      - name: Check for vulnerable dependencies
+        run: ./gradlew dependencyCheckAnalyze || true
+        continue-on-error: true
+        timeout-minutes: 10
+
+  file-integrity:
+    name: File Integrity Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Check for sensitive files
+        run: |
+          echo "Checking for potentially sensitive files..."
+          
+          # Check for common sensitive file patterns
+          SENSITIVE_FILES=$(find . -type f \( \
+            -name "*.env" -o \
+            -name "*.pem" -o \
+            -name "*.key" -o \
+            -name "*.p12" -o \
+            -name "*.jks" -o \
+            -name "*secret*" -o \
+            -name "*password*" -o \
+            -name "*credential*" \
+          \) ! -path "*/node_modules/*" ! -path "*/.git/*")
+          
+          if [ -n "$SENSITIVE_FILES" ]; then
+            echo "⚠️  Warning: Potentially sensitive files found:"
+            echo "$SENSITIVE_FILES"
+            echo "Please review these files and ensure they don't contain secrets."
+          else
+            echo "✅ No obviously sensitive files detected."
+          fi
+
+      - name: Check for exposed secrets in code
+        run: |
+          echo "Scanning for exposed secrets patterns..."
+          
+          # Common secret patterns
+          if grep -r -i -E '(api[_-]?key|secret[_-]?key|password|token|auth).*=.*["\x27][A-Za-z0-9+/=]{20,}["\x27]' \
+            --include=\*.{java,properties,yml,yaml,json} \
+            --exclude-dir={.git,.gradle,build} . ; then
+            echo "⚠️  Warning: Potential hardcoded secrets found!"
+            echo "Please review and remove any exposed credentials."
+            exit 1
+          else
+            echo "✅ No obvious hardcoded secrets detected."
+          fi
+
+  security-summary:
+    name: Security Summary
+    runs-on: ubuntu-latest
+    needs: [secret-scanning, code-scanning, gradle-security, file-integrity]
+    if: always()
+    steps:
+      - name: Security Check Summary
+        run: |
+          echo "🔒 Security Scan Complete"
+          echo "================================"
+          echo "All security checks have been executed."
+          echo "Please review any warnings or failures above."

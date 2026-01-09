@@ -83,6 +83,16 @@ public final class NozhCommands {
                                                     .executes(context -> {
                                                         runTelemetryExport(context.getSource(), TelemetryExportFormat.JSON);
                                                         return 1;
+                                                    }))
+                                            .then(ClientCommandManager.literal("compact-csv")
+                                                    .executes(context -> {
+                                                        runTelemetryExport(context.getSource(), TelemetryExportFormat.COMPACT_CSV);
+                                                        return 1;
+                                                    }))
+                                            .then(ClientCommandManager.literal("compact-json")
+                                                    .executes(context -> {
+                                                        runTelemetryExport(context.getSource(), TelemetryExportFormat.COMPACT_JSON);
+                                                        return 1;
                                                     }))))
                             .then(ClientCommandManager.literal("enable")
                                     .executes(context -> {
@@ -92,11 +102,6 @@ public final class NozhCommands {
                             .then(ClientCommandManager.literal("disable")
                                     .executes(context -> {
                                         runDisable(context.getSource());
-                                        return 1;
-                                    }))
-                            .then(ClientCommandManager.literal("apply")
-                                    .executes(context -> {
-                                        runApplySuggestion(context.getSource());
                                         return 1;
                                     }))
                             .then(ClientCommandManager.literal("safemode")
@@ -238,12 +243,17 @@ public final class NozhCommands {
         if (runtimeState.suggestedActions() != null && !runtimeState.suggestedActions().isEmpty()) {
             PendingAction pending = runtimeState.suggestedActions().get(0);
             int remaining = runtimeState.suggestedActions().size();
-            ctx.getSource().sendFeedback(Text.literal(
-                    "Suggestions pending (" + remaining + "): " + pending.capability().name() + "="
-                            + pending.newValue() + " (/nozh apply)"));
+            String summary = pending.capability().name() + "=" + pending.newValue();
+            ctx.getSource().sendFeedback(Text.translatable(
+                    "nozh.status.suggestions.pending",
+                    remaining,
+                    summary,
+                    "/nozh apply"));
         }
-        runtimeState.pendingAction().ifPresent(pending -> ctx.getSource().sendFeedback(Text.literal(
-                "Action pending evaluation: " + pending.capability().name() + "=" + pending.newValue())));
+        runtimeState.pendingAction().ifPresent(pending -> {
+            String summary = pending.capability().name() + "=" + pending.newValue();
+            ctx.getSource().sendFeedback(Text.translatable("nozh.status.action.pending", summary));
+        });
     }
 
     private static void runHistory(CommandContext<FabricClientCommandSource> ctx) {
@@ -315,17 +325,12 @@ public final class NozhCommands {
         source.sendFeedback(Text.translatable("nozh.disable.success"));
     }
 
-    private static void runApply(FabricClientCommandSource source) {
-        runApplySuggestion(source);
-    }
-
     private static void runApplySuggestion(FabricClientCommandSource source) {
-        MinecraftClient client = MinecraftClient.getInstance();
-        if (client == null) {
+        if (MinecraftClient.getInstance() == null) {
             source.sendFeedback(Text.translatable("nozh.suggestion.apply.unavailable"));
             return;
         }
-        NozhModClient.requestSuggestedAction(client, NozhModClient.ApplyTrigger.COMMAND);
+        NozhModClient.requestSuggestedAction();
     }
 
     private static void runClearSuggestion(FabricClientCommandSource source) {

@@ -30,6 +30,13 @@ public class NozhState {
     // Session ID for tracking
     public long sessionStartTime = 0;
 
+    // Last failure context captured (for crash recovery decisions)
+    public CrashFailureContext lastFailureContext = null;
+
+    // Capability quarantine map (crash recovery)
+    public java.util.Map<dev.nozh.core.bus.CapabilityId, Long> quarantinedCapabilities = new java.util.EnumMap<>(
+            dev.nozh.core.bus.CapabilityId.class);
+
     /**
      * Check if safe mode is currently active (any cause).
      */
@@ -124,6 +131,56 @@ public class NozhState {
         if (safeModeCauses.isEmpty()) {
             this.safeModeActivatedAt = 0;
         }
+    }
+
+    /**
+     * Store last failure context for crash-loop recovery.
+     */
+    public void setLastFailureContext(CrashFailureContext context) {
+        this.lastFailureContext = context;
+    }
+
+    /**
+     * Quarantine a capability until a given timestamp (epoch millis).
+     */
+    public void quarantineCapability(dev.nozh.core.bus.CapabilityId capabilityId, long retryAtMillis) {
+        if (capabilityId == null) {
+            return;
+        }
+        quarantinedCapabilities.put(capabilityId, retryAtMillis);
+    }
+
+    /**
+     * Check if a capability is still quarantined.
+     */
+    public boolean isCapabilityQuarantined(dev.nozh.core.bus.CapabilityId capabilityId, long nowMillis) {
+        if (capabilityId == null) {
+            return false;
+        }
+        Long retryAt = quarantinedCapabilities.get(capabilityId);
+        if (retryAt == null) {
+            return false;
+        }
+        if (retryAt <= nowMillis) {
+            quarantinedCapabilities.remove(capabilityId);
+            return false;
+        }
+        return true;
+    }
+
+    public java.util.OptionalLong getCapabilityRetryAt(dev.nozh.core.bus.CapabilityId capabilityId) {
+        Long retryAt = quarantinedCapabilities.get(capabilityId);
+        return retryAt != null ? java.util.OptionalLong.of(retryAt) : java.util.OptionalLong.empty();
+    }
+
+    /**
+     * Remove any expired quarantines.
+     */
+    public void cleanupExpiredQuarantines(long nowMillis) {
+        if (quarantinedCapabilities.isEmpty()) {
+            return;
+        }
+        quarantinedCapabilities.entrySet().removeIf(entry -> entry.getValue() <= nowMillis);
     }
 
     // Phase 6: Action History (Reversibility)

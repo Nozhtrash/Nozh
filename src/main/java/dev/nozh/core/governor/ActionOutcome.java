@@ -1,10 +1,16 @@
 package dev.nozh.core.governor;
 
-/**
- * Outcome classification for a governor action.
- */
 public enum ActionOutcome {
     POSITIVE,
+    NEGATIVE,
     NEUTRAL,
-    NEGATIVE
+    PENDING;
+    
+    public boolean isSuccess() {
+        return this == POSITIVE;
+    }
+    
+    public boolean isFailure() {
+        return this == NEGATIVE;
+    }
 }

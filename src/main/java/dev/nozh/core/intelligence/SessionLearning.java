@@ -3,6 +3,7 @@ package dev.nozh.core.intelligence;
 import dev.nozh.core.capability.CapabilityId;
 import dev.nozh.NozhConstants;
 import dev.nozh.core.governor.ActionOutcome;
+import dev.nozh.core.profiler.SpikeCauseType;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonElement;
@@ -17,6 +18,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
+import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -40,6 +42,7 @@ public final class SessionLearning {
     private static final String DEFAULT_SESSION_KEY = "DEFAULT";
     private final Map<String, ActionStats> history = new HashMap<>();
     private final PredictionStats predictionStats = new PredictionStats();
+    private final Map<SpikeCauseType, CausalityStats> causalityHistory = new EnumMap<>(SpikeCauseType.class);
     private final File statsFile;
     private final Path statsPath;
     private final Path tmpPath;
@@ -63,6 +66,7 @@ public final class SessionLearning {
         sessionKey = normalizedKey;
         history.clear();
         predictionStats.reset();
+        causalityHistory.clear();
         lastSavedHash = 0;
         lastSaveMillis = 0;
         dirty = true;
@@ -94,6 +98,11 @@ public final class SessionLearning {
 
     public void recordOutcome(CapabilityId id, dev.nozh.core.context.Scenario scenario, ActionOutcome outcome,
             double fpsGainMs) {
+        recordOutcome(id, scenario, outcome, fpsGainMs, 0.0, 0);
+    }
+
+    public void recordOutcome(CapabilityId id, dev.nozh.core.context.Scenario scenario, ActionOutcome outcome,
+            double fpsGainMs, double p95DeltaMs, int spikeDelta) {
         String key = buildKey(id, scenario);
         ActionStats stats = history.computeIfAbsent(key, k -> new ActionStats());
 
@@ -109,6 +118,10 @@ public final class SessionLearning {
         } else {
             stats.neutralCount++;
         }
+        stats.totalP95DeltaMs += p95DeltaMs;
+        stats.avgP95DeltaMs = stats.totalP95DeltaMs / stats.totalAttempts;
+        stats.totalSpikeDelta += spikeDelta;
+        stats.avgSpikeDelta = (double) stats.totalSpikeDelta / stats.totalAttempts;
         dirty = true;
     }
 
@@ -133,6 +146,31 @@ public final class SessionLearning {
             return 0.0;
         }
         return (double) predictionStats.correctPredictions / predictionStats.totalPredictions;
+    }
+
+    public double getPredictionAvgConfidence() {
+        return predictionStats.avgConfidence;
+    }
+
+    public int getPredictionCount() {
+        return predictionStats.totalPredictions;
+    }
+
+    public void recordCausality(SpikeCauseType cause, double confidence) {
+        if (cause == null || cause == SpikeCauseType.UNKNOWN) {
+            return;
+        }
+        CausalityStats stats = causalityHistory.computeIfAbsent(cause, key -> new CausalityStats());
+        stats.totalCount++;
+        stats.totalConfidence += Math.max(0.0, confidence);
+        stats.avgConfidence = stats.totalCount > 0 ? stats.totalConfidence / stats.totalCount : 0.0;
+        stats.lastObservedMillis = System.currentTimeMillis();
+        dirty = true;
+    }
+
+    public double getCausalityConfidence(SpikeCauseType cause) {
+        CausalityStats stats = causalityHistory.get(cause);
+        return stats != null ? stats.avgConfidence : 0.0;
     }
 
     /**
@@ -162,6 +200,19 @@ public final class SessionLearning {
     public double getAvgFpsGain(CapabilityId id, dev.nozh.core.context.Scenario scenario) {
         ActionStats stats = history.get(buildKey(id, scenario));
         return stats != null ? stats.avgFpsGain : 0.0;
+    }
+
+    public double getAvgP95Gain(CapabilityId id, dev.nozh.core.context.Scenario scenario) {
+        ActionStats stats = history.get(buildKey(id, scenario));
+        if (stats == null) {
+            return 0.0;
+        }
+        return Math.max(0.0, -stats.avgP95DeltaMs);
+    }
+
+    public double getAvgSpikeDelta(CapabilityId id, dev.nozh.core.context.Scenario scenario) {
+        ActionStats stats = history.get(buildKey(id, scenario));
+        return stats != null ? stats.avgSpikeDelta : 0.0;
     }
 
     /**
@@ -258,7 +309,7 @@ public final class SessionLearning {
                 parent.mkdirs();
             }
 
-            String json = GSON.toJson(new SessionData(sessionKey, history, predictionStats));
+            String json = GSON.toJson(new SessionData(sessionKey, history, predictionStats, causalityHistory));
             int currentHash = json.hashCode();
             if (!force && currentHash == lastSavedHash) {
                 dirty = false;
@@ -294,7 +345,7 @@ public final class SessionLearning {
             }
 
             try {
-                String json = GSON.toJson(new SessionData(sessionKey, history, predictionStats));
+                String json = GSON.toJson(new SessionData(sessionKey, history, predictionStats, causalityHistory));
                 Files.writeString(statsPath, json, StandardCharsets.UTF_8,
                         StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.WRITE);
             } catch (IOException ignored) {
@@ -326,6 +377,9 @@ public final class SessionLearning {
                         if (data.predictionStats != null) {
                             predictionStats.copyFrom(data.predictionStats);
                         }
+                        if (data.causalityHistory != null) {
+                            causalityHistory.putAll(data.causalityHistory);
+                        }
                     }
                 } else {
                     java.lang.reflect.Type type = new com.google.gson.reflect.TypeToken<Map<String, ActionStats>>() {
@@ -344,7 +398,8 @@ public final class SessionLearning {
                 }
             }
 
-            lastSavedHash = GSON.toJson(new SessionData(sessionKey, history, predictionStats)).hashCode();
+            lastSavedHash = GSON.toJson(new SessionData(sessionKey, history, predictionStats, causalityHistory))
+                    .hashCode();
             lastSaveMillis = System.currentTimeMillis();
             safeLog("Session learning loaded ({} entries)", history.size());
         } catch (Exception e) {
@@ -384,6 +439,10 @@ public final class SessionLearning {
         public long lastFailureTime = 0;
         public double totalFpsGain = 0.0;
         public double avgFpsGain = 0.0;
+        public double totalP95DeltaMs = 0.0;
+        public double avgP95DeltaMs = 0.0;
+        public int totalSpikeDelta = 0;
+        public double avgSpikeDelta = 0.0;
     }
 
     public static class PredictionStats {
@@ -419,15 +478,25 @@ public final class SessionLearning {
         }
     }
 
+    public static class CausalityStats {
+        public int totalCount = 0;
+        public double totalConfidence = 0.0;
+        public double avgConfidence = 0.0;
+        public long lastObservedMillis = 0;
+    }
+
     private static final class SessionData {
         public String sessionKey;
         public Map<String, ActionStats> history;
         public PredictionStats predictionStats;
+        public Map<SpikeCauseType, CausalityStats> causalityHistory;
 
-        private SessionData(String sessionKey, Map<String, ActionStats> history, PredictionStats predictionStats) {
+        private SessionData(String sessionKey, Map<String, ActionStats> history, PredictionStats predictionStats,
+                Map<SpikeCauseType, CausalityStats> causalityHistory) {
             this.sessionKey = sessionKey;
             this.history = history;
             this.predictionStats = predictionStats;
+            this.causalityHistory = causalityHistory;
         }
     }
 }

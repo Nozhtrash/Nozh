@@ -3,21 +3,21 @@ package dev.nozh.client;
 import dev.nozh.NozhConstants;
 import dev.nozh.core.NozhLogger;
 import dev.nozh.core.bus.ActionBus;
-import dev.nozh.core.bus.Command;
 import dev.nozh.core.bus.StandardActionProcessor;
 import dev.nozh.core.config.ConfigManager;
-import dev.nozh.core.config.NozhConfig;
 import dev.nozh.core.config.ConfigSyncService;
 import dev.nozh.core.capability.ProviderCoverage;
 import dev.nozh.core.capability.ProviderRegistry;
 import dev.nozh.core.governor.GovernorRunner;
-import dev.nozh.core.governor.ActionOutcome;
 import dev.nozh.core.matrix.ActionSuccessTracker;
 import dev.nozh.core.safety.CrashLoopGuard;
-import dev.nozh.core.state.PendingAction;
 import dev.nozh.core.state.RuntimeState;
-import dev.nozh.core.state.ActionHistoryEntry;
 import dev.nozh.core.state.StateStore;
+import dev.nozh.core.benchmark.InitialBenchmarkRunner;
+import dev.nozh.core.benchmark.BenchmarkEnvironment;
+import dev.nozh.core.benchmark.BenchmarkScenarioRecorder;
+import dev.nozh.core.telemetry.TelemetryManager;
+import dev.nozh.core.context.Scenario;
 import dev.nozh.fabric.FabricNozhLogger;
 import dev.nozh.fabric.capability.CompatAwareMinecraftOptionsAdapter;
 import dev.nozh.fabric.capability.MinecraftOptionsAdapter;
@@ -25,7 +25,9 @@ import dev.nozh.fabric.capability.ProductionMinecraftOptionsAdapter;
 import dev.nozh.fabric.capability.ProviderBootstrap;
 import dev.nozh.fabric.capability.StandardCapabilityExecutor;
 import dev.nozh.fabric.compat.CompatRegistry;
+import dev.nozh.fabric.input.ManualConfirmationHandler;
 import dev.nozh.client.hud.NozhHudRenderer;
+import net.fabricmc.loader.api.FabricLoader;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
@@ -39,8 +41,6 @@ import net.minecraft.client.toast.SystemToast;
 import net.minecraft.client.util.InputUtil;
 import net.minecraft.text.Text;
 import org.lwjgl.glfw.GLFW;
-
-import java.util.function.Consumer;
 
 /**
  * NOZH Client-side initializer - FULL INTEGRATION.
@@ -59,18 +59,27 @@ public class NozhModClient implements ClientModInitializer {
     private static ConfigSyncService configSyncService;
     private static dev.nozh.core.intelligence.SessionLearning sessionLearning;
     private static ProviderRegistry providerRegistry;
+    private static dev.nozh.fabric.context.FabricScenarioDetector scenarioDetector;
+    private static InitialBenchmarkRunner initialBenchmarkRunner;
+    private static BenchmarkScenarioRecorder benchmarkScenarioRecorder;
     private static KeyBinding toggleHudKey;
     private static KeyBinding applySuggestionKey;
+    private static KeyBinding exportReportKey;
+    private static ManualConfirmationHandler manualConfirmationHandler;
+    private static TelemetryManager telemetryManager;
     private static boolean safeModeNotified = false;
     private static String lastSessionKey = null;
-    private static long applyConfirmUntil = 0L;
-    private static String applyConfirmSummary = "";
-    private static final long APPLY_CONFIRM_WINDOW_MILLIS = 10000;
+    private static boolean tutorialPrompted = false;
+    private static boolean lastApplyKeyPressed = false;
 
     private static int tickCounter = 0;
     private static final int TELEMETRY_UPDATE_INTERVAL = 20; // Every second (20 ticks)
     private static final int GOVERNOR_POLL_INTERVAL = 100; // Every 5 seconds (100 ticks)
     private static final int SESSION_SAVE_INTERVAL = 1200; // Every 60 seconds (1200 ticks)
+    private static final int TUTORIAL_STEP_TOGGLE = 0;
+    private static final int TUTORIAL_STEP_APPLY = 1;
+    private static final int TUTORIAL_STEP_EXPORT = 2;
+    private static final int TUTORIAL_STEP_COMPLETE = 3;
 
     @Override
     public void onInitializeClient() {
@@ -87,6 +96,9 @@ public class NozhModClient implements ClientModInitializer {
 
         // 1. Create logger
         NozhLogger logger = new FabricNozhLogger();
+
+        telemetryManager = new TelemetryManager();
+        CrashLoopGuard.setTelemetryManager(telemetryManager);
 
         // 2. Get StateStore singleton
         stateStore = StateStore.getInstance();
@@ -125,7 +137,22 @@ public class NozhModClient implements ClientModInitializer {
 
         // Initialize PerfManager (collects FPS data)
         perfManager = new dev.nozh.core.profiler.PerfManager();
+        telemetryManager.setCriticalEventSink(perfManager);
         tickTimeSampler = new dev.nozh.core.monitoring.TickTimeSampler();
+        perfManager.setTickSnapshotSupplier(() -> tickTimeSampler.getSnapshot());
+        if (ConfigManager.getConfig().benchmarkModeEnabled) {
+            benchmarkScenarioRecorder = new BenchmarkScenarioRecorder(
+                    perfManager,
+                    () -> perfManager != null ? perfManager.getSnapshot() : dev.nozh.api.PerfSnapshot.empty(),
+                    NozhConstants.CONFIG_DIR.resolve("benchmark_artifacts"));
+        }
+        initialBenchmarkRunner = new InitialBenchmarkRunner(stateStore,
+                () -> perfManager != null ? perfManager.getSnapshot() : dev.nozh.api.PerfSnapshot.empty(),
+                snapshot -> {
+                    if (benchmarkScenarioRecorder != null) {
+                        benchmarkScenarioRecorder.recordInitialBenchmarkSnapshot(snapshot);
+                    }
+                });
 
         // 8. Create ActionProcessor bridge
         StandardActionProcessor actionProcessor = new StandardActionProcessor(
@@ -135,8 +162,9 @@ public class NozhModClient implements ClientModInitializer {
                 () -> perfManager != null ? perfManager.getSnapshot() : dev.nozh.api.PerfSnapshot.empty(),
                 successTracker);
 
-        // Create ScenarioDetector (Fabric implementation)
-        dev.nozh.core.context.ScenarioDetector scenarioDetector = new dev.nozh.fabric.context.FabricScenarioDetector();
+        // Create ScenarioDetector (Fabric implementation) - FIXED: Added MinecraftClient parameter
+        MinecraftClient client = MinecraftClient.getInstance();
+        scenarioDetector = new dev.nozh.fabric.context.FabricScenarioDetector(client);
 
         // 9. Create GovernorRunner with all dependencies
         governorRunner = new GovernorRunner(
@@ -166,22 +194,58 @@ public class NozhModClient implements ClientModInitializer {
                 GLFW.GLFW_KEY_K,
                 "category.nozh"));
 
+        exportReportKey = KeyBindingHelper.registerKeyBinding(new KeyBinding(
+                "key.nozh.export_report",
+                InputUtil.Type.KEYSYM,
+                GLFW.GLFW_KEY_P,
+                "category.nozh"));
+
+        manualConfirmationHandler = new ManualConfirmationHandler(
+                stateStore,
+                actionBus,
+                null,
+                applySuggestionKey,
+                null);
+
         // Register Frametime Sampler (called every frame)
+        net.fabricmc.fabric.api.client.rendering.v1.WorldRenderEvents.START.register(context -> {
+            if (perfManager != null) {
+                perfManager.onRenderFrameStart();
+                perfManager.onRenderPhaseStart(dev.nozh.core.profiler.RenderPhase.WORLD);
+            }
+        });
+
         net.fabricmc.fabric.api.client.rendering.v1.WorldRenderEvents.END.register(context -> {
-            perfManager.onFrame();
+            if (perfManager != null) {
+                perfManager.onRenderPhaseEnd(dev.nozh.core.profiler.RenderPhase.WORLD);
+                perfManager.onFrame();
+                perfManager.onRenderFrameEnd();
+            }
         });
 
         HudRenderCallback.EVENT.register(new NozhHudRenderer(
                 stateStore,
                 providerRegistry,
-                () -> perfManager != null ? perfManager.getSnapshot() : dev.nozh.api.PerfSnapshot.empty()));
+                () -> perfManager != null ? perfManager.getSnapshot() : dev.nozh.api.PerfSnapshot.empty(),
+                perfManager,
+                NozhModClient::resolveExportKeyLabel));
 
         // === TICK HANDLER SETUP ===
 
         // Register tick handler for ActionBus, telemetry updates, and governor
-        ClientTickEvents.END_CLIENT_TICK.register(client -> {
-            if (!ConfigManager.getConfig().enabled)
+        ClientTickEvents.START_CLIENT_TICK.register(clientInstance -> {
+            if (perfManager != null) {
+                perfManager.onRenderPhaseStart(dev.nozh.core.profiler.RenderPhase.CLIENT_TICK);
+            }
+        });
+
+        ClientTickEvents.END_CLIENT_TICK.register(clientInstance -> {
+            if (!ConfigManager.getConfig().enabled) {
+                if (perfManager != null) {
+                    perfManager.onRenderPhaseEnd(dev.nozh.core.profiler.RenderPhase.CLIENT_TICK);
+                }
                 return;
+            }
 
             tickCounter++;
 
@@ -193,24 +257,33 @@ public class NozhModClient implements ClientModInitializer {
 
             // Sample tick time (must be called once per tick)
             tickTimeSampler.onTick();
+            if (perfManager != null) {
+                perfManager.onTickSample(tickTimeSampler.getLastTickMs());
+            }
+
+            if (scenarioDetector != null) {
+                scenarioDetector.tick();
+            }
 
             if (toggleHudKey != null) {
                 while (toggleHudKey.wasPressed()) {
                     var config = ConfigManager.getConfig();
                     config.showHud = !config.showHud;
                     ConfigManager.saveAndNotify();
+                    advanceTutorialIfExpected(clientInstance, TUTORIAL_STEP_TOGGLE);
                 }
             }
 
-            if (applySuggestionKey != null) {
-                while (applySuggestionKey.wasPressed()) {
-                    requestSuggestedAction(client, ApplyTrigger.KEYBIND);
+            if (exportReportKey != null) {
+                while (exportReportKey.wasPressed()) {
+                    exportHudReport(clientInstance);
+                    advanceTutorialIfExpected(clientInstance, TUTORIAL_STEP_EXPORT);
                 }
             }
 
             if (!safeModeNotified && CrashLoopGuard.isInSafeMode()) {
                 safeModeNotified = true;
-                notifyClient(client,
+                notifyClient(clientInstance,
                         Text.translatable("nozh.safemode.entered.title"),
                         Text.translatable("nozh.safemode.entered.message"));
             }
@@ -218,6 +291,9 @@ public class NozhModClient implements ClientModInitializer {
             // Update RuntimeState with telemetry data every second
             if (tickCounter % TELEMETRY_UPDATE_INTERVAL == 0) {
                 updateTelemetryState();
+                if (scenarioDetector != null) {
+                    scenarioDetector.logTelemetry();
+                }
             }
 
             // Run governor decision loop every 5 seconds
@@ -228,25 +304,51 @@ public class NozhModClient implements ClientModInitializer {
             if (tickCounter % SESSION_SAVE_INTERVAL == 0) {
                 sessionLearning.saveIfDue();
             }
-        });
 
-        ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> {
-            if (sessionLearning != null) {
-                sessionLearning.save();
+            if (initialBenchmarkRunner != null) {
+                initialBenchmarkRunner.tick();
+            }
+            if (benchmarkScenarioRecorder != null) {
+                Scenario scenario = stateStore.snapshotSafe().currentScenario();
+                benchmarkScenarioRecorder.tick(scenario);
+            }
+
+            handleTutorial(clientInstance);
+
+            if (perfManager != null) {
+                perfManager.onRenderPhaseEnd(dev.nozh.core.profiler.RenderPhase.CLIENT_TICK);
             }
         });
 
-        ClientPlayConnectionEvents.JOIN.register((handler, sender, client) -> {
+        ClientPlayConnectionEvents.DISCONNECT.register((handler, clientInstance) -> {
+            if (sessionLearning != null) {
+                sessionLearning.save();
+            }
+            if (initialBenchmarkRunner != null) {
+                initialBenchmarkRunner.onSessionEnd();
+            }
+            if (benchmarkScenarioRecorder != null) {
+                benchmarkScenarioRecorder.onSessionEnd();
+            }
+        });
+
+        ClientPlayConnectionEvents.JOIN.register((handler, sender, clientInstance) -> {
             if (governorRunner != null) {
                 governorRunner.captureBaselineSettings();
             }
             if (sessionLearning != null) {
-                String sessionKey = resolveSessionKey(client, handler);
+                String sessionKey = resolveSessionKey(clientInstance, handler);
                 if (lastSessionKey == null || !lastSessionKey.equals(sessionKey)) {
                     sessionLearning.resetForSession(sessionKey);
                     sessionLearning.save();
                     lastSessionKey = sessionKey;
                 }
+            }
+            if (initialBenchmarkRunner != null) {
+                initialBenchmarkRunner.onSessionStart();
+            }
+            if (benchmarkScenarioRecorder != null) {
+                benchmarkScenarioRecorder.onSessionStart(buildBenchmarkEnvironment(clientInstance));
             }
         });
 
@@ -308,108 +410,56 @@ public class NozhModClient implements ClientModInitializer {
         return stateStore;
     }
 
-    public static KeyBinding getApplySuggestionKey() {
-        return applySuggestionKey;
+    public static dev.nozh.fabric.context.FabricScenarioDetector getScenarioDetector() {
+        return scenarioDetector;
     }
 
-    public static void requestSuggestedAction(MinecraftClient client, ApplyTrigger trigger) {
-        if (client == null) {
-            return;
+    private BenchmarkEnvironment buildBenchmarkEnvironment(MinecraftClient clientInstance) {
+        String hardwareProfile = ConfigManager.getConfig().hardwareProfile;
+        String resolution = "unknown";
+        if (clientInstance != null && clientInstance.getWindow() != null) {
+            resolution = clientInstance.getWindow().getFramebufferWidth()
+                    + "x" + clientInstance.getWindow().getFramebufferHeight();
         }
-        NozhConfig config = ConfigManager.getConfig();
-        boolean needsConfirmation = config != null && !config.allowAutoTuning;
-        if (!needsConfirmation) {
-            applySuggestedAction(client);
-            return;
-        }
-
-        RuntimeState state = StateStore.getInstance().snapshotSafe();
-        if (state.suggestedActions() == null || state.suggestedActions().isEmpty()) {
-            applySuggestedAction(client);
-            return;
-        }
-
-        PendingAction pending = state.suggestedActions().get(0);
-        String summary = pending.capability().name() + "=" + pending.newValue();
-        long now = System.currentTimeMillis();
-        if (now <= applyConfirmUntil && summary.equals(applyConfirmSummary)) {
-            applyConfirmUntil = 0L;
-            applyConfirmSummary = "";
-            applySuggestedAction(client);
-            return;
-        }
-
-        applyConfirmUntil = now + APPLY_CONFIRM_WINDOW_MILLIS;
-        applyConfirmSummary = summary;
-        Text keyHint = applySuggestionKey != null ? applySuggestionKey.getBoundKeyLocalizedText()
-                : Text.translatable("nozh.suggestion.apply.keybind_unknown");
-        String detailKey = trigger == ApplyTrigger.COMMAND
-                ? "nozh.suggestion.apply.confirm.detail.command"
-                : "nozh.suggestion.apply.confirm.detail.keybind";
-        Text detail = trigger == ApplyTrigger.COMMAND
-                ? Text.translatable(detailKey, summary, APPLY_CONFIRM_WINDOW_MILLIS / 1000)
-                : Text.translatable(detailKey, summary, keyHint, APPLY_CONFIRM_WINDOW_MILLIS / 1000);
-        notifyClient(client,
-                Text.translatable("nozh.suggestion.apply.confirm.title"),
-                detail);
+        int modCount = FabricLoader.getInstance().getAllMods().size();
+        String modsSummary = "mods=" + modCount;
+        String workloadProfile = ConfigManager.getConfig().optimizationProfile;
+        return new BenchmarkEnvironment(hardwareProfile, resolution, modsSummary, workloadProfile);
     }
 
-    public static void applySuggestedAction(MinecraftClient client) {
-        if (client == null) {
+    public static void requestSuggestedAction() {
+        if (manualConfirmationHandler == null) {
             return;
         }
-        applyConfirmUntil = 0L;
-        applyConfirmSummary = "";
-        var actionBus = getActionBus();
-        if (actionBus == null) {
+        manualConfirmationHandler.requestApply();
+    }
+
+    private static void exportHudReport(MinecraftClient client) {
+        if (perfManager == null) {
             notifyClient(client,
-                    Text.translatable("nozh.suggestion.apply.failed"),
-                    Text.translatable("nozh.suggestion.apply.unavailable"));
+                    Text.translatable("nozh.telemetry.export.failed"),
+                    Text.translatable("nozh.telemetry.export.unavailable"));
             return;
         }
-
-        RuntimeState state = StateStore.getInstance().snapshotSafe();
-        if (state.suggestedActions() == null || state.suggestedActions().isEmpty()) {
+        try {
+            var output = perfManager.exportTelemetry(
+                    NozhConstants.CONFIG_DIR.resolve("telemetry_exports"),
+                    dev.nozh.core.telemetry.TelemetryExportFormat.JSON);
             notifyClient(client,
-                    Text.translatable("nozh.suggestion.apply.none"),
-                    Text.translatable("nozh.suggestion.apply.none_detail"));
-            return;
+                    Text.translatable("nozh.telemetry.export.success", output.toString()),
+                    Text.translatable("nozh.telemetry.export.complete"));
+        } catch (Exception e) {
+            notifyClient(client,
+                    Text.translatable("nozh.telemetry.export.failed"),
+                    Text.literal(e.getMessage() != null ? e.getMessage() : "Error"));
         }
+    }
 
-        PendingAction pending = state.suggestedActions().get(0);
-        var command = pending.command();
-        long now = System.currentTimeMillis();
-        int maxHistoryEntries = ConfigManager.getConfig() != null ? ConfigManager.getConfig().historyMaxEntries : 50;
-        ActionHistoryEntry actionEntry = new ActionHistoryEntry(
-                now,
-                pending.capability().name() + "=" + pending.newValue(),
-                pending.scenario(),
-                pending.scenarioConfidence(),
-                pending.baselineSnapshot(),
-                dev.nozh.api.PerfSnapshot.empty(),
-                0.0,
-                0,
-                0,
-                ActionOutcome.NEUTRAL,
-                false);
-
-        actionBus.dispatch(command, report -> {
-            if (report.succeeded()) {
-                notifyClient(client,
-                        Text.translatable("nozh.suggestion.apply.success"),
-                        Text.translatable("nozh.suggestion.apply.success_detail",
-                                pending.capability().name(), pending.newValue().toString()));
-            } else {
-                String reason = report.error().orElse("unknown");
-                notifyClient(client,
-                        Text.translatable("nozh.suggestion.apply.failed"),
-                        Text.translatable("nozh.suggestion.apply.failed_detail", reason));
-                StateStore.getInstance().update(RuntimeState::withPendingActionCleared);
-            }
-        });
-
-        StateStore.getInstance().update(currentState -> currentState
-                .withAppliedSuggestion(now, pending, actionEntry, maxHistoryEntries));
+    private static String resolveExportKeyLabel() {
+        if (exportReportKey == null) {
+            return "";
+        }
+        return exportReportKey.getBoundKeyLocalizedText().getString();
     }
 
     private static void notifyClient(MinecraftClient client, Text title, Text message) {
@@ -422,6 +472,79 @@ public class NozhModClient implements ClientModInitializer {
         if (client.inGameHud != null) {
             client.inGameHud.getChatHud().addMessage(title.copy().append(Text.literal(" ")).append(message));
         }
+    }
+
+    private static void handleTutorial(MinecraftClient client) {
+        var config = ConfigManager.getConfig();
+        if (config == null || config.tutorialStep >= TUTORIAL_STEP_COMPLETE) {
+            return;
+        }
+        if (!tutorialPrompted) {
+            showTutorialStep(client, config.tutorialStep);
+            tutorialPrompted = true;
+        }
+
+        boolean applyPressed = applySuggestionKey != null && applySuggestionKey.isPressed();
+        if (config.tutorialStep == TUTORIAL_STEP_APPLY && applyPressed && !lastApplyKeyPressed) {
+            advanceTutorial(client);
+        }
+        lastApplyKeyPressed = applyPressed;
+    }
+
+    private static void advanceTutorialIfExpected(MinecraftClient client, int expectedStep) {
+        var config = ConfigManager.getConfig();
+        if (config == null || config.tutorialStep != expectedStep) {
+            return;
+        }
+        advanceTutorial(client);
+    }
+
+    private static void advanceTutorial(MinecraftClient client) {
+        var config = ConfigManager.getConfig();
+        if (config == null) {
+            return;
+        }
+        config.tutorialStep++;
+        ConfigManager.saveAndNotify();
+        if (config.tutorialStep >= TUTORIAL_STEP_COMPLETE) {
+            notifyClient(client,
+                    Text.translatable("nozh.tutorial.complete.title"),
+                    Text.translatable("nozh.tutorial.complete.message"));
+            tutorialPrompted = true;
+            return;
+        }
+        showTutorialStep(client, config.tutorialStep);
+        tutorialPrompted = true;
+    }
+
+    private static void showTutorialStep(MinecraftClient client, int step) {
+        if (client == null) {
+            return;
+        }
+        if (step == TUTORIAL_STEP_TOGGLE) {
+            notifyClient(client,
+                    Text.translatable("nozh.tutorial.welcome.title"),
+                    Text.translatable("nozh.tutorial.welcome.message", resolveKeyLabel(toggleHudKey)));
+        } else if (step == TUTORIAL_STEP_APPLY) {
+            notifyClient(client,
+                    Text.translatable("nozh.tutorial.step.apply.title"),
+                    Text.translatable("nozh.tutorial.step.apply.message", resolveKeyLabel(applySuggestionKey)));
+        } else if (step == TUTORIAL_STEP_EXPORT) {
+            notifyClient(client,
+                    Text.translatable("nozh.tutorial.step.export.title"),
+                    Text.translatable("nozh.tutorial.step.export.message", resolveKeyLabel(exportReportKey)));
+        }
+    }
+
+    private static String resolveKeyLabel(KeyBinding keyBinding) {
+        if (keyBinding == null) {
+            return Text.translatable("nozh.hud.export.unbound").getString();
+        }
+        String label = keyBinding.getBoundKeyLocalizedText().getString();
+        if (label == null || label.isBlank()) {
+            return Text.translatable("nozh.hud.export.unbound").getString();
+        }
+        return label;
     }
 
     private static String resolveSessionKey(MinecraftClient client,
@@ -441,8 +564,4 @@ public class NozhModClient implements ClientModInitializer {
         return "unknown";
     }
 
-    public enum ApplyTrigger {
-        COMMAND,
-        KEYBIND
-    }
 }

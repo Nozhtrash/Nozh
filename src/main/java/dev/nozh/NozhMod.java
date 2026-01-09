@@ -1,26 +1,63 @@
 package dev.nozh;
 
-import net.fabricmc.api.ModInitializer;
-import dev.nozh.core.config.ConfigManager;
-import dev.nozh.core.safety.CrashLoopGuard;
+import dev.nozh.commands.NozhCommand;
+import dev.nozh.core.governor.IntegratedGovernor;
+import net.fabricmc.api.ClientModInitializer;
+import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallback;
+import net.minecraft.client.MinecraftClient;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.nio.file.Path;
 
 /**
- * NOZH - Frametime Stability Optimizer
- * Main mod initializer (runs on both client and server, but most logic is
- * client-only)
+ * Main mod class for Nozh FPS Optimizer.
+ * 
+ * Initializes the full autonomous governor system.
  */
-public class NozhMod implements ModInitializer {
+public class NozhMod implements ClientModInitializer {
+
+    public static final String MOD_ID = "nozh";
+    public static final Logger LOGGER = LoggerFactory.getLogger(MOD_ID);
+    
+    private static IntegratedGovernor governor;
 
     @Override
-    public void onInitialize() {
-        NozhConstants.LOGGER.info("NOZH {} initializing...", NozhConstants.getVersion());
+    public void onInitializeClient() {
+        LOGGER.info("Nozh FPS Optimizer initializing...");
+        
+        // Get Minecraft client
+        MinecraftClient client = MinecraftClient.getInstance();
+        
+        // Set up log path
+        Path logPath = client.runDirectory.toPath().resolve("logs").resolve("nozh-performance.log");
+        
+        // Initialize governor
+        governor = new IntegratedGovernor(client, logPath);
+        
+        // Register commands
+        NozhCommand.setGovernor(governor);
+        ClientCommandRegistrationCallback.EVENT.register((dispatcher, registryAccess) -> {
+            NozhCommand.register(dispatcher);
+        });
+        
+        LOGGER.info("Nozh FPS Optimizer initialized successfully!");
+        LOGGER.info("Use /nozh to access commands");
+    }
 
-        // Load configuration
-        ConfigManager.load();
+    /**
+     * Get the governor instance.
+     */
+    public static IntegratedGovernor getGovernor() {
+        return governor;
+    }
 
-        // Initialize crash loop guard (increment boot attempts)
-        CrashLoopGuard.onStartup();
-
-        NozhConstants.LOGGER.info("NOZH initialized. Safe mode: {}", CrashLoopGuard.isInSafeMode());
+    /**
+     * Shutdown hook.
+     */
+    public static void shutdown() {
+        if (governor != null) {
+            governor.shutdown();
+        }
     }
 }

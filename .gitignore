@@ -1,14 +1,90 @@
+# Build files
 build/
 .gradle/
+out/
+target/
+
+# IDE files
 .idea/
 *.iml
 *.ipr
 *.iws
 .settings/
+.vscode/
+*.code-workspace
+.classpath
+.project
+
+# Runtime directories
 bin/
 run/
-.vscode/
+
+# OS files
 .DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs and reports - SECURITY CRITICAL
+logs/
+*.log
+reports/
+crash-reports/
+debug/
+
+# Personal and sensitive data
+*.env
+.env.*
+*.key
+*.pem
+*.p12
+*.jks
+secrets/
+credentials/
+
+# Config files that might contain personal info
+local.properties
+gradle-local.properties
+
+# Temporary and cache files
+*.tmp
+*.temp
+*.cache
+*.swp
+*.swo
+*~
+
+# JSON files (except specific resources)
 *.json
 !src/main/resources/**/*.json
 !fabric.mod.json
+!.github/**/*.json
+
+# Backup files
+*.bak
+*.backup
+*.old
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+
+# Test output
+test-output/
+test-results/
+
+# Package files (if accidentally included)
+*.jar
+*.war
+*.ear
+!gradle/wrapper/*.jar
+
+# Documentation build
+docs/_build/
+site/
+
+# User-specific files
+*.suo
+*.user
+*.userosscache
+*.sln.docstates

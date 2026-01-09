@@ -12,10 +12,12 @@ import net.fabricmc.api.Environment;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.gui.widget.ButtonWidget;
+import net.minecraft.client.gui.widget.SliderWidget;
 import net.minecraft.text.Text;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.DoubleConsumer;
 
 /**
  * ModMenu integration for NOZH with professional UI and tooltips.
@@ -33,7 +35,9 @@ public class NozhModMenuIntegration implements ModMenuApi {
      */
     private static class NozhConfigScreen extends Screen {
         private final Screen parent;
-        private final List<TooltipButton> tooltipButtons = new ArrayList<>();
+        private final List<TooltipRenderable> tooltipWidgets = new ArrayList<>();
+        private TooltipSlider minQualitySlider;
+        private TooltipSlider maxQualitySlider;
 
         protected NozhConfigScreen(Screen parent) {
             super(Text.translatable("nozh.config.title"));
@@ -43,7 +47,7 @@ public class NozhModMenuIntegration implements ModMenuApi {
         @Override
         protected void init() {
             super.init();
-            tooltipButtons.clear();
+            tooltipWidgets.clear();
 
             NozhConfig config = ConfigManager.getConfig();
             int centerX = this.width / 2;
@@ -79,18 +83,18 @@ public class NozhModMenuIntegration implements ModMenuApi {
                 y += 35;
 
                 // Reset Safe Mode button
-                TooltipButton resetSafeMode = new TooltipButton(
-                        centerX - 100, y, 200, 20,
-                        Text.translatable("nozh.config.reset_safemode"),
-                        Text.translatable("nozh.config.reset_safemode.tooltip"),
-                        button -> {
+            TooltipButton resetSafeMode = new TooltipButton(
+                    centerX - 100, y, 200, 20,
+                    Text.translatable("nozh.config.reset_safemode"),
+                    Text.translatable("nozh.config.reset_safemode.tooltip"),
+                    button -> {
                             CrashLoopGuard.resetSafeMode();
                             this.clearAndInit();
                         });
-                addDrawableChild(resetSafeMode);
-                tooltipButtons.add(resetSafeMode);
-                y += 30;
-            }
+            addDrawableChild(resetSafeMode);
+            tooltipWidgets.add(resetSafeMode);
+            y += 30;
+        }
 
             y += 10;
 
@@ -107,7 +111,7 @@ public class NozhModMenuIntegration implements ModMenuApi {
                         this.clearAndInit();
                     });
             addDrawableChild(enabledButton);
-            tooltipButtons.add(enabledButton);
+            tooltipWidgets.add(enabledButton);
             y += 25;
 
             // Toggle: Debug Logs
@@ -121,7 +125,7 @@ public class NozhModMenuIntegration implements ModMenuApi {
                         this.clearAndInit();
                     });
             addDrawableChild(debugButton);
-            tooltipButtons.add(debugButton);
+            tooltipWidgets.add(debugButton);
             y += 25;
 
             y = addSectionHeader(centerX, y, "nozh.config.section.auto");
@@ -137,7 +141,7 @@ public class NozhModMenuIntegration implements ModMenuApi {
                         this.clearAndInit();
                     });
             addDrawableChild(rollbackButton);
-            tooltipButtons.add(rollbackButton);
+            tooltipWidgets.add(rollbackButton);
             y += 25;
 
             // Toggle: Auto-Tuning
@@ -151,7 +155,7 @@ public class NozhModMenuIntegration implements ModMenuApi {
                         this.clearAndInit();
                     });
             addDrawableChild(autoTuningButton);
-            tooltipButtons.add(autoTuningButton);
+            tooltipWidgets.add(autoTuningButton);
             y += 25;
 
             // Target FPS (cycle 30/60/90/120)
@@ -173,7 +177,89 @@ public class NozhModMenuIntegration implements ModMenuApi {
                         this.clearAndInit();
                     });
             addDrawableChild(targetFpsButton);
-            tooltipButtons.add(targetFpsButton);
+            tooltipWidgets.add(targetFpsButton);
+            y += 35;
+
+            y = addSectionHeader(centerX, y, "nozh.config.section.visual_quality");
+
+            TooltipButton adaptiveQualityButton = new TooltipButton(
+                    centerX - 150, y, 300, 20,
+                    Text.translatable("nozh.config.visual_quality.enabled",
+                            config.adaptiveVisualQualityEnabled ? "ON" : "OFF"),
+                    Text.translatable("nozh.config.visual_quality.enabled.tooltip"),
+                    button -> {
+                        config.adaptiveVisualQualityEnabled = !config.adaptiveVisualQualityEnabled;
+                        saveConfigAndSync();
+                        this.clearAndInit();
+                    });
+            addDrawableChild(adaptiveQualityButton);
+            tooltipWidgets.add(adaptiveQualityButton);
+            y += 25;
+
+            TooltipSlider sensitivitySlider = new TooltipSlider(
+                    centerX - 150, y, 300, 20,
+                    "nozh.config.visual_quality.sensitivity",
+                    Text.translatable("nozh.config.visual_quality.sensitivity.tooltip"),
+                    0.25,
+                    8.0,
+                    0.1,
+                    config.adaptiveVisualQualitySensitivityMs,
+                    value -> {
+                        config.adaptiveVisualQualitySensitivityMs = value;
+                        saveConfigAndSync();
+                    },
+                    value -> String.format("%.2f ms", value));
+            addDrawableChild(sensitivitySlider);
+            tooltipWidgets.add(sensitivitySlider);
+            y += 25;
+
+            int maxSteps = dev.nozh.core.governor.AdaptiveVisualQualityController.totalSteps();
+            minQualitySlider = new TooltipSlider(
+                    centerX - 150, y, 300, 20,
+                    "nozh.config.visual_quality.min_step",
+                    Text.translatable("nozh.config.visual_quality.min_step.tooltip"),
+                    0,
+                    maxSteps,
+                    1,
+                    config.adaptiveVisualQualityMinStep,
+                    value -> {
+                        int intValue = (int) Math.round(value);
+                        config.adaptiveVisualQualityMinStep = intValue;
+                        if (config.adaptiveVisualQualityMinStep > config.adaptiveVisualQualityMaxStep) {
+                            config.adaptiveVisualQualityMaxStep = config.adaptiveVisualQualityMinStep;
+                            if (maxQualitySlider != null) {
+                                maxQualitySlider.setConfigValue(config.adaptiveVisualQualityMaxStep);
+                            }
+                        }
+                        saveConfigAndSync();
+                    },
+                    value -> Integer.toString((int) Math.round(value)));
+            addDrawableChild(minQualitySlider);
+            tooltipWidgets.add(minQualitySlider);
+            y += 25;
+
+            maxQualitySlider = new TooltipSlider(
+                    centerX - 150, y, 300, 20,
+                    "nozh.config.visual_quality.max_step",
+                    Text.translatable("nozh.config.visual_quality.max_step.tooltip"),
+                    0,
+                    maxSteps,
+                    1,
+                    config.adaptiveVisualQualityMaxStep,
+                    value -> {
+                        int intValue = (int) Math.round(value);
+                        config.adaptiveVisualQualityMaxStep = intValue;
+                        if (config.adaptiveVisualQualityMaxStep < config.adaptiveVisualQualityMinStep) {
+                            config.adaptiveVisualQualityMinStep = config.adaptiveVisualQualityMaxStep;
+                            if (minQualitySlider != null) {
+                                minQualitySlider.setConfigValue(config.adaptiveVisualQualityMinStep);
+                            }
+                        }
+                        saveConfigAndSync();
+                    },
+                    value -> Integer.toString((int) Math.round(value)));
+            addDrawableChild(maxQualitySlider);
+            tooltipWidgets.add(maxQualitySlider);
             y += 35;
 
             y = addSectionHeader(centerX, y, "nozh.config.section.scenarios");
@@ -185,7 +271,7 @@ public class NozhModMenuIntegration implements ModMenuApi {
                     });
             scenariosInfo.active = false;
             addDrawableChild(scenariosInfo);
-            tooltipButtons.add(scenariosInfo);
+            tooltipWidgets.add(scenariosInfo);
             y += 35;
 
             y = addSectionHeader(centerX, y, "nozh.config.section.compat");
@@ -197,7 +283,7 @@ public class NozhModMenuIntegration implements ModMenuApi {
                     });
             compatInfo.active = false;
             addDrawableChild(compatInfo);
-            tooltipButtons.add(compatInfo);
+            tooltipWidgets.add(compatInfo);
             y += 35;
 
             y = addSectionHeader(centerX, y, "nozh.config.section.hud");
@@ -213,7 +299,7 @@ public class NozhModMenuIntegration implements ModMenuApi {
                         this.clearAndInit();
                     });
             addDrawableChild(hudButton);
-            tooltipButtons.add(hudButton);
+            tooltipWidgets.add(hudButton);
             y += 25;
 
             TooltipButton hudSuggestionsButton = new TooltipButton(
@@ -226,7 +312,21 @@ public class NozhModMenuIntegration implements ModMenuApi {
                         this.clearAndInit();
                     });
             addDrawableChild(hudSuggestionsButton);
-            tooltipButtons.add(hudSuggestionsButton);
+            tooltipWidgets.add(hudSuggestionsButton);
+            y += 25;
+
+            TooltipButton hudModeButton = new TooltipButton(
+                    centerX - 150, y, 300, 20,
+                    Text.translatable("nozh.config.hud.mode",
+                            Text.translatable("nozh.config.hud.mode." + formatHudModeKey(config.hudMode))),
+                    Text.translatable("nozh.config.hud.mode.tooltip"),
+                    button -> {
+                        config.hudMode = nextHudMode(config.hudMode);
+                        saveConfigAndSync();
+                        this.clearAndInit();
+                    });
+            addDrawableChild(hudModeButton);
+            tooltipWidgets.add(hudModeButton);
             y += 25;
 
             TooltipButton hudAnchorButton = new TooltipButton(
@@ -240,7 +340,7 @@ public class NozhModMenuIntegration implements ModMenuApi {
                         this.clearAndInit();
                     });
             addDrawableChild(hudAnchorButton);
-            tooltipButtons.add(hudAnchorButton);
+            tooltipWidgets.add(hudAnchorButton);
             y += 25;
 
             TooltipButton hudOffsetXButton = new TooltipButton(
@@ -253,7 +353,7 @@ public class NozhModMenuIntegration implements ModMenuApi {
                         this.clearAndInit();
                     });
             addDrawableChild(hudOffsetXButton);
-            tooltipButtons.add(hudOffsetXButton);
+            tooltipWidgets.add(hudOffsetXButton);
             y += 25;
 
             TooltipButton hudOffsetYButton = new TooltipButton(
@@ -266,7 +366,7 @@ public class NozhModMenuIntegration implements ModMenuApi {
                         this.clearAndInit();
                     });
             addDrawableChild(hudOffsetYButton);
-            tooltipButtons.add(hudOffsetYButton);
+            tooltipWidgets.add(hudOffsetYButton);
             y += 35;
 
             TooltipButton hudScaleButton = new TooltipButton(
@@ -279,7 +379,7 @@ public class NozhModMenuIntegration implements ModMenuApi {
                         this.clearAndInit();
                     });
             addDrawableChild(hudScaleButton);
-            tooltipButtons.add(hudScaleButton);
+            tooltipWidgets.add(hudScaleButton);
             y += 35;
 
             // Preset Buttons
@@ -297,7 +397,7 @@ public class NozhModMenuIntegration implements ModMenuApi {
                         this.clearAndInit();
                     });
             addDrawableChild(lowButton);
-            tooltipButtons.add(lowButton);
+            tooltipWidgets.add(lowButton);
 
             TooltipButton midButton = new TooltipButton(
                     startX + presetWidth + gap, y, presetWidth, 20,
@@ -309,7 +409,7 @@ public class NozhModMenuIntegration implements ModMenuApi {
                         this.clearAndInit();
                     });
             addDrawableChild(midButton);
-            tooltipButtons.add(midButton);
+            tooltipWidgets.add(midButton);
 
             TooltipButton highButton = new TooltipButton(
                     startX + (presetWidth + gap) * 2, y, presetWidth, 20,
@@ -321,7 +421,7 @@ public class NozhModMenuIntegration implements ModMenuApi {
                         this.clearAndInit();
                     });
             addDrawableChild(highButton);
-            tooltipButtons.add(highButton);
+            tooltipWidgets.add(highButton);
             y += 35;
 
             // Reset Config Button
@@ -333,7 +433,7 @@ public class NozhModMenuIntegration implements ModMenuApi {
                         this.client.setScreen(new ConfirmResetScreen(this));
                     });
             addDrawableChild(resetButton);
-            tooltipButtons.add(resetButton);
+            tooltipWidgets.add(resetButton);
             y += 35;
 
             // Done Button
@@ -348,8 +448,8 @@ public class NozhModMenuIntegration implements ModMenuApi {
             super.render(context, mouseX, mouseY, delta);
 
             // Render tooltips for hovered buttons
-            for (TooltipButton button : tooltipButtons) {
-                button.renderTooltip(context, mouseX, mouseY, textRenderer);
+            for (TooltipRenderable widget : tooltipWidgets) {
+                widget.renderTooltip(context, mouseX, mouseY, textRenderer);
             }
         }
 
@@ -398,6 +498,27 @@ public class NozhModMenuIntegration implements ModMenuApi {
             return 0;
         }
 
+        private String nextHudMode(String current) {
+            if ("COMPACT".equalsIgnoreCase(current)) {
+                return "ANALYST";
+            }
+            if ("ANALYST".equalsIgnoreCase(current)) {
+                return "EXPERT";
+            }
+            return "COMPACT";
+        }
+
+        private String formatHudModeKey(String current) {
+            if (current == null) {
+                return "analyst";
+            }
+            String normalized = current.toLowerCase();
+            if ("compact".equals(normalized) || "expert".equals(normalized)) {
+                return normalized;
+            }
+            return "analyst";
+        }
+
         private double cycleHudScale(double current) {
             double[] options = { 0.75, 1.0, 1.25, 1.5 };
             for (int i = 0; i < options.length; i++) {
@@ -416,7 +537,12 @@ public class NozhModMenuIntegration implements ModMenuApi {
     /**
      * Custom button widget with tooltip support.
      */
-    private static class TooltipButton extends ButtonWidget {
+    private interface TooltipRenderable {
+        void renderTooltip(DrawContext context, int mouseX, int mouseY,
+                net.minecraft.client.font.TextRenderer textRenderer);
+    }
+
+    private static class TooltipButton extends ButtonWidget implements TooltipRenderable {
         private final Text tooltip;
 
         public TooltipButton(int x, int y, int width, int height, Text message, Text tooltip, PressAction onPress) {
@@ -424,6 +550,71 @@ public class NozhModMenuIntegration implements ModMenuApi {
             this.tooltip = tooltip;
         }
 
+        public void renderTooltip(DrawContext context, int mouseX, int mouseY,
+                net.minecraft.client.font.TextRenderer textRenderer) {
+            if (this.isHovered()) {
+                context.drawTooltip(textRenderer, tooltip, mouseX, mouseY);
+            }
+        }
+    }
+
+    private static class TooltipSlider extends SliderWidget implements TooltipRenderable {
+        private final String translationKey;
+        private final Text tooltip;
+        private final double min;
+        private final double max;
+        private final double step;
+        private final DoubleConsumer onChange;
+        private final java.util.function.DoubleFunction<String> formatter;
+
+        protected TooltipSlider(int x, int y, int width, int height, String translationKey, Text tooltip,
+                double min, double max, double step, double currentValue, DoubleConsumer onChange,
+                java.util.function.DoubleFunction<String> formatter) {
+            super(x, y, width, height, Text.empty(), toSliderValue(currentValue, min, max));
+            this.translationKey = translationKey;
+            this.tooltip = tooltip;
+            this.min = min;
+            this.max = max;
+            this.step = step;
+            this.onChange = onChange;
+            this.formatter = formatter;
+            updateMessage();
+        }
+
+        @Override
+        protected void updateMessage() {
+            double value = getConfigValue();
+            setMessage(Text.translatable(translationKey, formatter.apply(value)));
+        }
+
+        @Override
+        protected void applyValue() {
+            onChange.accept(getConfigValue());
+        }
+
+        private double getConfigValue() {
+            double raw = min + (value * (max - min));
+            if (step <= 0) {
+                return raw;
+            }
+            double snapped = Math.round(raw / step) * step;
+            return Math.max(min, Math.min(max, snapped));
+        }
+
+        private static double toSliderValue(double value, double min, double max) {
+            if (max <= min) {
+                return 0.0;
+            }
+            double clamped = Math.max(min, Math.min(max, value));
+            return (clamped - min) / (max - min);
+        }
+
+        public void setConfigValue(double value) {
+            this.value = toSliderValue(value, min, max);
+            updateMessage();
+        }
+
+        @Override
         public void renderTooltip(DrawContext context, int mouseX, int mouseY,
                 net.minecraft.client.font.TextRenderer textRenderer) {
             if (this.isHovered()) {

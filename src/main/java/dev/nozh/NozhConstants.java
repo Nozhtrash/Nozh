@@ -38,6 +38,8 @@ public final class NozhConstants {
     public static final Path CONFIG_FILE;
     public static final Path STATE_FILE;
     public static final Path STATE_TMP_FILE;
+    public static final Path MODEL_DIR;
+    public static final Path MODEL_FILE;
 
     static {
         Path configDir;
@@ -50,11 +52,14 @@ public final class NozhConstants {
         CONFIG_FILE = CONFIG_DIR.resolve("nozh.json");
         STATE_FILE = CONFIG_DIR.resolve("state.json");
         STATE_TMP_FILE = CONFIG_DIR.resolve("state.tmp");
+        MODEL_DIR = CONFIG_DIR.resolve("models");
+        MODEL_FILE = MODEL_DIR.resolve("hybrid_model_v1.json");
     }
 
     // Crash loop guard thresholds
     public static final int MAX_BOOT_ATTEMPTS_BEFORE_SAFE_MODE = 3;
     public static final int TICKS_BEFORE_STABLE = 200; // ~10 seconds
+    public static final long CRASH_RECOVERY_QUARANTINE_MILLIS = 600_000L; // 10 minutes
 
     // Profiler defaults
     public static final int DEFAULT_RING_BUFFER_SIZE = 300; // ~5 seconds at 60fps

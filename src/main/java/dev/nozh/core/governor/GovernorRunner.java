@@ -3,6 +3,7 @@ package dev.nozh.core.governor;
 import dev.nozh.core.NozhLogger;
 import dev.nozh.core.bus.ActionBus;
 import dev.nozh.core.bus.Command;
+import dev.nozh.core.bus.CapabilityId;
 import dev.nozh.core.capability.ProviderRegistry;
 import dev.nozh.core.config.ConfigManager;
 import dev.nozh.core.config.NozhConfig;
@@ -12,9 +13,12 @@ import dev.nozh.core.matrix.ActionCandidate;
 import dev.nozh.core.matrix.ActionMatrix;
 import dev.nozh.core.matrix.ActionSuccessTracker;
 import dev.nozh.core.matrix.ConfidenceCalculator;
+import dev.nozh.core.matrix.ActionMatrixTuning;
 import dev.nozh.core.governor.OptimizationProfile;
+import dev.nozh.core.compat.IrisCompat;
 import dev.nozh.core.compatibility.CompatibilityMatrix;
 import dev.nozh.core.profiler.PerfManager;
+import dev.nozh.core.profiler.SpikeCausalityReport;
 import dev.nozh.core.state.RuntimeState;
 import dev.nozh.core.state.StateStore;
 import dev.nozh.core.state.PendingAction;
@@ -23,15 +27,23 @@ import dev.nozh.core.state.BaselineSnapshot;
 import dev.nozh.core.capability.CapabilityValue;
 import dev.nozh.api.PerfSnapshot;
 import dev.nozh.core.governor.ActionOutcome;
+import dev.nozh.core.preset.HardwareProfile;
+import dev.nozh.core.preset.ModpackProfile;
+import dev.nozh.core.preset.ModpackRegistry;
+import dev.nozh.core.preset.PresetTuningResolver;
+import dev.nozh.core.capability.RollbackGuarantee;
 
 import dev.nozh.core.monitoring.ChunkLoadMonitor;
 import dev.nozh.core.monitoring.SystemMonitor;
 
-import java.util.Optional;
 import java.util.function.Supplier;
 import java.util.function.ToDoubleFunction;
 import java.util.HashMap;
+import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
 
 /**
  * Governor runner - integration loop (Phase G).
@@ -41,8 +53,10 @@ public final class GovernorRunner {
     private static final int MAX_SUGGESTED_QUEUE = 5;
     private static final int REVERSE_IMPROVEMENT_STREAK = 3;
     private static final long SPIKE_PREDICTION_MIN_WINDOW_MS = 5_000L;
+    private static final int DECISION_LATENCY_TARGET_MS = 2;
 
-    private final SimulationGovernor governor;
+    private final HybridGovernor governor;
+    private final ActionMatrix actionMatrix;
     private final ActionBus actionBus;
     private final NozhLogger logger;
     private final StateStore stateStore;
@@ -58,6 +72,11 @@ public final class GovernorRunner {
     private final dev.nozh.core.monitoring.SystemMonitor systemMonitor;
     private final dev.nozh.core.monitoring.ChunkLoadMonitor chunkLoadMonitor;
     private final dev.nozh.core.context.ScenarioDetector scenarioDetector;
+    private final Optional<ModpackProfile> modpackProfile;
+    private final AdaptiveVisualQualityController visualQualityController;
+    private ActionMatrixTuning actionMatrixTuning = ActionMatrixTuning.defaults();
+    private String lastHardwareProfile = "";
+    private String lastModpackId = "";
 
     private int tickCounter = 0;
     private long totalTicks = 0;
@@ -69,6 +88,12 @@ public final class GovernorRunner {
     private dev.nozh.core.profiler.SpikePrediction pendingSpikePrediction;
     private long lastSpikePredictionMillis = 0L;
     private int lastSpikePredictionCount = -1;
+    private boolean pendingFrametimePrediction = false;
+    private double pendingFrametimeConfidence = 0.0;
+    private long lastFrametimePredictionMillis = 0L;
+    private double lastFrametimePredictionAvgMs = Double.NaN;
+    private double lastFrametimePredictionP95Ms = Double.NaN;
+    private int lastFrametimePredictionSpikes = -1;
 
     public GovernorRunner(
             ProviderRegistry registry,
@@ -87,7 +112,8 @@ public final class GovernorRunner {
                 sessionLearning,
                 new CompatibilityMatrix());
 
-        this.governor = new SimulationGovernor(matrix);
+        this.actionMatrix = matrix;
+        this.governor = new HybridGovernor(matrix, logger);
         this.actionBus = actionBus;
         this.stateStore = stateStore;
         this.logger = logger;
@@ -101,6 +127,8 @@ public final class GovernorRunner {
         this.predictiveAnalyzer = new PredictiveAnalyzer();
         this.systemMonitor = new SystemMonitor();
         this.chunkLoadMonitor = new ChunkLoadMonitor();
+        this.modpackProfile = ModpackRegistry.detect();
+        this.visualQualityController = new AdaptiveVisualQualityController();
     }
 
     public void onTick() {
@@ -130,9 +158,11 @@ public final class GovernorRunner {
         long now = System.currentTimeMillis();
         NozhConfig config = ConfigManager.getConfig();
 
+        refreshActionMatrixTuning(config);
         syncObservationWindow(config);
         refreshCurrentSettings();
         RuntimeState state = stateStore.snapshotSafe();
+        applyPredictionLearningFeedback();
         evaluatePredictionAccuracy(state, config, now);
         syncBaselineIfNeeded(state);
         boolean reverseReady = updateReverseImprovement(state, config);
@@ -154,6 +184,11 @@ public final class GovernorRunner {
             return;
         }
 
+        if (actionBus.hasPendingCommands()) {
+            logger.debug("Skipping governor decision - action bus pending");
+            return;
+        }
+
         int suggestionQueueSize = state.suggestedActions() != null ? state.suggestedActions().size() : 0;
         if (suggestionQueueSize >= MAX_SUGGESTED_QUEUE) {
             logger.debug("Suggestion queue full, awaiting confirmations");
@@ -166,6 +201,7 @@ public final class GovernorRunner {
         }
 
         updateSpikePrediction(state, config, now);
+        updateFrametimePrediction(state, config, now);
 
         if (chunkLoadMonitor.isHeavyChunkLoad()) {
             logger.debug("Skipping governor decision - heavy chunk load");
@@ -177,12 +213,28 @@ public final class GovernorRunner {
             return;
         }
 
+        if (attemptPreventiveAction(state, config, now)) {
+            return;
+        }
+
+        Optional<AdaptiveVisualQualityController.QualityChange> visualChange = visualQualityController.evaluate(
+                state,
+                config,
+                providerRegistry,
+                now);
+        if (visualChange.isPresent()) {
+            if (dispatchAdaptiveVisualChange(state, config, now, visualChange.get())) {
+                return;
+            }
+        }
+
         GovernorMode mode = determineMode(state);
         mode = ModePolicy.enforceManualPreference(mode, state.autoTuning() && config.allowAutoTuning);
         ModePolicy policy = ModePolicy.forMode(mode);
 
         // 3. Detect performance bound from telemetry
-        String bound = detectBound(state);
+        SpikeCausalityReport spikeCausality = resolveSpikeCausality();
+        String bound = applyCausalityBound(detectBound(state), spikeCausality);
         // REMOVED: withGovernorSnapshot() tracking no longer available
 
         // 4. Check cooldown (NO CASCADE) with adaptive window
@@ -194,6 +246,9 @@ public final class GovernorRunner {
             return;
         }
 
+        int decisionBudgetMs = Math.min(config.governorDecisionBudgetMs, DECISION_LATENCY_TARGET_MS);
+        DecisionBudget decisionBudget = new DecisionBudget(decisionBudgetMs);
+        long decisionStartNanos = perfManager != null ? perfManager.startDecisionTimer() : System.nanoTime();
         Optional<ActionCandidate> decisionOpt = governor.decide(
                 state,
                 mode,
@@ -204,13 +259,37 @@ public final class GovernorRunner {
                 config.reverseEpsilonMs,
                 reverseReady,
                 state.baselineSnapshot(),
-                state.currentSettings());
+                state.currentSettings(),
+                config,
+                actionMatrixTuning,
+                spikeCausality);
+
+        if (decisionBudget.isOverBudget()) {
+            if (perfManager != null) {
+                perfManager.recordDecisionLatency(decisionStartNanos);
+            }
+            logger.warn(String.format(
+                    "Governor decision aborted - internal budget exceeded (%dms)",
+                    decisionBudget.elapsedMs()));
+            return;
+        }
+
+        if (perfManager != null && !perfManager.isDecisionWithinBudget(decisionStartNanos, decisionBudgetMs)) {
+            logger.warn(String.format(
+                    "Governor decision aborted - latency budget exceeded (%dms)",
+                    perfManager.getLastDecisionLatencyMs()));
+            return;
+        }
 
         if (decisionOpt.isEmpty()) {
             return;
         }
 
         ActionCandidate decision = decisionOpt.get();
+        if (decision.targetValue() == null) {
+            logger.info("Governor idle: stewardship active (" + decision.reason() + ")");
+            return;
+        }
         successTracker.recordDecision(decision);
         // REMOVED: withDecision() tracking no longer available
         String actionSummary = formatActionSummary(decision);
@@ -332,6 +411,249 @@ public final class GovernorRunner {
         }
     }
 
+    private boolean dispatchAdaptiveVisualChange(RuntimeState state, NozhConfig config, long now,
+            AdaptiveVisualQualityController.QualityChange change) {
+        if (change == null || change.targetValue() == null) {
+            return false;
+        }
+        PerfSnapshot baselineSnapshot = captureSnapshot();
+        int observationWindowSeconds = resolveObservationWindowSeconds(config, baselineSnapshot);
+        Optional<dev.nozh.core.bus.CapabilityValue> previousValue = providerRegistry.get(change.capabilityId())
+                .flatMap(provider -> provider.getCurrentValueSafe());
+        Command cmd = new Command.ApplyCapability(change.capabilityId(), change.targetValue());
+        PendingAction pending = new PendingAction(
+                now,
+                totalTicks,
+                change.capabilityId(),
+                cmd,
+                previousValue,
+                change.targetValue(),
+                state.avgFrametimeMs(),
+                state.p95FrametimeMs(),
+                state.currentScenario(),
+                state.scenarioConfidence(),
+                baselineSnapshot);
+
+        String actionSummary = "adaptive_visual=" + change.capabilityId().name()
+                + "=" + formatCapabilityValue(change.targetValue());
+        ActionHistoryEntry actionEntry = new ActionHistoryEntry(
+                now,
+                actionSummary,
+                state.currentScenario(),
+                state.scenarioConfidence(),
+                baselineSnapshot,
+                PerfSnapshot.empty(),
+                0.0,
+                0,
+                observationWindowSeconds,
+                ActionOutcome.NEUTRAL,
+                false);
+
+        try {
+            stateStore.update(currentState -> currentState.withDecision(change.reason(), now));
+        } catch (Exception e) {
+            logger.warn("Failed to update state decision: " + e.getMessage());
+        }
+
+        actionBus.dispatch(cmd, report -> {
+            if (report.succeeded()) {
+                logger.info("Adaptive visual quality action succeeded");
+                long appliedAt = report.finishedAtMillis() > 0 ? report.finishedAtMillis() : nowMillis();
+                visualQualityController.onChangeApplied(change.nextStep(), appliedAt);
+                predictiveAnalyzer.reset();
+                refreshCurrentSettings();
+            } else {
+                logger.warn("Adaptive visual quality action failed: " +
+                        report.error().orElse("unknown"));
+                try {
+                    stateStore.update(RuntimeState::withPendingActionCleared);
+                } catch (Exception e) {
+                    logger.error("Failed to clear pending action after execution failure");
+                }
+            }
+        });
+
+        try {
+            stateStore.update(currentState -> currentState.withGovernorAction(
+                    now,
+                    pending,
+                    actionEntry,
+                    config.historyMaxEntries));
+        } catch (Exception e) {
+            logger.warn("Failed to update state after adaptive visual action: " + e.getMessage());
+        }
+        return true;
+    }
+
+    private boolean attemptPreventiveAction(RuntimeState state, NozhConfig config, long nowMillis) {
+        if (state == null || config == null) {
+            return false;
+        }
+        if (!config.rollbackEnabled) {
+            return false;
+        }
+
+        PredictiveAnalyzer.Prediction prediction = predictiveAnalyzer.evaluate();
+        if (!prediction.ready() || !prediction.isLikely() || prediction.confidence() < 0.5) {
+            return false;
+        }
+
+        int predictionCount = sessionLearning.getPredictionCount();
+        double predictionAccuracy = sessionLearning.getPredictionAccuracy();
+        if (predictionCount >= 5 && predictionAccuracy < 0.4) {
+            logger.debug("Skipping preventive action - prediction accuracy below threshold");
+            return false;
+        }
+
+        GovernorMode mode = determineMode(state);
+        mode = ModePolicy.enforceManualPreference(mode, state.autoTuning() && config.allowAutoTuning);
+        ModePolicy policy = ModePolicy.forMode(mode);
+        SpikeCausalityReport spikeCausality = resolveSpikeCausality();
+        String bound = applyCausalityBound(detectBound(state), spikeCausality);
+        long lastActionTimestamp = state.governorLastActionTimestamp();
+        boolean benchmarkMode = config.benchmarkModeEnabled;
+        if (!governor.canAct(state, lastActionTimestamp, nowMillis, benchmarkMode, config.benchmarkMicroIntervalMillis)) {
+            return false;
+        }
+
+        OptimizationProfile profile = OptimizationProfile.fromConfig(config.optimizationProfile);
+        ActionCandidate decision = null;
+        List<ActionCandidate> candidates = actionMatrix.generateCandidates(
+                policy,
+                bound,
+                state.currentScenario(),
+                profile,
+                state.p95FrametimeMs(),
+                state.spikeCount(),
+                actionMatrixTuning);
+        applyCausalityPriority(candidates, spikeCausality);
+        for (ActionCandidate candidate : candidates) {
+            if (candidate.targetValue() == null) {
+                continue;
+            }
+            if (candidate.rollbackGuarantee() != RollbackGuarantee.STRONG) {
+                continue;
+            }
+            decision = candidate;
+            break;
+        }
+
+        if (decision == null) {
+            return false;
+        }
+
+        successTracker.recordDecision(decision);
+        ActionCandidate preventiveDecision = decision;
+        String actionSummary = "preventive(" + prediction.window().name().toLowerCase(Locale.ROOT) + ") "
+                + formatActionSummary(preventiveDecision);
+
+        logger.info("Preventive governor decision: " + preventiveDecision.reason());
+        try {
+            stateStore.update(currentState -> currentState.withDecision(
+                    "preventive: " + preventiveDecision.reason(),
+                    nowMillis));
+        } catch (Exception e) {
+            logger.warn("Failed to update state decision: " + e.getMessage());
+        }
+
+        if (policy.requiresUserConfirmation() && preventiveDecision.targetValue() != null) {
+            if (state.suggestedActions() != null) {
+                for (PendingAction existing : state.suggestedActions()) {
+                    if (existing.capability() == preventiveDecision.capabilityId()
+                            && existing.newValue().equals(preventiveDecision.targetValue())) {
+                        logger.debug("Suggestion already queued, skipping duplicate preventive suggestion");
+                        return true;
+                    }
+                }
+            }
+            PerfSnapshot baselineSnapshot = captureSnapshot();
+            Optional<dev.nozh.core.bus.CapabilityValue> previousValue = providerRegistry.get(preventiveDecision.capabilityId())
+                    .flatMap(provider -> provider.getCurrentValueSafe());
+            Command cmd = new Command.ApplyCapability(
+                    preventiveDecision.capabilityId(),
+                    preventiveDecision.targetValue());
+            PendingAction pending = new PendingAction(
+                    nowMillis,
+                    totalTicks,
+                    preventiveDecision.capabilityId(),
+                    cmd,
+                    previousValue,
+                    preventiveDecision.targetValue(),
+                    state.avgFrametimeMs(),
+                    state.p95FrametimeMs(),
+                    state.currentScenario(),
+                    state.scenarioConfidence(),
+                    baselineSnapshot);
+            try {
+                stateStore.update(currentState -> currentState.withSuggestedAction(pending));
+            } catch (Exception e) {
+                logger.warn("Failed to store preventive suggested action: " + e.getMessage());
+            }
+            logger.info("Preventive suggestion queued for manual assist: " + actionSummary);
+            return true;
+        }
+
+        PerfSnapshot baselineSnapshot = captureSnapshot();
+        int observationWindowSeconds = resolveObservationWindowSeconds(config, baselineSnapshot);
+        Optional<dev.nozh.core.bus.CapabilityValue> previousValue = providerRegistry.get(preventiveDecision.capabilityId())
+                .flatMap(provider -> provider.getCurrentValueSafe());
+        Command cmd = new Command.ApplyCapability(
+                preventiveDecision.capabilityId(),
+                preventiveDecision.targetValue());
+        PendingAction pending = new PendingAction(
+                nowMillis,
+                totalTicks,
+                preventiveDecision.capabilityId(),
+                cmd,
+                previousValue,
+                preventiveDecision.targetValue(),
+                state.avgFrametimeMs(),
+                state.p95FrametimeMs(),
+                state.currentScenario(),
+                state.scenarioConfidence(),
+                baselineSnapshot);
+
+        ActionHistoryEntry actionEntry = new ActionHistoryEntry(
+                nowMillis,
+                actionSummary,
+                state.currentScenario(),
+                state.scenarioConfidence(),
+                baselineSnapshot,
+                PerfSnapshot.empty(),
+                0.0,
+                0,
+                observationWindowSeconds,
+                ActionOutcome.NEUTRAL,
+                false);
+
+        actionBus.dispatch(cmd, report -> {
+            if (report.succeeded()) {
+                logger.info("Preventive governor action succeeded");
+                predictiveAnalyzer.reset();
+                refreshCurrentSettings();
+            } else {
+                logger.warn("Preventive governor action failed: " +
+                        report.error().orElse("unknown"));
+                try {
+                    stateStore.update(RuntimeState::withPendingActionCleared);
+                } catch (Exception e) {
+                    logger.error("Failed to clear pending action after preventive execution failure");
+                }
+            }
+        });
+
+        try {
+            stateStore.update(currentState -> currentState.withGovernorAction(
+                    nowMillis,
+                    pending,
+                    actionEntry,
+                    config.historyMaxEntries));
+        } catch (Exception e) {
+            logger.warn("Failed to update state after preventive action: " + e.getMessage());
+        }
+        return true;
+    }
+
     private void syncBaselineIfNeeded(RuntimeState state) {
         if (state.baselineSnapshot() != null && !state.baselineSnapshot().isEmpty()) {
             return;
@@ -371,6 +693,33 @@ public final class GovernorRunner {
         refreshCurrentSettings();
     }
 
+    private SpikeCausalityReport resolveSpikeCausality() {
+        if (perfManager == null) {
+            return SpikeCausalityReport.unknown();
+        }
+        SpikeCausalityReport report = perfManager.getSpikeCausality();
+        if (report == null) {
+            return SpikeCausalityReport.unknown();
+        }
+        if (sessionLearning != null && report.cause() != null) {
+            double learnedConfidence = sessionLearning.getCausalityConfidence(report.cause());
+            if (learnedConfidence > 0.0 && report.confidence() > 0.0) {
+                double blended = Math.min(0.95, report.confidence() * 0.7 + learnedConfidence * 0.3);
+                report = new SpikeCausalityReport(report.cause(), blended, report.detail());
+            }
+            sessionLearning.recordCausality(report.cause(), report.confidence());
+        }
+        return report;
+    }
+
+    private String applyCausalityBound(String detectedBound, SpikeCausalityReport report) {
+        return CausalityPriorityResolver.applyBound(detectedBound, report);
+    }
+
+    private void applyCausalityPriority(List<ActionCandidate> candidates, SpikeCausalityReport report) {
+        CausalityPriorityResolver.prioritizeCandidates(candidates, report);
+    }
+
     private String detectBound(RuntimeState state) {
         double avgMs = state.avgFrametimeMs();
         double p95Ms = state.p95FrametimeMs();
@@ -400,16 +749,82 @@ public final class GovernorRunner {
         double tickThresholdMs = 50.0;
         boolean tickHigh = tickAvgMs > tickThresholdMs || tickP95Ms > tickThresholdMs;
 
-        if (tickHigh) {
-            return "CPU";
-        }
-
         double frameThresholdMs = 16.67;
         boolean frameHigh = frameDataAvailable && (avgMs > frameThresholdMs || p95Ms > frameThresholdMs);
-        if (frameHigh) {
-            return "GPU";
+
+        String heuristicBound = "BALANCED";
+        if (tickHigh) {
+            heuristicBound = "CPU";
+        } else if (frameHigh) {
+            heuristicBound = "GPU";
         }
-        return "BALANCED";
+
+        double renderTimeMs = resolveRenderTimeMs(avgMs, p95Ms);
+        double tickTimeMs = resolveTickTimeMs(tickAvgMs, tickP95Ms);
+        boolean systemDataAvailable = renderTimeMs >= 0 && tickTimeMs >= 0;
+        if (!systemDataAvailable) {
+            return heuristicBound;
+        }
+
+        double resolutionScale = resolveResolutionScale(state);
+        boolean shadersActive = IrisCompat.areShadersLikelyActive();
+        String systemBound = systemMonitor.detectBottleneck(
+                tickTimeMs,
+                renderTimeMs,
+                -1,
+                shadersActive,
+                resolutionScale);
+
+        if (!systemBound.equals(heuristicBound)) {
+            logger.debug(String.format(
+                    "Bound telemetry mismatch: heuristic=%s system=%s (tick=%.2fms render=%.2fms cpu=%.1f%% scale=%.2f shaders=%s)",
+                    heuristicBound,
+                    systemBound,
+                    tickTimeMs,
+                    renderTimeMs,
+                    systemMonitor.getSystemCpuLoad() * 100,
+                    resolutionScale,
+                    shadersActive));
+        }
+
+        if (!"BALANCED".equals(systemBound) && !systemBound.equals(heuristicBound)) {
+            return systemBound;
+        }
+        return "BALANCED".equals(heuristicBound) ? systemBound : heuristicBound;
+    }
+
+    private double resolveRenderTimeMs(double avgMs, double p95Ms) {
+        if (avgMs >= 0) {
+            return avgMs;
+        }
+        if (p95Ms >= 0) {
+            return p95Ms;
+        }
+        return -1.0;
+    }
+
+    private double resolveTickTimeMs(double avgMs, double p95Ms) {
+        if (avgMs >= 0) {
+            return avgMs;
+        }
+        if (p95Ms >= 0) {
+            return p95Ms;
+        }
+        return -1.0;
+    }
+
+    private double resolveResolutionScale(RuntimeState state) {
+        if (state == null || state.currentSettings() == null) {
+            return 1.0;
+        }
+        CapabilityValue value = state.currentSettings().get(CapabilityId.RESOLUTION_SCALE);
+        if (value instanceof CapabilityValue.FloatValue floatValue) {
+            return floatValue.value();
+        }
+        if (value instanceof CapabilityValue.IntValue intValue) {
+            return intValue.value();
+        }
+        return 1.0;
     }
 
     private GovernorMode determineMode(RuntimeState state) {
@@ -448,7 +863,7 @@ public final class GovernorRunner {
                             logger.warn("Safe fallback rollback failed");
                         }
                     }), () -> logger.warn("Safe fallback rollback unavailable"));
-            sessionLearning.recordOutcome(pending.capability(), pending.scenario(), ActionOutcome.NEGATIVE, 0.0);
+            sessionLearning.recordOutcome(pending.capability(), pending.scenario(), ActionOutcome.NEGATIVE, 0.0, 0.0, 0);
             successTracker.recordFailure(pending.capability());
             try {
                 stateStore.update(RuntimeState::withPendingActionCleared);
@@ -497,16 +912,18 @@ public final class GovernorRunner {
                 logger.info("Rollback disabled in config, keeping ineffective action.");
             }
 
-            sessionLearning.recordOutcome(pending.capability(), pending.scenario(), ActionOutcome.NEGATIVE, 0.0);
+            sessionLearning.recordOutcome(pending.capability(), pending.scenario(), ActionOutcome.NEGATIVE, 0.0,
+                    p95Delta, spikeDelta);
             successTracker.recordFailure(pending.capability());
         } else if (outcome == ActionOutcome.POSITIVE) {
             double gainAvg = resolveGain(pending.baselineAvgMs(), currentSnapshot != null ? currentSnapshot.avgFrametimeMs() : Double.NaN);
             double gainP95 = resolveGain(pending.baselineP95Ms(), currentSnapshot != null ? currentSnapshot.p95FrametimeMs() : Double.NaN);
             sessionLearning.recordOutcome(pending.capability(), pending.scenario(), ActionOutcome.POSITIVE,
-                    Math.max(gainAvg, gainP95));
+                    Math.max(gainAvg, gainP95), p95Delta, spikeDelta);
             successTracker.recordSuccess(pending.capability());
         } else {
-            sessionLearning.recordOutcome(pending.capability(), pending.scenario(), ActionOutcome.NEUTRAL, 0.0);
+            sessionLearning.recordOutcome(pending.capability(), pending.scenario(), ActionOutcome.NEUTRAL, 0.0,
+                    p95Delta, spikeDelta);
         }
 
         logger.debug(String.format(
@@ -632,6 +1049,25 @@ public final class GovernorRunner {
             perfManager.setObservationWindowSeconds(config.observationWindowSeconds);
         }
         lastObservationWindowSeconds = config.observationWindowSeconds;
+    }
+
+    private void refreshActionMatrixTuning(NozhConfig config) {
+        String hardwareProfile = config != null ? config.hardwareProfile : "";
+        String modpackId = modpackProfile.map(ModpackProfile::id).orElse("");
+        if (Objects.equals(lastHardwareProfile, hardwareProfile)
+                && Objects.equals(lastModpackId, modpackId)) {
+            return;
+        }
+        HardwareProfile hardware = HardwareProfile.parse(hardwareProfile).orElse(HardwareProfile.unknown());
+        actionMatrixTuning = PresetTuningResolver.resolve(hardware, modpackProfile.orElse(null));
+        lastHardwareProfile = hardwareProfile;
+        lastModpackId = modpackId;
+    }
+
+    private void applyPredictionLearningFeedback() {
+        predictiveAnalyzer.applyLearning(
+                sessionLearning.getPredictionAccuracy(),
+                sessionLearning.getPredictionAvgConfidence());
     }
 
     private PerfSnapshot captureSnapshot() {
@@ -819,21 +1255,11 @@ public final class GovernorRunner {
     }
 
     private void evaluatePredictionAccuracy(RuntimeState state, NozhConfig config, long nowMillis) {
-        if (pendingSpikePrediction == null || state == null) {
+        if (state == null) {
             return;
         }
-        long windowMs = resolvePredictionWindowMillis(config);
-        if (nowMillis - lastSpikePredictionMillis < windowMs) {
-            return;
-        }
-        if (lastSpikePredictionCount < 0) {
-            pendingSpikePrediction = null;
-            return;
-        }
-        boolean actualSpike = state.spikeCount() > lastSpikePredictionCount;
-        sessionLearning.recordPredictionOutcome(pendingSpikePrediction.spikeLikely(), actualSpike,
-                pendingSpikePrediction.confidence());
-        pendingSpikePrediction = null;
+        evaluateSpikePredictionAccuracy(state, config, nowMillis);
+        evaluateFrametimePredictionAccuracy(state, config, nowMillis);
     }
 
     private void updateSpikePrediction(RuntimeState state, NozhConfig config, long nowMillis) {
@@ -857,6 +1283,82 @@ public final class GovernorRunner {
                     prediction.confidence(),
                     prediction.reason()));
         }
+    }
+
+    private void updateFrametimePrediction(RuntimeState state, NozhConfig config, long nowMillis) {
+        if (state == null || pendingFrametimePrediction) {
+            return;
+        }
+        PredictiveAnalyzer.Prediction prediction = predictiveAnalyzer.evaluate();
+        if (!prediction.ready() || !prediction.isLikely()) {
+            return;
+        }
+        if (prediction.confidence() < 0.5) {
+            return;
+        }
+        pendingFrametimePrediction = true;
+        pendingFrametimeConfidence = prediction.confidence();
+        lastFrametimePredictionMillis = nowMillis;
+        lastFrametimePredictionAvgMs = state.avgFrametimeMs();
+        lastFrametimePredictionP95Ms = state.p95FrametimeMs();
+        lastFrametimePredictionSpikes = state.spikeCount();
+        logger.debug(String.format(
+                "Frametime prediction: window=%s confidence=%.2f trend=%s",
+                prediction.window(),
+                prediction.confidence(),
+                predictiveAnalyzer.getTrendDescription()));
+    }
+
+    private void evaluateSpikePredictionAccuracy(RuntimeState state, NozhConfig config, long nowMillis) {
+        if (pendingSpikePrediction == null) {
+            return;
+        }
+        long windowMs = resolvePredictionWindowMillis(config);
+        if (nowMillis - lastSpikePredictionMillis < windowMs) {
+            return;
+        }
+        if (lastSpikePredictionCount < 0) {
+            pendingSpikePrediction = null;
+            return;
+        }
+        boolean actualSpike = state.spikeCount() > lastSpikePredictionCount;
+        sessionLearning.recordPredictionOutcome(pendingSpikePrediction.spikeLikely(), actualSpike,
+                pendingSpikePrediction.confidence());
+        pendingSpikePrediction = null;
+    }
+
+    private void evaluateFrametimePredictionAccuracy(RuntimeState state, NozhConfig config, long nowMillis) {
+        if (!pendingFrametimePrediction) {
+            return;
+        }
+        long windowMs = resolvePredictionWindowMillis(config);
+        if (nowMillis - lastFrametimePredictionMillis < windowMs) {
+            return;
+        }
+        boolean actualSpike = isPredictionSpike(state, config);
+        sessionLearning.recordPredictionOutcome(true, actualSpike, pendingFrametimeConfidence);
+        pendingFrametimePrediction = false;
+    }
+
+    private boolean isPredictionSpike(RuntimeState state, NozhConfig config) {
+        if (state == null) {
+            return false;
+        }
+        double avgEpsilon = config != null ? config.improvementEpsilonAvgMs : 0.5;
+        double p95Epsilon = config != null ? config.improvementEpsilonP95Ms : 1.0;
+
+        double avgMs = state.avgFrametimeMs();
+        double p95Ms = state.p95FrametimeMs();
+        boolean avgSpike = isValidPerfValue(avgMs)
+                && isValidPerfValue(lastFrametimePredictionAvgMs)
+                && avgMs > lastFrametimePredictionAvgMs + avgEpsilon;
+        boolean p95Spike = isValidPerfValue(p95Ms)
+                && isValidPerfValue(lastFrametimePredictionP95Ms)
+                && p95Ms > lastFrametimePredictionP95Ms + p95Epsilon;
+        boolean spikeRise = lastFrametimePredictionSpikes >= 0
+                && state.spikeCount() > lastFrametimePredictionSpikes;
+
+        return avgSpike || p95Spike || spikeRise;
     }
 
     private long resolvePredictionWindowMillis(NozhConfig config) {

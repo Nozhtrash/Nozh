@@ -25,7 +25,7 @@ public record HudViewModel(
                 ParanoiaLevel paranoiaLevel,
                 HardwareTier activeTier,
                 long uptimeSeconds,
-                String currentBound, // "CPU_BOUND" / "GPU_BOUND" / "BALANCED" / "UNKNOWN"
+                String currentBound, // Translation key for bound status
 
                 // Performance metrics
                 double avgFrametimeMs,
@@ -34,6 +34,18 @@ public record HudViewModel(
                 int sampleCount,
                 int droppedSamples,
                 boolean sufficientData,
+
+                // Diagnostics
+                double gcRecentMs,
+                double gcPressureScore,
+                int pauseCount,
+                double pauseMaxMs,
+                String stutterCauseKey,
+                String stutterDetail,
+                double stutterConfidence,
+                String hottestRenderPhaseKey,
+                double hottestRenderPhaseMs,
+                int hottestRenderPhaseTicks,
 
                 // Provider summary
                 int providersTotal,
@@ -64,9 +76,20 @@ public record HudViewModel(
                 String benchmarkValidity, // "VALID" / "NOISY" / "INCONCLUSIVE" / "NONE"
 
                 // Detailed data (for respective sections)
+                List<DirectorTrace> stewardshipTraces,
                 List<ProviderViewModel> providers,
                 List<Issue> issues,
                 List<ActionHistoryEntryView> recentActions) {
+        /**
+         * Director mode trace (stewardship handoff).
+         */
+        public record DirectorTrace(
+                        String capabilityId,
+                        String steward,
+                        String modeKey,
+                        String reason) {
+        }
+
         /**
          * Provider view model (nested DTO).
          */
@@ -97,6 +120,16 @@ public record HudViewModel(
                         0,
                         "UNKNOWN",
                         0, 0, 0, 0, 0, false,
+                        0.0,
+                        0.0,
+                        0,
+                        0.0,
+                        "nozh.hud.stutter.unknown",
+                        "",
+                        0.0,
+                        "nozh.hud.render_phase.unknown",
+                        0.0,
+                        0,
                         0, 0, 0, 0,
                         0.0, 0, 0,
                         0, 0, 0,
@@ -110,6 +143,7 @@ public record HudViewModel(
                         0.5,
                         false,
                         "NONE",
+                        List.of(),
                         List.of(),
                         List.of(),
                         List.of());

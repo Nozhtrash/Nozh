@@ -145,4 +145,24 @@ public final class StateManager {
     public static void saveImmediately() {
         save();
     }
+
+    /**
+     * Persist last failure context for crash recovery.
+     */
+    public static void recordFailureContext(CrashFailureContext context) {
+        synchronized (LOCK) {
+            if (context == null) {
+                return;
+            }
+            if (state == null) {
+                load();
+            }
+            if (state == null) {
+                NozhConstants.LOGGER.warn("Cannot record failure context: state is null");
+                return;
+            }
+            state.setLastFailureContext(context);
+            save();
+        }
+    }
 }

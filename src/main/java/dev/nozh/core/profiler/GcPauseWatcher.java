@@ -28,13 +28,12 @@ public class GcPauseWatcher {
     
     /**
      * Update GC tracking. Call periodically (e.g., every tick or every few frames).
-     * Returns true if a check was performed.
      */
-    public boolean update() {
+    public GcPauseEvent update() {
         long now = System.currentTimeMillis();
         
         if (now - lastCheckTime < CHECK_INTERVAL_MS) {
-            return false;
+            return null;
         }
         
         long totalTime = getTotalCollectionTime();
@@ -50,9 +49,10 @@ public class GcPauseWatcher {
         
         if (delta > 0) {
             NozhConstants.LOGGER.debug("GC activity: {}ms in last {}ms", delta, elapsed);
+            return new GcPauseEvent(now, elapsed, delta);
         }
         
-        return true;
+        return null;
     }
     
     /**

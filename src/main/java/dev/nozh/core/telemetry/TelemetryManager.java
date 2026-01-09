@@ -4,9 +4,14 @@ import dev.nozh.api.PerfSnapshot;
 import dev.nozh.core.context.Scenario;
 import dev.nozh.core.capability.CapabilityId;
 import dev.nozh.core.governor.ActionOutcome;
+import dev.nozh.core.safety.CrashFailureContext;
+import dev.nozh.core.safety.CrashRecoveryAction;
+import dev.nozh.core.safety.CrashRecoveryDecision;
 import java.nio.file.Path;
 import java.nio.file.Files;
 import java.io.IOException;
+import java.util.HashMap;
+import java.util.Map;
 
 /**
  * Central orchestrator for all telemetry systems.
@@ -19,6 +24,7 @@ public final class TelemetryManager {
     private final EventTimeline timeline;
     private final TelemetryDashboard dashboard;
     private final TelemetryReportGenerator reportGenerator;
+    private dev.nozh.core.profiler.CriticalEventSink criticalEventSink;
     
     public TelemetryManager() {
         this.aggregator = new TelemetryAggregator();
@@ -87,6 +93,60 @@ public final class TelemetryManager {
         String message
     ) {
         timeline.recordEvent(severity, category, message);
+        forwardCriticalEvent(severity, category, message);
+    }
+
+    public void recordCrashContext(CrashFailureContext context) {
+        if (context == null) {
+            return;
+        }
+        Map<String, String> details = new HashMap<>();
+        details.put("source", String.valueOf(context.source()));
+        details.put("capabilityId", String.valueOf(context.capabilityId()));
+        details.put("commandType", String.valueOf(context.commandType()));
+        details.put("requestedValue", String.valueOf(context.requestedValue()));
+        details.put("errorMessage", String.valueOf(context.errorMessage()));
+        details.put("exceptionType", String.valueOf(context.exceptionType()));
+        timeline.recordEvent(
+            EventTimeline.EventSeverity.ERROR,
+            EventTimeline.EventCategory.CRASH_LOOP,
+            "Crash context captured",
+            details
+        );
+        forwardCriticalEvent(EventTimeline.EventSeverity.ERROR, EventTimeline.EventCategory.CRASH_LOOP,
+                "Crash context captured");
+    }
+
+    public void recordCrashRecovery(CrashRecoveryDecision decision, CrashFailureContext context) {
+        if (decision == null || decision.action() == null) {
+            return;
+        }
+        Map<String, String> details = new HashMap<>();
+        details.put("action", decision.action().name());
+        details.put("capabilityId", String.valueOf(decision.capabilityId()));
+        if (decision.retryAtMillis() > 0L) {
+            details.put("retryAtMillis", String.valueOf(decision.retryAtMillis()));
+        }
+        if (context != null) {
+            details.put("source", String.valueOf(context.source()));
+            details.put("errorMessage", String.valueOf(context.errorMessage()));
+            details.put("exceptionType", String.valueOf(context.exceptionType()));
+        }
+        EventTimeline.EventSeverity severity = decision.action() == CrashRecoveryAction.SAFE_MODE
+            ? EventTimeline.EventSeverity.CRITICAL
+            : EventTimeline.EventSeverity.WARNING;
+        timeline.recordEvent(
+            severity,
+            EventTimeline.EventCategory.CRASH_LOOP,
+            "Crash recovery applied: " + decision.action(),
+            details
+        );
+        forwardCriticalEvent(severity, EventTimeline.EventCategory.CRASH_LOOP,
+                "Crash recovery applied: " + decision.action());
+    }
+
+    public void setCriticalEventSink(dev.nozh.core.profiler.CriticalEventSink sink) {
+        this.criticalEventSink = sink;
     }
     
     public TelemetryDashboard.DashboardSnapshot getDashboardSnapshot() {
@@ -114,5 +174,21 @@ public final class TelemetryManager {
         decisionTracker.reset();
         effectivenessTracker.reset();
         timeline.reset();
+    }
+
+    private void forwardCriticalEvent(
+            EventTimeline.EventSeverity severity,
+            EventTimeline.EventCategory category,
+            String message) {
+        if (criticalEventSink == null) {
+            return;
+        }
+        if (severity != EventTimeline.EventSeverity.ERROR && severity != EventTimeline.EventSeverity.CRITICAL) {
+            return;
+        }
+        criticalEventSink.recordCriticalEvent(
+                severity.name(),
+                category != null ? category.name() : "",
+                message);
     }
 }

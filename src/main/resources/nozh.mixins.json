@@ -4,9 +4,15 @@
     "compatibilityLevel": "JAVA_17",
     "mixins": [],
     "client": [
+        "MixinClientPlayerInteractionManager",
+        "MixinClientPlayerEntity",
+        "MixinMinecraftClient",
         "MixinKeyboard",
         "MixinMouse",
         "MixinEntityRenderDispatcher",
+        "MixinGameRenderer",
+        "MixinArmorStandEntity",
+        "MixinItemFrameEntity",
         "MixinBlockEntityRenderDispatcher",
         "MixinClientChunkManager",
         "MixinParticleManager"

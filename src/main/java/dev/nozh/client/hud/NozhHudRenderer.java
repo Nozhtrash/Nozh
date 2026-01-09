@@ -5,9 +5,13 @@ import dev.nozh.core.capability.ProviderRegistry;
 import dev.nozh.core.config.ConfigManager;
 import dev.nozh.core.config.NozhConfig;
 import dev.nozh.core.preset.HardwareTier;
+import dev.nozh.core.profiler.PerfDiagnosticsSnapshot;
+import dev.nozh.core.profiler.PerfManager;
+import dev.nozh.core.profiler.RenderPhase;
 import dev.nozh.core.state.RuntimeState;
 import dev.nozh.core.state.StateStore;
 import dev.nozh.core.telemetry.TelemetrySnapshot;
+import dev.nozh.core.ui.HudMode;
 import dev.nozh.core.ui.HudViewModel;
 import dev.nozh.core.ui.HudViewModelBuilder;
 import net.fabricmc.api.EnvType;
@@ -30,12 +34,18 @@ public class NozhHudRenderer implements HudRenderCallback {
     private final StateStore stateStore;
     private final ProviderRegistry providerRegistry;
     private final Supplier<PerfSnapshot> perfSnapshotSupplier;
+    private final PerfManager perfManager;
+    private final Supplier<String> exportKeySupplier;
+    private double lastHudRenderMs = 0.0;
 
     public NozhHudRenderer(StateStore stateStore, ProviderRegistry providerRegistry,
-            Supplier<PerfSnapshot> perfSnapshotSupplier) {
+            Supplier<PerfSnapshot> perfSnapshotSupplier, PerfManager perfManager,
+            Supplier<String> exportKeySupplier) {
         this.stateStore = stateStore;
         this.providerRegistry = providerRegistry;
         this.perfSnapshotSupplier = perfSnapshotSupplier;
+        this.perfManager = perfManager;
+        this.exportKeySupplier = exportKeySupplier;
     }
 
     @Override
@@ -50,18 +60,26 @@ public class NozhHudRenderer implements HudRenderCallback {
             return;
         }
 
+        long renderStartNanos = System.nanoTime();
+        if (perfManager != null) {
+            perfManager.onRenderPhaseStart(RenderPhase.HUD);
+        }
+
         RuntimeState state = stateStore != null ? stateStore.snapshotSafe() : RuntimeState.defaults();
         TelemetrySnapshot telemetry = buildTelemetry();
+        PerfDiagnosticsSnapshot diagnostics = buildDiagnostics();
         HudViewModel viewModel = HudViewModelBuilder.build(
                 state,
                 telemetry,
+                diagnostics,
                 List.of(),
                 HardwareTier.MEDIUM,
                 providerRegistry);
 
         TextRenderer textRenderer = client.textRenderer;
         int lineHeight = textRenderer.fontHeight + 2;
-        List<Text> lines = buildHudLines(viewModel, state);
+        HudMode hudMode = HudMode.fromConfig(config.hudMode);
+        List<Text> lines = buildHudLines(viewModel, state, hudMode);
         int maxWidth = 0;
         for (Text line : lines) {
             maxWidth = Math.max(maxWidth, textRenderer.getWidth(line));
@@ -85,6 +103,13 @@ public class NozhHudRenderer implements HudRenderCallback {
             drawY += lineHeight;
         }
         context.getMatrices().pop();
+
+        if (perfManager != null) {
+            perfManager.onRenderPhaseEnd(RenderPhase.HUD);
+        }
+
+        long renderEndNanos = System.nanoTime();
+        lastHudRenderMs = (renderEndNanos - renderStartNanos) / 1_000_000.0;
     }
 
     private TelemetrySnapshot buildTelemetry() {
@@ -103,26 +128,130 @@ public class NozhHudRenderer implements HudRenderCallback {
                 0);
     }
 
-    private List<Text> buildHudLines(HudViewModel viewModel, RuntimeState state) {
-        List<Text> lines = new java.util.ArrayList<>();
-        lines.add(Text.translatable("nozh.hud.title"));
-        lines.add(Text.translatable("nozh.hud.mode", resolveMode(state)));
-        lines.add(Text.translatable("nozh.hud.scenario", Text.translatable(viewModel.scenarioKey())));
-        lines.add(Text.translatable("nozh.hud.metrics.fps", formatFps(viewModel.avgFrametimeMs())));
-        lines.add(Text.translatable(
-                "nozh.hud.metrics.p95_spikes",
-                formatMs(viewModel.p95FrametimeMs()),
-                viewModel.spikeCount()));
+    private PerfDiagnosticsSnapshot buildDiagnostics() {
+        if (perfManager == null) {
+            return PerfDiagnosticsSnapshot.empty();
+        }
+        PerfDiagnosticsSnapshot snapshot = perfManager.getDiagnosticsSnapshot();
+        return snapshot != null ? snapshot : PerfDiagnosticsSnapshot.empty();
+    }
 
-        lines.add(Text.translatable("nozh.hud.last_action", resolveLastAction(viewModel)));
-        lines.add(Text.translatable("nozh.hud.last_outcome", resolveLastOutcome(viewModel)));
-        NozhConfig config = ConfigManager.getConfig();
-        if (config == null || config.showHudSuggestions) {
-            if (state != null && !state.autoTuning()) {
-                lines.add(Text.translatable("nozh.hud.suggestion", resolveSuggestion(state)));
-            }
+    private List<Text> buildHudLines(HudViewModel viewModel, RuntimeState state, HudMode hudMode) {
+        List<Text> lines = new java.util.ArrayList<>();
+        lines.add(Text.translatable("nozh.hud.title", Text.translatable(hudMode.translationKey())));
+        lines.add(Text.translatable("nozh.hud.mode", resolveMode(state)));
+        if (hudMode != HudMode.COMPACT) {
+            lines.add(Text.translatable("nozh.hud.scenario", Text.translatable(viewModel.scenarioKey())));
+        }
+        lines.add(Text.translatable("nozh.hud.metrics.fps", formatFps(viewModel.avgFrametimeMs())));
+        if (hudMode != HudMode.COMPACT) {
+            lines.add(Text.translatable(
+                    "nozh.hud.metrics.p95_spikes",
+                    formatMs(viewModel.p95FrametimeMs()),
+                    viewModel.spikeCount()));
+        }
+        lines.add(Text.translatable("nozh.hud.bound", Text.translatable(viewModel.currentBound())));
+        lines.add(Text.translatable(
+                "nozh.hud.stutter.cause",
+                Text.translatable(viewModel.stutterCauseKey()),
+                formatStutterDetail(viewModel.stutterDetail(), viewModel.stutterConfidence())));
+        if (hudMode == HudMode.EXPERT) {
+            lines.add(Text.translatable(
+                    "nozh.hud.metrics.gc",
+                    formatMsAllowZero(viewModel.gcRecentMs()),
+                    formatPercent(viewModel.gcPressureScore())));
+            lines.add(Text.translatable(
+                    "nozh.hud.metrics.pauses",
+                    viewModel.pauseCount(),
+                    formatMsAllowZero(viewModel.pauseMaxMs())));
+            lines.add(Text.translatable(
+                    "nozh.hud.metrics.render_hot",
+                    Text.translatable(viewModel.hottestRenderPhaseKey()),
+                    formatMsAllowZero(viewModel.hottestRenderPhaseMs()),
+                    viewModel.hottestRenderPhaseTicks()));
+        }
+        if (hudMode != HudMode.COMPACT) {
+            lines.add(Text.translatable("nozh.hud.last_action", resolveLastAction(viewModel)));
+            lines.add(Text.translatable("nozh.hud.last_outcome", resolveLastOutcome(viewModel)));
+        }
+        appendSuggestedActions(lines, state);
+        if (hudMode == HudMode.EXPERT) {
+            appendDirectorTraces(lines, viewModel);
+            lines.add(Text.translatable(
+                    "nozh.hud.hud_time",
+                    formatMsAllowZero(lastHudRenderMs),
+                    resolveHudBudgetStatus(lastHudRenderMs)));
+            lines.add(Text.translatable("nozh.hud.export_hint", resolveExportKeyLabel()));
         }
         return lines;
+    }
+
+    private void appendSuggestedActions(List<Text> lines, RuntimeState state) {
+        NozhConfig config = ConfigManager.getConfig();
+        if (config != null && !config.showHudSuggestions) {
+            return;
+        }
+        if (state == null || state.suggestedActions() == null || state.suggestedActions().isEmpty()) {
+            lines.add(Text.translatable("nozh.hud.actions.none"));
+            return;
+        }
+        int limit = Math.min(state.suggestedActions().size(), 2);
+        StringBuilder summary = new StringBuilder();
+        for (int i = 0; i < limit; i++) {
+            var pending = state.suggestedActions().get(i);
+            if (i > 0) {
+                summary.append(" | ");
+            }
+            summary.append(formatAction(pending.capability().name(), pending.newValue().toString()));
+        }
+        int remaining = state.suggestedActions().size() - limit;
+        if (remaining > 0) {
+            summary.append(" +").append(remaining);
+        }
+        lines.add(Text.translatable("nozh.hud.actions.suggested", summary.toString()));
+    }
+
+    private String resolveExportKeyLabel() {
+        if (exportKeySupplier == null) {
+            return Text.translatable("nozh.hud.export.unbound").getString();
+        }
+        String label = exportKeySupplier.get();
+        if (label == null || label.isBlank()) {
+            return Text.translatable("nozh.hud.export.unbound").getString();
+        }
+        return label;
+    }
+
+    private String resolveHudBudgetStatus(double renderMs) {
+        if (renderMs <= 0) {
+            return Text.translatable("nozh.hud.hud_time.unknown").getString();
+        }
+        return renderMs <= 0.5
+                ? Text.translatable("nozh.hud.hud_time.ok").getString()
+                : Text.translatable("nozh.hud.hud_time.slow").getString();
+    }
+
+    private void appendDirectorTraces(List<Text> lines, HudViewModel viewModel) {
+        if (viewModel == null || viewModel.stewardshipTraces() == null || viewModel.stewardshipTraces().isEmpty()) {
+            return;
+        }
+        lines.add(Text.translatable("nozh.hud.director.title"));
+        int limit = Math.min(viewModel.stewardshipTraces().size(), 5);
+        for (int i = 0; i < limit; i++) {
+            HudViewModel.DirectorTrace trace = viewModel.stewardshipTraces().get(i);
+            Text mode = Text.translatable(trace.modeKey());
+            if (trace.reason() != null && !trace.reason().isBlank()) {
+                lines.add(Text.translatable("nozh.hud.director.trace_reason",
+                        trace.capabilityId(), trace.steward(), mode, trace.reason()));
+            } else {
+                lines.add(Text.translatable("nozh.hud.director.trace",
+                        trace.capabilityId(), trace.steward(), mode));
+            }
+        }
+        int remaining = viewModel.stewardshipTraces().size() - limit;
+        if (remaining > 0) {
+            lines.add(Text.translatable("nozh.hud.director.more", remaining));
+        }
     }
 
     private String resolveMode(RuntimeState state) {
@@ -162,6 +291,10 @@ public class NozhHudRenderer implements HudRenderCallback {
         }
         var pending = state.suggestedActions().get(0);
         String summary = formatAction(pending.capability().name(), pending.newValue().toString());
+        String reason = state.lastDecisionReason();
+        if (reason != null && !reason.isBlank()) {
+            summary = summary + " (" + reason + ")";
+        }
         int remaining = state.suggestedActions().size() - 1;
         if (remaining > 0) {
             return Text.translatable("nozh.hud.suggestion.apply_hint_many", summary, remaining).getString();
@@ -180,12 +313,34 @@ public class NozhHudRenderer implements HudRenderCallback {
         return String.format("%.1f", value);
     }
 
+    private String formatMsAllowZero(double value) {
+        if (Double.isNaN(value) || value < 0) {
+            return "--";
+        }
+        return String.format("%.1f", value);
+    }
+
     private String formatFps(double avgMs) {
         if (Double.isNaN(avgMs) || avgMs <= 0) {
             return "--";
         }
         double fps = 1000.0 / avgMs;
         return String.format("%.0f", fps);
+    }
+
+    private String formatPercent(double value) {
+        if (!Double.isFinite(value) || value < 0) {
+            return "--";
+        }
+        return String.format("%.0f%%", value * 100.0);
+    }
+
+    private String formatStutterDetail(String detail, double confidence) {
+        String base = formatPercent(confidence);
+        if (detail == null || detail.isBlank()) {
+            return base;
+        }
+        return detail + " • " + base;
     }
 
     private int resolveAnchorX(NozhConfig config, int maxWidth, int screenWidth) {
