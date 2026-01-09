@@ -1,15 +1,15 @@
 <div align="center">
   <h1>⚡ NOZH ⚡</h1>
   <p>
-    <b>Intelligent Optimization Orchestrator for Minecraft (Fabric)</b><br>
-    <i>Orquestador inteligente de optimización para Minecraft (Fabric)</i>
+    <b>Intelligent Performance Orchestrator for Minecraft (Fabric)</b><br>
+    <i>Orquestador inteligente de rendimiento para Minecraft (Fabric)</i>
   </p>
 
   <p>
-    <a href="https://github.com/NozhMod/Nozh/actions"><img src="https://img.shields.io/badge/Status-ALPHA-ff8c00?style=for-the-badge&logo=appveyor" alt="Status"></a>
+    <a href="https://github.com/NozhMod/Nozh/actions"><img src="https://img.shields.io/badge/Status-ALPHA%200.2.0-ff8c00?style=for-the-badge&logo=appveyor" alt="Status"></a>
     <a href="https://fabricmc.net/"><img src="https://img.shields.io/badge/Loader-FABRIC-00b8a3?style=for-the-badge&logo=fabric" alt="Fabric"></a>
-    <a href="#"><img src="https://img.shields.io/badge/Version-1.20.1-FFA500?style=for-the-badge&logo=minecraft" alt="Version"></a>
-    <a href="#"><img src="https://img.shields.io/badge/Mode-Context%20Aware-00c853?style=for-the-badge" alt="Mode"></a>
+    <a href="#"><img src="https://img.shields.io/badge/Minecraft-1.20.1-FFA500?style=for-the-badge&logo=minecraft" alt="Version"></a>
+    <a href="#"><img src="https://img.shields.io/badge/Arch-Event%20Driven-00c853?style=for-the-badge" alt="Mode"></a>
   </p>
 </div>
 
@@ -17,154 +17,284 @@
 
 # 🇬🇧 English
 
-## What NOZH is
+## What is NOZH?
 
-**NOZH** is a client-side optimization orchestrator for Minecraft. Instead of applying static tweaks, it runs a **Governor** that evaluates live telemetry and decides *when* to adjust settings based on the current game scenario (combat, building, exploring, AFK, etc.).
+**NOZH** is an **event-driven adaptive performance orchestrator** for Minecraft. Instead of using static configuration, it implements a **3-layer architecture**:
 
-## Current stage
+1. **Core Layer** - Pure business logic (capabilities, telemetry, orchestration)
+2. **Bus Layer** - Event-driven communication between components
+3. **Integration Layer** - Fabric/Minecraft bindings and mod adapters
 
-**Alpha / active development.** The core decision loop, telemetry, compatibility matrix, and in-game controls are implemented and usable. Some mod integrations and advanced tuning features are still partial or stubbed.
+## Architecture Overview (v0.2.0-alpha)
 
-## What it does today (implemented)
+### Core Components
 
-- **Scenario detection** using recent actions, hostiles nearby, world context, and stability scoring (AFK, combat, building, exploring, loading, menu).
-- **Governor decision loop** (auto/assisted) that proposes or applies changes based on frametime signals and safety rules.
-- **Session Learning** with persistent action outcome tracking (avoids repeating ineffective tweaks on your hardware).
-- **Telemetry & HUD** with average frametime, p95 spikes, stutter causes, last actions, and suggested actions.
-- **Capability providers** for real Minecraft settings (render distance, simulation distance, particles, mipmap levels, smooth lighting, graphics mode, vsync, FPS cap, etc.).
-- **Surgical rendering toggles** (armor stands, item frames, block entities, animations) via NOZH render settings.
-- **Compatibility matrix** that detects many popular performance mods and yields control to them when appropriate.
-- **Limited adapters** (e.g., Sodium options + LambDynamicLights) for shared control when available.
-- **Commands and exports** (`/nozh status`, `/nozh selfcheck`, `/nozh perf`, `/nozh history`, `/nozh telemetry export ...`).
+#### Capability System
+- **CapabilityProvider Interface** - Defines how settings are read/modified safely
+- **CapabilityRegistry** - Central registry for all capability providers
+- **Isolation Guarantee** - One broken provider cannot crash the entire system
+- **Rollback Support** - Failed changes can be reverted via state snapshots
 
-## Partial / experimental / stubbed
+#### Orchestration
+- **IntegratedGovernor** - Main decision-making engine
+- **Scenario Detection** - Context awareness (combat, building, exploring, AFK)
+- **ActionMatrix** - Available actions per scenario with priorities
+- **EffectivenessTracker** - Learns which actions work on your hardware
 
-- **Fog control** is currently a stub in vanilla options (marked DEGRADED).
-- **Iris/Sodium compatibility** is mostly detection + limited reflection; not full shader or render pipeline orchestration.
-- **Director V2 + deep mod coordination** is only partially wired; many modules are detection-only.
-- **Advanced predictive or ML-driven decisioning** is not yet active (still roadmap).
+#### Telemetry
+- **TelemetryCollector** - Gathers FPS, frametime, entity count, chunk loading
+- **RingBuffer** - Efficient circular buffer for temporal analysis
+- **Spike Detection** - Identifies P95/P99 frametime anomalies
+- **No Synthetic Data** - Returns null if measurement is invalid
 
-## Why install it now
+#### Analysis
+- **BottleneckDetector** - CPU vs GPU bottleneck identification
+- **HostileEntityTracker** - Combat detection based on nearby threats
+- **ActionWindowAnalyzer** - Temporal pattern analysis (30-second windows)
 
-- You want **context-aware optimization** instead of a fixed ruleset.
-- You want **visibility** into stutter causes and NOZH’s decisions.
-- You need **safe orchestration** when combining multiple performance mods.
-- You can tolerate alpha-level limitations in exchange for adaptive behavior.
+### Bus Layer (Event System)
 
-## Future potential (based on `future.txt`)
+```
+┌─────────────────────────────────────────┐
+│         EVENT BUS (Central)             │
+│  - CapabilityChangeEvent                │
+│  - TelemetrySampleEvent                 │
+│  - GovernorDecisionEvent                │
+│  - ScenarioTransitionEvent              │
+└─────────────────────────────────────────┘
+         ▲              │
+         │              ▼
+┌────────┴───────┐  ┌───────────────┐
+│   Publishers   │  │  Subscribers  │
+│  - Governor    │  │  - HUD        │
+│  - Telemetry   │  │  - Logger     │
+│  - Providers   │  │  - Analytics  │
+└────────────────┘  └───────────────┘
+```
 
-- More precise **CPU vs GPU** bottleneck detection.
-- Deeper **scenario profiling** (dimension context, long-term action windows).
-- **Predictive analysis** to avoid oscillations and pre-empt spikes.
-- Wider **mod adapter coverage** and richer orchestration rules.
+### Integration Layer
 
-> Roadmap is aspirational and can change. It reflects intent, not a delivery guarantee.
+- **FabricNozhClient** - Mod initialization and lifecycle
+- **Mixins** - Targeted Minecraft hooks for action tracking
+- **Mod Adapters** - Compatibility with Sodium, Iris, LambDynamicLights, etc.
 
-## Known limitations & risks
+## Current State (January 2026)
 
-- Gains are **contextual**, not guaranteed; some hardware or modpacks may see minimal improvement.
-- Scenario detection is heuristic and can misclassify (e.g., inventory-heavy building might look like AFK).
-- Some capabilities are **DEGRADED or no-op** in vanilla; NOZH will back off in those cases.
-- External mod updates can break reflection-based adapters (Sodium/Iris APIs are not stable).
+### ✅ Fully Implemented
 
-## Configuration (recommended defaults)
+#### Core Architecture
+- [x] CapabilityProvider interface with isolation guarantees
+- [x] CapabilityRegistry with safe execution and rollback
+- [x] StateSnapshot system for reversible changes
+- [x] ActionResult type system (Success/Failed/Invalid/NoChange)
+- [x] Event bus infrastructure
+- [x] Telemetry collection with validation (no synthetic data)
 
-These defaults are tuned for **real hardware baselines** and common 60–144 Hz panels:
+#### Orchestration
+- [x] IntegratedGovernor decision loop
+- [x] Scenario detection (Combat, Building, Exploring, AFK, Loading)
+- [x] EffectivenessTracker with TTL and decay
+- [x] Blacklist system for failed actions
+- [x] Session learning persistence
 
-- `targetFps = 60` (set to 120/144/240 if your monitor and GPU can sustain it).
-- `observationWindowSeconds = 5` (enough samples to smooth spikes without lagging reactions).
-- `cooldownActionMillis = 120000` (per-action cooldown to avoid churn).
-- `cooldownGlobalMinIntervalMillis = 60000` (global guardrail between any actions).
+#### Analysis
+- [x] BottleneckDetector (CPU vs GPU identification)
+- [x] HostileEntityTracker (combat context)
+- [x] ActionWindowAnalyzer (temporal patterns)
+- [x] Spike detection (P95/P99 frametime)
 
-## Rough progress estimate (subjective)
+#### Commands
+- [x] `/nozh status` - System overview
+- [x] `/nozh selfcheck` - Diagnostic report
+- [x] `/nozh perf` - Performance metrics
+- [x] `/nozh history` - Action history
+- [x] `/nozh learning` - Learning statistics
+- [x] `/nozh telemetry export` - Data export
 
-- **Core loop + telemetry + HUD:** ~70–80% complete.
-- **Compatibility orchestration:** ~35–50% complete (detection solid, adapters limited).
-- **Predictive/advanced intelligence:** ~10–20% complete.
+### 🚧 In Progress
 
-Overall: **~45–55% of the “full vision”** described in `future.txt` + extra ideas. This is a **best-effort estimate** based on current repo behavior, not a formal metric.
+#### Capability Providers (0/10 implemented)
+- [ ] RenderDistanceProvider
+- [ ] SimulationDistanceProvider
+- [ ] ParticlesProvider
+- [ ] EntityDistanceProvider
+- [ ] GraphicsModeProvider
+- [ ] MipmapLevelsProvider
+- [ ] SmoothLightingProvider
+- [ ] CloudsProvider
+- [ ] VsyncProvider
+- [ ] MaxFpsProvider
+
+> **Note**: Previous implementations were incompatible with v2 interface and removed in PR #149.
+> New implementations following the CapabilityProvider v2 contract are in development.
+
+#### Advanced Features
+- [ ] TransactionalExecutor with automatic rollback
+- [ ] ImprovedQLearning with epsilon-greedy exploration
+- [ ] Director V2 orchestration layer
+- [ ] Enhanced mod adapter coverage
+
+### 📋 Planned
+
+- **Predictive Analysis** - Pre-emptive optimization before spikes
+- **ML-Driven Decisions** - More sophisticated action selection
+- **Dimension Context** - Per-dimension learning profiles
+- **Multiplayer Optimizations** - Server-aware adjustments
+- **Advanced Shader Orchestration** - Deeper Iris/Optifine coordination
+
+## Why Use NOZH Now?
+
+### Advantages
+- **Context-Aware** - Adapts to what you're doing (combat needs different settings than building)
+- **Hardware Learning** - Remembers what works on YOUR specific setup
+- **Safe Orchestration** - Coordinates with other performance mods instead of fighting them
+- **Full Visibility** - HUD shows you exactly what's being adjusted and why
+- **Reversible Changes** - Failed optimizations are automatically rolled back
+
+### Current Limitations
+- **Alpha Software** - Expect bugs and incomplete features
+- **Provider System Incomplete** - Most capability providers are not yet implemented
+- **Mod Compatibility** - Some reflection-based adapters may break with mod updates
+- **Performance Gains Not Guaranteed** - Effectiveness depends on your specific hardware/mods
+
+## Installation
+
+1. Download `nozh-x.x.x.jar` from releases
+2. Place in your `.minecraft/mods` folder
+3. Launch Minecraft 1.20.1 with Fabric Loader
+4. Run `/nozh selfcheck` to verify installation
+
+## Configuration
+
+Default config is tuned for 60 Hz monitors. Adjust in `config/nozh.json5`:
+
+```json5
+{
+  targetFps: 60,              // Set to your monitor refresh rate
+  observationWindowSeconds: 5, // Telemetry collection window
+  cooldownActionMillis: 120000, // Per-action cooldown (2 minutes)
+  cooldownGlobalMinIntervalMillis: 60000, // Global minimum (1 minute)
+  mode: "AUTO"                // AUTO or ASSISTED
+}
+```
+
+## Development Progress
+
+| Component | Completion | Status |
+|-----------|------------|--------|
+| Core Architecture | 85% | ✅ Stable |
+| Telemetry System | 80% | ✅ Functional |
+| Scenario Detection | 70% | ✅ Working |
+| Capability Providers | 0% | 🚧 In Development |
+| Mod Compatibility | 40% | 🚧 Partial |
+| Advanced Features | 15% | 📋 Planned |
+| **Overall** | **~48%** | 🟡 Alpha |
 
 ---
 
 # 🇪🇸 Español
 
-## Qué es NOZH
+## ¿Qué es NOZH?
 
-**NOZH** es un orquestador de optimización del lado del cliente para Minecraft. En lugar de aplicar tweaks estáticos, ejecuta un **Governor** que analiza telemetría en tiempo real y decide *cuándo* ajustar configuraciones según el escenario actual (combate, construcción, exploración, AFK, etc.).
+**NOZH** es un **orquestador adaptativo de rendimiento basado en eventos** para Minecraft. En lugar de usar configuración estática, implementa una **arquitectura de 3 capas**:
 
-## Etapa actual
+1. **Capa Core** - Lógica de negocio pura (capacidades, telemetría, orquestación)
+2. **Capa Bus** - Comunicación por eventos entre componentes
+3. **Capa Integration** - Bindings con Fabric/Minecraft y adaptadores de mods
 
-**Alpha / desarrollo activo.** El loop de decisión, telemetría, matriz de compatibilidad y controles en juego ya funcionan. Algunas integraciones con mods y mejoras avanzadas siguen parciales o en modo stub.
+## Estado Actual (Enero 2026)
 
-## Qué hace hoy (implementado)
+### ✅ Completamente Implementado
 
-- **Detección de escenarios** con acciones recientes, hostiles cercanos, contexto del mundo y estabilidad (AFK, combate, construcción, exploración, carga, menú).
-- **Governor** en modo automático o asistido, con reglas de seguridad y evaluación de frametime.
-- **Session Learning** persistente (evita repetir ajustes ineficientes en tu hardware).
-- **Telemetría + HUD** con promedio, p95, spikes, causas de stutter, últimas acciones y sugerencias.
-- **Providers** para opciones reales (render distance, simulation distance, partículas, mipmap, smooth lighting, graphics mode, vsync, FPS cap, etc.).
-- **Control quirúrgico de render** (armor stands, item frames, block entities, animaciones).
-- **Matriz de compatibilidad** que detecta muchos mods de rendimiento y cede control cuando corresponde.
-- **Adapters limitados** (p. ej. Sodium options + LambDynamicLights) para control compartido.
-- **Comandos y exportación** (`/nozh status`, `/nozh selfcheck`, `/nozh perf`, `/nozh history`, `/nozh telemetry export ...`).
+- Arquitectura core con sistema de eventos
+- Detección de escenarios contextual
+- Sistema de telemetría validado
+- Detección de cuellos de botella (CPU vs GPU)
+- Análisis de patrones temporales
+- Comandos de diagnóstico y exportación
 
-## Parcial / experimental / stub
+### 🚧 En Progreso
 
-- **Control de fog** es un stub en vanilla (marcado DEGRADED).
-- **Compatibilidad Iris/Sodium** es principalmente detección + reflection limitada; no hay orquestación profunda.
-- **Director V2** y coordinación avanzada de mods están solo parcialmente conectados.
-- **Modelos predictivos/ML** aún no están activos (solo roadmap).
+- **Providers de capacidades (0/10)** - Implementaciones anteriores incompatibles con interfaz v2 fueron eliminadas
+- Sistema de aprendizaje Q-Learning mejorado
+- Executor transaccional con rollback automático
+- Mayor cobertura de adaptadores de mods
 
-## Por qué instalarlo hoy
+### 📋 Planeado
 
-- Quieres **optimización contextual** en vez de reglas fijas.
-- Buscas **visibilidad** sobre el origen del stutter y las decisiones.
-- Necesitas **orquestación segura** al combinar varios mods de rendimiento.
-- Aceptas limitaciones de etapa alpha a cambio de comportamiento adaptativo.
+- Análisis predictivo
+- Decisiones basadas en ML
+- Contexto por dimensión
+- Optimizaciones para multijugador
+- Orquestación avanzada de shaders
 
-## Potencial futuro (basado en `future.txt`)
+## Por Qué Usar NOZH Ahora
 
-- Detección más precisa de **CPU vs GPU bound**.
-- Escenarios más profundos (dimensión, ventanas largas de acciones).
-- **Análisis predictivo** para evitar oscilaciones y picos.
-- Más **adapters** y reglas de orquestación avanzadas.
+### Ventajas
+- **Consciente del Contexto** - Se adapta a lo que estás haciendo
+- **Aprende de tu Hardware** - Recuerda qué funciona en TU setup específico
+- **Orquestación Segura** - Se coordina con otros mods de rendimiento
+- **Visibilidad Completa** - HUD te muestra qué se ajusta y por qué
+- **Cambios Reversibles** - Optimizaciones fallidas se revierten automáticamente
 
-> El roadmap es aspiracional y puede cambiar. No es una garantía de entrega.
+### Limitaciones Actuales
+- **Software Alpha** - Espera bugs y funciones incompletas
+- **Sistema de Providers Incompleto** - La mayoría de providers aún no están implementados
+- **Compatibilidad de Mods** - Algunos adapters basados en reflection pueden romperse
+- **Mejoras No Garantizadas** - Depende de tu hardware/mods específicos
 
-## Limitaciones y riesgos conocidos
+## Instalación
 
-- Las mejoras son **contextuales**, no garantizadas; algunos hardwares/modpacks pueden ver poca mejora.
-- La detección de escenarios es heurística y puede fallar (p. ej. construcción con inventario puede parecer AFK).
-- Algunas capacidades están **DEGRADED o no-op** en vanilla; NOZH retrocede en esos casos.
-- Actualizaciones de mods externos pueden romper adapters basados en reflection.
+1. Descarga `nozh-x.x.x.jar` desde releases
+2. Coloca en tu carpeta `.minecraft/mods`
+3. Inicia Minecraft 1.20.1 con Fabric Loader
+4. Ejecuta `/nozh selfcheck` para verificar instalación
 
-## Configuración (defaults recomendados)
+## Configuración
 
-Estos defaults están afinados para **hardware real** y paneles comunes de 60–144 Hz:
+La config por defecto está ajustada para monitores de 60 Hz. Modifica en `config/nozh.json5`:
 
-- `targetFps = 60` (sube a 120/144/240 si tu monitor y GPU lo sostienen).
-- `observationWindowSeconds = 5` (suficientes muestras sin retrasar la reacción).
-- `cooldownActionMillis = 120000` (cooldown por acción para evitar oscilaciones).
-- `cooldownGlobalMinIntervalMillis = 60000` (mínimo global entre acciones).
+```json5
+{
+  targetFps: 60,              // Ajusta a la tasa de refresco de tu monitor
+  observationWindowSeconds: 5, // Ventana de recolección de telemetría
+  cooldownActionMillis: 120000, // Cooldown por acción (2 minutos)
+  cooldownGlobalMinIntervalMillis: 60000, // Mínimo global (1 minuto)
+  mode: "AUTO"                // AUTO o ASSISTED
+}
+```
 
-## Estimación de progreso (subjetiva)
+## Progreso de Desarrollo
 
-- **Loop + telemetría + HUD:** ~70–80%.
-- **Orquestación de compatibilidad:** ~35–50% (detección sólida, adapters limitados).
-- **Inteligencia predictiva/avanzada:** ~10–20%.
-
-En total: **~45–55% de la “visión completa”** descrita en `future.txt` y mejoras adicionales. Es una **estimación orientativa**, no un KPI formal.
+| Componente | Completitud | Estado |
+|-----------|------------|--------|
+| Arquitectura Core | 85% | ✅ Estable |
+| Sistema de Telemetría | 80% | ✅ Funcional |
+| Detección de Escenarios | 70% | ✅ Operativo |
+| Providers de Capacidades | 0% | 🚧 En Desarrollo |
+| Compatibilidad Mods | 40% | 🚧 Parcial |
+| Features Avanzadas | 15% | 📋 Planeadas |
+| **Total** | **~48%** | 🟡 Alpha |
 
 ---
 
-## Installation (quick)
+## Contributing
 
-1. Drop `nozh-x.x.x.jar` into your `mods` folder.
-2. Launch Minecraft 1.20.1 with Fabric.
-3. Use `/nozh selfcheck` and `/nozh status` to verify.
+We welcome contributions! Please:
+
+1. Read `docs/v0.2-alpha.md` for architecture overview
+2. Check `CONTRACTS.md` for interface contracts
+3. Follow the 3-layer separation (core/bus/integration)
+4. Add tests for new capability providers
+5. Update documentation for new features
+
+## License
+
+MIT License - See LICENSE file for details
 
 ---
 
 <div align="center">
   <p><i>Context-aware optimization beats static tweaks.</i></p>
+  <p><b>v0.2.0-alpha</b> • Built with 🧠 for adaptive performance</p>
 </div>

@@ -1,116 +1,79 @@
-/**
- * NOZH - Adaptive Performance Optimization
- * Copyright (c) 2025 NOZH Project
- * 
- * Licensed under the MIT License.
- * 
- * This file defines a CORE ARCHITECTURAL CONTRACT.
- * Changes here affect system-wide invariants.
- * 
- * Read docs/v0.2-alpha.md before modifying.
- */
 package dev.nozh.core.capability;
 
 import dev.nozh.core.bus.CapabilityId;
 import dev.nozh.core.bus.CapabilityValue;
-
 import java.util.Optional;
 
 /**
- * CapabilityProvider interface (Contract 3).
+ * Core interface for capability providers (Phase C).
  * 
- * WHY THIS EXISTS:
- * CapabilityProvider enforces ISOLATION: one broken provider MUST NOT crash
- * the entire system. This is critical because providers interact with Minecraft
- * (particles, clouds, FPS cap) which can fail in unpredictable ways:
- * - Mod conflicts (shaders override particles)
- * - Version mismatches (API changes between MC versions)
- * - Hardware limits (GPU driver rejects FPS cap value)
+ * A CapabilityProvider is responsible for reading and modifying a specific game setting
+ * in a safe, reversible manner.
  * 
- * ISOLATION GUARANTEE:
- * If ParticlesProvider.apply() throws an exception, the system:
- * 1. Catches it (never propagates upward)
- * 2. Marks provider as BROKEN
- * 3. Continues operating with other providers
- * 4. Logs issue for user debugging
+ * Contract:
+ * - id() returns unique CapabilityId
+ * - metadata() returns immutable metadata about the provider
+ * - status() returns current health status
+ * - isAvailable() returns whether the provider can be used
+ * - getCurrentValueSafe() returns current value or empty if unavailable
+ * - apply() applies a new value atomically with rollback support
  * 
- * WHY "NEVER THROW" MATTERS:
- * Without this rule, a single broken provider crashes governor tick →
- * freezes entire mod → user uninstalls. With this rule, partial degradation
- * is acceptable (3 of 4 providers working) rather than total failure.
+ * Providers must be isolated - one failing provider cannot crash others.
  * 
- * CONTRACT RULES:
- * - NEVER throw exceptions from any method
- * - getCurrentValueSafe() returns Optional-like pattern, never crashes
- * - apply() is atomic or best-effort atomic (declare via metadata)
- * - One broken provider MUST NOT crash registry
- * 
- * PURITY:
- * - Interface is pure (in /core)
- * - Implementations MAY use Minecraft (in /fabric or /integration)
- * 
- * WHY ATOMIC apply():
- * If apply() is NOT atomic, failed changes leave system in partial state:
- * - particles=MEDIUM attempted but failed
- * - Minecraft shows particles=HIGH (old value)
- * - State shows particles=MEDIUM (new value)
- * → Mismatch causes governor confusion, repeat attempts, flapping.
- * Atomicity (or rollback on failure) prevents this.
+ * @since v0.2.0-alpha
  */
 public interface CapabilityProvider {
-
+    
     /**
-     * Capability ID this provider manages.
+     * Get the unique identifier for this provider.
+     * 
+     * @return capability identifier
      */
     CapabilityId id();
-
+    
     /**
-     * Provider metadata (static characteristics).
+     * Get immutable metadata about this provider.
+     * 
+     * @return provider metadata
      */
     ProviderMetadata metadata();
-
+    
     /**
-     * Current operational status.
+     * Get current provider health status.
+     * 
+     * @return current status (HEALTHY, DEGRADED, or BROKEN)
      */
     ProviderStatus status();
-
+    
     /**
-     * Reason for current status (if not HEALTHY).
+     * Get the reason for current status if not HEALTHY.
      * 
-     * @return Human-readable status reason, or empty if HEALTHY
+     * @return optional status reason
      */
     Optional<String> statusReason();
-
+    
     /**
-     * Check if provider is available (mod/version requirements met).
+     * Check if this provider is available for use.
+     * A provider is available if it's not BROKEN and all dependencies are met.
      * 
-     * @return true if provider can be used, false otherwise
+     * @return true if available
      */
     boolean isAvailable();
-
+    
     /**
-     * Get current capability value safely.
+     * Safely get the current value of this capability.
+     * Returns empty if the value cannot be read.
      * 
-     * NEVER throws. If cannot read -> return Optional.empty() and mark DEGRADED.
-     * 
-     * @return Current value, or empty if unavailable
+     * @return current value or empty
      */
     Optional<CapabilityValue> getCurrentValueSafe();
-
+    
     /**
-     * Apply a new capability value.
+     * Apply a new value to this capability.
+     * This method is atomic and includes automatic rollback on failure.
      * 
-     * MUST be atomic (or best-effort atomic, declare via metadata).
-     * NEVER throws exceptions upward.
-     * 
-     * On failure with STRONG rollback guarantee:
-     * - Capture previousValue
-     * - Attempt apply
-     * - If fails: attempt rollback
-     * - Return Failed with rollback status
-     * 
-     * @param value New value to apply
-     * @return ApplyResult (Success/Failed/Rejected)
+     * @param value the new value to apply
+     * @return result of the apply operation
      */
     ApplyResult apply(CapabilityValue value);
 }

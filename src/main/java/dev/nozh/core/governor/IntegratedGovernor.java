@@ -115,7 +115,8 @@ public final class IntegratedGovernor {
         // Initialize core systems
         this.telemetryBuffer = new IntegratedRingTelemetryBuffer(512);
         this.scenarioDetector = new EnhancedFabricScenarioDetector(client);
-        this.executor = new TransactionalExecutor();
+        // FIX: Pass telemetryBuffer to TransactionalExecutor constructor
+        this.executor = new TransactionalExecutor(this.telemetryBuffer);
         
         // Initialize context
         this.environmentContext = new EnvironmentContext(client);
@@ -895,6 +896,7 @@ public final class IntegratedGovernor {
      * 
      * AUDIT FIX #4: Enhanced resource cleanup with comprehensive error tracking.
      * AUDIT FIX #24: Also shutdown async executor.
+     * FIX: Removed call to non-existent executor.shutdown() method.
      */
     public void shutdown() {
         NozhConstants.LOGGER.info("Starting IntegratedGovernor shutdown...");
@@ -912,14 +914,8 @@ public final class IntegratedGovernor {
             }
         }
         
-        if (executor != null) {
-            try {
-                executor.shutdown();
-            } catch (Exception e) {
-                errorCount++;
-                NozhConstants.LOGGER.error("Failed to shutdown executor", e);
-            }
-        }
+        // FIX: TransactionalExecutor doesn't have a shutdown() method
+        // Removed: executor.shutdown()
         
         if (effectivenessTracker != null) {
             try {
