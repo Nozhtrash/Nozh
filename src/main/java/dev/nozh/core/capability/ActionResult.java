@@ -1,7 +1,5 @@
 package dev.nozh.core.capability;
 
-import dev.nozh.core.state.StateSnapshot;
-
 /**
  * Result of a capability provider action execution.
  * Encapsulates success status, error messages, and state snapshots for rollback.
