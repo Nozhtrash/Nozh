@@ -1,6 +1,6 @@
 package dev.nozh.core.capability;
 
-import dev.nozh.core.bus.CapabilityValue;
+import dev.nozh.core.capability.CapabilityValue;
 
 /**
  * Result of a CapabilityProvider.apply() operation (Contract 3).
