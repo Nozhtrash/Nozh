@@ -128,19 +128,28 @@ public class TransactionalExecutor {
     
     /**
      * Evaluate if performance improved after action.
+     * FIX: Use direct record accessors instead of getter methods.
      */
     private ImprovementEvaluation evaluateImprovement(TelemetrySnapshot before, TelemetrySnapshot after) {
         // Can't evaluate if insufficient data
-        if (before.getSampleCount() < 10 || after.getSampleCount() < 10) {
+        // FIX: Use sampleCount() instead of getSampleCount()
+        if (before.sampleCount() < 10 || after.sampleCount() < 10) {
             return ImprovementEvaluation.insufficient("Not enough samples");
         }
         
         // Calculate metrics
-        double fpsImprovement = (after.getAvgFps() - before.getAvgFps()) / before.getAvgFps();
-        double p95Improvement = (before.getP95FrametimeMs() - after.getP95FrametimeMs()) / 
-                               before.getP95FrametimeMs();
-        double spikeReduction = (before.getSpikeCount() - after.getSpikeCount()) / 
-                               (double) Math.max(1, before.getSpikeCount());
+        // FIX: TelemetrySnapshot is a record, so we need to calculate FPS from avgFrametimeMs
+        double beforeFps = 1000.0 / before.avgFrametimeMs();
+        double afterFps = 1000.0 / after.avgFrametimeMs();
+        double fpsImprovement = (afterFps - beforeFps) / beforeFps;
+        
+        // FIX: Use p95FrametimeMs() instead of getP95FrametimeMs()
+        double p95Improvement = (before.p95FrametimeMs() - after.p95FrametimeMs()) / 
+                               before.p95FrametimeMs();
+        
+        // FIX: Use spikeCount() instead of getSpikeCount()
+        double spikeReduction = (before.spikeCount() - after.spikeCount()) / 
+                               (double) Math.max(1, before.spikeCount());
         
         // Check for negative impact
         if (fpsImprovement < -0.05) {
