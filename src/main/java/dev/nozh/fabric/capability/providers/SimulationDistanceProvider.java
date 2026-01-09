@@ -1,7 +1,7 @@
 package dev.nozh.fabric.capability.providers;
 
 import dev.nozh.core.bus.CapabilityId;
-import dev.nozh.core.bus.CapabilityValue;
+import dev.nozh.core.capability.CapabilityValue;
 import dev.nozh.core.capability.*;
 import dev.nozh.fabric.capability.MinecraftOptionsAdapter;
 

@@ -1,6 +1,6 @@
 package dev.nozh.core.executor.handlers;
 
-import dev.nozh.core.bus.CapabilityValue;
+import dev.nozh.core.capability.CapabilityValue;
 import dev.nozh.core.capability.ApplyResult;
 import dev.nozh.fabric.capability.MinecraftOptionsAdapter;
 

@@ -1,7 +1,7 @@
 package dev.nozh.fabric.compat;
 
 import dev.nozh.core.bus.CapabilityId;
-import dev.nozh.core.bus.CapabilityValue;
+import dev.nozh.core.capability.CapabilityValue;
 
 import java.util.EnumSet;
 import java.util.Optional;
