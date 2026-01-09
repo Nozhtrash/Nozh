@@ -6,7 +6,7 @@ import net.minecraft.entity.Entity;
 
 import java.util.ArrayDeque;
 import java.util.Deque;
-
+import java.util.Iterator;
 /**
  * Detects whether performance is CPU-bound or GPU-bound.
  * Analyzes tick time vs render time to determine bottleneck.
@@ -140,7 +140,9 @@ public class BottleneckDetector {
             if (client.world != null) {
                 // Count entities by iterating the Iterable
                 int entities = 0;
-                for (Entity entity : client.world.getEntities()) {
+                Iterator<Entity> it = client.world.getEntities().iterator();
+                while (it.hasNext()) {
+                    it.next();
                     entities++;
                 }
                 
