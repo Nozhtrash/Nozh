@@ -1,45 +1,49 @@
 package dev.nozh.core.telemetry;
 
 /**
- * Telemetry snapshot (Contract 4).
+ * Telemetry data snapshot for performance tracking.
  * 
- * Cheap copy of aggregated telemetry data for HUD/Governor consumption.
- * PURE - no mutable state, no nested objects.
+ * @author Nozh Team
+ * @since 0.5.0 (Phase 1 Sprint 2)
  */
-public record TelemetrySnapshot(
-        double avgFrametimeMs,
-        double p95FrametimeMs,
-        int spikeCount,
-        int sampleCount,
-        int droppedSamples,
-        boolean sufficientData) {
-    /**
-     * Empty snapshot for when no data is available.
-     */
-    public static TelemetrySnapshot EMPTY = new TelemetrySnapshot(
-            0, 0, 0, 0, 0, false);
-
-    /**
-     * Minimum samples required for sufficient data.
-     */
-    private static final int MIN_SAMPLES = 30;
-
-    /**
-     * Create snapshot with automatic sufficiency check.
-     */
-    public static TelemetrySnapshot of(
-            double avgFrametimeMs,
-            double p95FrametimeMs,
-            int spikeCount,
-            int sampleCount,
-            int droppedSamples) {
-        boolean sufficient = sampleCount >= MIN_SAMPLES;
-        return new TelemetrySnapshot(
-                avgFrametimeMs,
-                p95FrametimeMs,
-                spikeCount,
-                sampleCount,
-                droppedSamples,
-                sufficient);
+public final class TelemetrySnapshot {
+    private final long timestamp;
+    private final double fps;
+    private final int renderDistance;
+    private final double tickTime;
+    private final double renderTime;
+    
+    public TelemetrySnapshot(double fps, int renderDistance, double tickTime, double renderTime) {
+        this.timestamp = System.currentTimeMillis();
+        this.fps = fps;
+        this.renderDistance = renderDistance;
+        this.tickTime = tickTime;
+        this.renderTime = renderTime;
+    }
+    
+    public long getTimestamp() { 
+        return timestamp; 
+    }
+    
+    public double getFps() { 
+        return fps; 
+    }
+    
+    public int getRenderDistance() { 
+        return renderDistance; 
+    }
+    
+    public double getTickTime() {
+        return tickTime;
+    }
+    
+    public double getRenderTime() {
+        return renderTime;
+    }
+    
+    @Override
+    public String toString() {
+        return String.format("TelemetrySnapshot[fps=%.2f, renderDist=%d, tick=%.2fms, render=%.2fms]",
+            fps, renderDistance, tickTime, renderTime);
     }
 }
