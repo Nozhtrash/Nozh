@@ -1,106 +1,97 @@
 package dev.nozh.core.learning;
 
-import dev.nozh.NozhConstants;
+import dev.nozh.core.scenario.Scenario;
 
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ThreadLocalRandom;
 
 /**
- * Enhanced Q-Learning with exploration/exploitation balance.
- * Features epsilon-greedy strategy with adaptive decay.
+ * Improved Q-Learning with exploration.
+ * 
+ * ROADMAP: Phase 2, Sprint 4 - Q-Learning with Exploration
+ * 
+ * Implements epsilon-greedy strategy for balancing exploration and exploitation.
  */
 public class ImprovedQLearning {
     
-    // Learning parameters
+    private static final double INITIAL_EPSILON = 0.3;  // 30% exploration
+    private static final double MIN_EPSILON = 0.05;     // Minimum 5%
+    private static final double EPSILON_DECAY = 0.995;  // Decay per episode
     private static final double LEARNING_RATE = 0.1;
-    private static final double DISCOUNT_FACTOR = 0.95;
-    
-    // Exploration parameters
-    private static final double INITIAL_EPSILON = 0.3;  // 30% initial exploration
-    private static final double MIN_EPSILON = 0.05;      // Minimum 5% exploration
-    private static final double EPSILON_DECAY = 0.995;   // Decay rate
+    private static final double DISCOUNT_FACTOR = 0.9;
     
     private double epsilon = INITIAL_EPSILON;
     private final Map<StateActionPair, Double> qTable = new ConcurrentHashMap<>();
-    
-    private int totalEpisodes = 0;
-    private int successfulEpisodes = 0;
     
     /**
      * Select action using epsilon-greedy strategy.
      * 
      * @param state current game state
-     * @param availableActions actions that can be taken
-     * @return selected action
+     * @param availableActions array of possible actions
+     * @return selected action ID
      */
     public String selectAction(GameState state, String[] availableActions) {
         if (availableActions == null || availableActions.length == 0) {
-            throw new IllegalArgumentException("No available actions");
+            return null;
         }
         
-        // Epsilon-greedy: explore vs exploit
+        // Exploration: random action
         if (Math.random() < epsilon) {
-            // EXPLORE: Random action
-            String randomAction = availableActions[
-                ThreadLocalRandom.current().nextInt(availableActions.length)
-            ];
-            NozhConstants.LOGGER.debug("[Q-Learning] EXPLORING: selected random action {}", randomAction);
-            return randomAction;
-        } else {
-            // EXPLOIT: Best known action
-            String bestAction = getBestKnownAction(state, availableActions);
-            NozhConstants.LOGGER.debug("[Q-Learning] EXPLOITING: selected best action {}", bestAction);
-            return bestAction;
+            int index = ThreadLocalRandom.current().nextInt(availableActions.length);
+            return availableActions[index];
         }
+        
+        // Exploitation: best known action
+        return getBestKnownAction(state, availableActions);
     }
     
     /**
-     * Get the best known action for a state.
+     * Get best action based on Q-values.
      */
-    private String getBestKnownAction(GameState state, String[] availableActions) {
-        String bestAction = null;
-        double bestQValue = Double.NEGATIVE_INFINITY;
+    private String getBestKnownAction(GameState state, String[] actions) {
+        String bestAction = actions[0];
+        double bestValue = getQValue(state, bestAction);
         
-        for (String action : availableActions) {
-            StateActionPair pair = new StateActionPair(state, action);
-            double qValue = qTable.getOrDefault(pair, 0.0);
-            
-            if (qValue > bestQValue) {
-                bestQValue = qValue;
-                bestAction = action;
+        for (int i = 1; i < actions.length; i++) {
+            double value = getQValue(state, actions[i]);
+            if (value > bestValue) {
+                bestValue = value;
+                bestAction = actions[i];
             }
         }
         
-        // If no action has been tried, return first one
-        return bestAction != null ? bestAction : availableActions[0];
+        return bestAction;
     }
     
     /**
-     * Update Q-value after action execution.
+     * Update Q-value based on experience.
      * 
-     * @param state state before action
-     * @param action action taken
-     * @param reward reward received
-     * @param nextState state after action
+     * Q(s,a) = Q(s,a) + α * [reward + γ * max(Q(s',a')) - Q(s,a)]
      */
-    public void updateQValue(GameState state, String action, double reward, GameState nextState) {
+    public void updateQValue(GameState state, String action, 
+                            double reward, GameState nextState) {
         StateActionPair pair = new StateActionPair(state, action);
-        
         double oldQ = qTable.getOrDefault(pair, 0.0);
         double maxNextQ = getMaxQValue(nextState);
         
-        // Q-learning update rule
-        double newQ = oldQ + LEARNING_RATE * (reward + DISCOUNT_FACTOR * maxNextQ - oldQ);
+        double newQ = oldQ + LEARNING_RATE * (
+            reward + DISCOUNT_FACTOR * maxNextQ - oldQ
+        );
         
         qTable.put(pair, newQ);
-        
-        NozhConstants.LOGGER.debug("[Q-Learning] Updated Q({}, {}) : {} -> {} (reward={})",
-                                 state, action, oldQ, newQ, reward);
     }
     
     /**
-     * Get maximum Q-value for a state.
+     * Get Q-value for state-action pair.
+     */
+    public double getQValue(GameState state, String action) {
+        StateActionPair pair = new StateActionPair(state, action);
+        return qTable.getOrDefault(pair, 0.0);
+    }
+    
+    /**
+     * Get maximum Q-value for next state.
      */
     private double getMaxQValue(GameState state) {
         return qTable.entrySet().stream()
@@ -111,76 +102,36 @@ public class ImprovedQLearning {
     }
     
     /**
-     * Update after episode completion.
-     * Adjusts epsilon based on success.
+     * Update epsilon after episode completion.
      * 
      * @param success whether the episode was successful
      */
     public void updateAfterEpisode(boolean success) {
-        totalEpisodes++;
         if (success) {
-            successfulEpisodes++;
-        }
-        
-        if (success) {
-            // Decay epsilon after successful episodes
+            // Decay epsilon on success - exploit more
             epsilon = Math.max(MIN_EPSILON, epsilon * EPSILON_DECAY);
-            NozhConstants.LOGGER.debug("[Q-Learning] Success! Epsilon decayed to {}", epsilon);
         } else {
-            // Increase exploration after failures
+            // Increase epsilon on failure - explore more
             epsilon = Math.min(0.5, epsilon * 1.1);
-            NozhConstants.LOGGER.debug("[Q-Learning] Failure! Epsilon increased to {}", epsilon);
         }
     }
     
     /**
-     * Get current exploration rate.
+     * Get current epsilon value.
      */
     public double getEpsilon() {
         return epsilon;
     }
     
     /**
-     * Get success rate.
-     */
-    public double getSuccessRate() {
-        return totalEpisodes > 0 ? (double) successfulEpisodes / totalEpisodes : 0.0;
-    }
-    
-    /**
-     * Get Q-value for specific state-action pair.
-     */
-    public double getQValue(GameState state, String action) {
-        return qTable.getOrDefault(new StateActionPair(state, action), 0.0);
-    }
-    
-    /**
-     * Get total number of learned state-action pairs.
+     * Get Q-table size.
      */
     public int getQTableSize() {
         return qTable.size();
     }
     
     /**
-     * Reset epsilon to initial value (for testing or reset).
-     */
-    public void resetEpsilon() {
-        epsilon = INITIAL_EPSILON;
-        totalEpisodes = 0;
-        successfulEpisodes = 0;
-    }
-    
-    /**
-     * Clear all learned Q-values.
-     */
-    public void clearQTable() {
-        qTable.clear();
-        resetEpsilon();
-        NozhConstants.LOGGER.info("[Q-Learning] Q-table cleared");
-    }
-    
-    /**
-     * State-action pair key for Q-table.
+     * State-action pair for Q-table key.
      */
     private static class StateActionPair {
         final GameState state;
@@ -206,37 +157,32 @@ public class ImprovedQLearning {
     }
     
     /**
-     * Simplified game state representation.
+     * Game state representation.
      */
     public static class GameState {
-        final String scenario;
-        final int fpsRange;  // 0-30, 30-60, 60-90, 90+
-        final String bottleneck; // CPU, GPU, BALANCED, NONE
+        final Scenario scenario;
+        final double fps;
+        final String hardwareProfile;
         
-        public GameState(String scenario, int fps, String bottleneck) {
+        public GameState(Scenario scenario, double fps, String profile) {
             this.scenario = scenario;
-            this.fpsRange = fps < 30 ? 0 : (fps < 60 ? 1 : (fps < 90 ? 2 : 3));
-            this.bottleneck = bottleneck;
+            this.fps = fps;
+            this.hardwareProfile = profile;
         }
         
         @Override
         public boolean equals(Object o) {
             if (this == o) return true;
             if (!(o instanceof GameState)) return false;
-            GameState that = (GameState) o;
-            return fpsRange == that.fpsRange && 
-                   scenario.equals(that.scenario) && 
-                   bottleneck.equals(that.bottleneck);
+            GameState state = (GameState) o;
+            return scenario == state.scenario && 
+                   Math.abs(fps - state.fps) < 10 && // FPS within 10
+                   hardwareProfile.equals(state.hardwareProfile);
         }
         
         @Override
         public int hashCode() {
-            return 31 * (31 * scenario.hashCode() + fpsRange) + bottleneck.hashCode();
-        }
-        
-        @Override
-        public String toString() {
-            return String.format("State{%s,FPS:%d,BN:%s}", scenario, fpsRange, bottleneck);
+            return 31 * scenario.hashCode() + hardwareProfile.hashCode();
         }
     }
 }
