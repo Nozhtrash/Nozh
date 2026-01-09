@@ -34,28 +34,24 @@ public class EnhancedTelemetryCollector {
         }
         
         try {
-            // Get frametime - NO DEFAULTS
-            double frametime = getValidatedFrametime(client);
-            if (frametime <= 0 || !Double.isFinite(frametime)) {
-                NozhConstants.LOGGER.debug("Invalid frametime: {}", frametime);
-                return null;
-            }
-            
-            if (frametime < MIN_VALID_FRAMETIME || frametime > MAX_VALID_FRAMETIME) {
-                NozhConstants.LOGGER.debug("Frametime out of valid range: {}", frametime);
-                return null;
-            }
-            
-            // Get FPS - NO DEFAULTS
+            // Get FPS
             int fps = client.getCurrentFps();
             if (fps <= 0) {
                 NozhConstants.LOGGER.debug("Invalid FPS: {}", fps);
                 return null;
             }
             
+            // Calculate frametime from FPS (milliseconds per frame)
+            double frametime = 1000.0 / fps;
+            
+            if (frametime < MIN_VALID_FRAMETIME || frametime > MAX_VALID_FRAMETIME) {
+                NozhConstants.LOGGER.debug("Frametime out of valid range: {}", frametime);
+                return null;
+            }
+            
             // Get world metrics
             ClientWorld world = client.world;
-            int entities = world.getEntities().size();
+            int entities = world.getRegularEntityCount();
             int loadedChunks = getLoadedChunksCount(world);
             
             // Get memory
@@ -111,39 +107,19 @@ public class EnhancedTelemetryCollector {
     }
     
     /**
-     * Get validated frametime from client.
-     */
-    private double getValidatedFrametime(MinecraftClient client) {
-        try {
-            // Get last frame duration in milliseconds
-            double frametime = client.getLastFrameDuration();
-            
-            // Convert to milliseconds if needed (sometimes in seconds)
-            if (frametime < 1.0) {
-                frametime *= 1000.0;
-            }
-            
-            return frametime;
-            
-        } catch (Exception e) {
-            NozhConstants.LOGGER.debug("Failed to get frametime", e);
-            return -1.0;
-        }
-    }
-    
-    /**
      * Estimate tick time from available metrics.
      */
     private double estimateTickTime(MinecraftClient client) {
         try {
             // Try to get from integrated server if available
             if (client.getServer() != null) {
-                return client.getServer().getTickTime();
+                // Use average tick time from server metrics
+                float avgTickTime = client.getServer().getAverageTickTime();
+                return avgTickTime;
             }
             
             // Estimate based on entity count and world complexity
-            // This is less accurate but better than nothing
-            int entities = client.world.getEntities().size();
+            int entities = client.world.getRegularEntityCount();
             double baseTickTime = 10.0; // Base 10ms
             double entityOverhead = Math.min(entities * 0.01, 40.0); // Max 40ms from entities
             
@@ -160,10 +136,14 @@ public class EnhancedTelemetryCollector {
      */
     private int getLoadedChunksCount(ClientWorld world) {
         try {
-            // Access chunk manager
-            return world.getChunkManager().getLoadedChunkCount();
+            // Try to estimate from render distance
+            int renderDistance = world.getClientMinecraftClient().options.getViewDistance().getValue();
+            // Approximate loaded chunks based on render distance
+            // Formula: (2 * renderDistance + 1)^2 for a square area
+            int diameter = 2 * renderDistance + 1;
+            return diameter * diameter;
         } catch (Exception e) {
-            NozhConstants.LOGGER.debug("Failed to get chunk count", e);
+            NozhConstants.LOGGER.debug("Failed to estimate chunk count", e);
             return 0;
         }
     }
