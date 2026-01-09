@@ -1,6 +1,6 @@
 package dev.nozh.fabric.capability;
 
-import dev.nozh.core.bus.CapabilityValue;
+import dev.nozh.core.capability.CapabilityValue;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.option.CloudRenderMode;
 import net.minecraft.client.option.GameOptions;

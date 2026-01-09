@@ -1,6 +1,6 @@
 package dev.nozh.core.compatibility;
 
-import dev.nozh.core.bus.CapabilityId;
+import dev.nozh.core.capability.CapabilityId;
 import dev.nozh.core.capability.ProviderMetadata;
 import dev.nozh.fabric.compat.CompatRegistry;
 import net.fabricmc.loader.api.FabricLoader;

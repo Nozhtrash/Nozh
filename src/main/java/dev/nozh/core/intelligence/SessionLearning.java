@@ -1,6 +1,6 @@
 package dev.nozh.core.intelligence;
 
-import dev.nozh.core.bus.CapabilityId;
+import dev.nozh.core.capability.CapabilityId;
 import dev.nozh.NozhConstants;
 import dev.nozh.core.governor.ActionOutcome;
 import com.google.gson.Gson;

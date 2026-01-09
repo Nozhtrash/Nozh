@@ -1,6 +1,6 @@
 package dev.nozh.core.capability;
 
-import dev.nozh.core.bus.CapabilityId;
+import dev.nozh.core.capability.CapabilityId;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;

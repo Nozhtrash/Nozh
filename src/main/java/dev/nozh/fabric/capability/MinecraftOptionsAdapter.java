@@ -1,6 +1,6 @@
 package dev.nozh.fabric.capability;
 
-import dev.nozh.core.bus.CapabilityValue;
+import dev.nozh.core.capability.CapabilityValue;
 
 import java.util.Optional;
 

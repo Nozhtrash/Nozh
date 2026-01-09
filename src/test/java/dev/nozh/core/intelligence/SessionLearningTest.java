@@ -1,6 +1,6 @@
 package dev.nozh.core.intelligence;
 
-import dev.nozh.core.bus.CapabilityId;
+import dev.nozh.core.capability.CapabilityId;
 import dev.nozh.core.context.Scenario;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;

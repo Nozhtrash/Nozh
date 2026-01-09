@@ -1,4 +1,5 @@
 package dev.nozh.core.bus;
+import dev.nozh.core.capability.CapabilityId;
 
 import java.util.Optional;
 import java.util.UUID;

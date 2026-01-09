@@ -1,6 +1,6 @@
 package dev.nozh.core.matrix;
 
-import dev.nozh.core.bus.CapabilityId;
+import dev.nozh.core.capability.CapabilityId;
 import dev.nozh.core.capability.ProviderStatus;
 
 /**

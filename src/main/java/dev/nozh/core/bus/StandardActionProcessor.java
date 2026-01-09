@@ -1,4 +1,6 @@
 package dev.nozh.core.bus;
+import dev.nozh.core.capability.CapabilityId;
+import dev.nozh.core.capability.CapabilityValue;
 
 import dev.nozh.api.PerfSnapshot;
 import dev.nozh.core.NozhLogger;

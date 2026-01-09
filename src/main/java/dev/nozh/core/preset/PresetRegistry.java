@@ -1,6 +1,6 @@
 package dev.nozh.core.preset;
 
-import dev.nozh.core.bus.CapabilityId;
+import dev.nozh.core.capability.CapabilityId;
 
 import java.util.Map;
 import java.util.Set;

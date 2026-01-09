@@ -1,8 +1,8 @@
 package dev.nozh.fabric.capability;
 
 import dev.nozh.core.NozhLogger;
-import dev.nozh.core.bus.CapabilityId;
-import dev.nozh.core.bus.CapabilityValue;
+import dev.nozh.core.capability.CapabilityId;
+import dev.nozh.core.capability.CapabilityValue;
 import dev.nozh.core.bus.Command;
 import dev.nozh.core.bus.CommandExecutionReport;
 import dev.nozh.core.bus.CommandLifecycle;

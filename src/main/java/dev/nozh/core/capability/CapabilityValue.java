@@ -1,4 +1,4 @@
-package dev.nozh.core.bus;
+package dev.nozh.core.capability;
 
 /**
  * Type-safe capability values (Contract 2, Rule 2.3).

@@ -1,7 +1,7 @@
 package dev.nozh.core.telemetry;
 
 import dev.nozh.api.PerfSnapshot;
-import dev.nozh.api.Scenario;
+import dev.nozh.core.context.Scenario;
 import dev.nozh.core.capability.CapabilityId;
 import dev.nozh.core.governor.ActionOutcome;
 import java.nio.file.Path;

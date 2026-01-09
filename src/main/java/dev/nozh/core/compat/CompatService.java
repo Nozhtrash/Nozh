@@ -4,7 +4,7 @@ import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.text.Text;
 import java.util.ArrayList;
 import java.util.List;
-import dev.nozh.core.bus.CapabilityId;
+import dev.nozh.core.capability.CapabilityId;
 import dev.nozh.core.compatibility.ModConflictDetector;
 
 /**

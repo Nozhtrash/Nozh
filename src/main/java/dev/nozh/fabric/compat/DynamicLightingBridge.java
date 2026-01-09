@@ -1,6 +1,6 @@
 package dev.nozh.fabric.compat;
 
-import dev.nozh.core.bus.CapabilityValue;
+import dev.nozh.core.capability.CapabilityValue;
 import net.fabricmc.loader.api.FabricLoader;
 
 import java.lang.reflect.Field;

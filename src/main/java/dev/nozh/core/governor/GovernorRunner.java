@@ -20,7 +20,7 @@ import dev.nozh.core.state.StateStore;
 import dev.nozh.core.state.PendingAction;
 import dev.nozh.core.state.ActionHistoryEntry;
 import dev.nozh.core.state.BaselineSnapshot;
-import dev.nozh.core.bus.CapabilityValue;
+import dev.nozh.core.capability.CapabilityValue;
 import dev.nozh.api.PerfSnapshot;
 import dev.nozh.core.governor.ActionOutcome;
 
@@ -51,7 +51,7 @@ public final class GovernorRunner {
     private final ActionSuccessTracker successTracker;
     private final PerfManager perfManager;
     private final Supplier<PerfSnapshot> perfSnapshotSupplier;
-    private final Map<dev.nozh.core.bus.CapabilityId, Long> rollbackCooldowns = new HashMap<>();
+    private final Map<dev.nozh.core.capability.CapabilityId, Long> rollbackCooldowns = new HashMap<>();
 
     // Intelligent components
     private final dev.nozh.core.governor.PredictiveAnalyzer predictiveAnalyzer;
@@ -236,7 +236,7 @@ public final class GovernorRunner {
                 }
             }
             PerfSnapshot baselineSnapshot = captureSnapshot();
-            Optional<dev.nozh.core.bus.CapabilityValue> previousValue = providerRegistry.get(decision.capabilityId())
+            Optional<dev.nozh.core.capability.CapabilityValue> previousValue = providerRegistry.get(decision.capabilityId())
                     .flatMap(provider -> provider.getCurrentValueSafe());
             Command cmd = new Command.ApplyCapability(
                     decision.capabilityId(),
@@ -266,7 +266,7 @@ public final class GovernorRunner {
         if (decision.targetValue() != null) {
             PerfSnapshot baselineSnapshot = captureSnapshot();
             int observationWindowSeconds = resolveObservationWindowSeconds(config, baselineSnapshot);
-            Optional<dev.nozh.core.bus.CapabilityValue> previousValue = providerRegistry.get(decision.capabilityId())
+            Optional<dev.nozh.core.capability.CapabilityValue> previousValue = providerRegistry.get(decision.capabilityId())
                     .flatMap(provider -> provider.getCurrentValueSafe());
             Command cmd = new Command.ApplyCapability(
                     decision.capabilityId(),
@@ -341,8 +341,8 @@ public final class GovernorRunner {
     }
 
     private void refreshBaselineSettings() {
-        java.util.Map<dev.nozh.core.bus.CapabilityId, dev.nozh.core.bus.CapabilityValue> baseline = new java.util.EnumMap<>(
-                dev.nozh.core.bus.CapabilityId.class);
+        java.util.Map<dev.nozh.core.capability.CapabilityId, dev.nozh.core.capability.CapabilityValue> baseline = new java.util.EnumMap<>(
+                dev.nozh.core.capability.CapabilityId.class);
         for (var provider : providerRegistry.getAllProviders()) {
             provider.getCurrentValueSafe().ifPresent(value -> baseline.put(provider.id(), value));
         }
@@ -354,8 +354,8 @@ public final class GovernorRunner {
     }
 
     private void refreshCurrentSettings() {
-        java.util.Map<dev.nozh.core.bus.CapabilityId, dev.nozh.core.bus.CapabilityValue> current = new java.util.EnumMap<>(
-                dev.nozh.core.bus.CapabilityId.class);
+        java.util.Map<dev.nozh.core.capability.CapabilityId, dev.nozh.core.capability.CapabilityValue> current = new java.util.EnumMap<>(
+                dev.nozh.core.capability.CapabilityId.class);
         for (var provider : providerRegistry.getAllProviders()) {
             provider.getCurrentValueSafe().ifPresent(value -> current.put(provider.id(), value));
         }

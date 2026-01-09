@@ -86,7 +86,7 @@ public final class SimulationGovernor {
                         double reverseEpsilonMs,
                         boolean reverseReady,
                         dev.nozh.core.state.BaselineSnapshot baselineSnapshot,
-                        Map<dev.nozh.core.bus.CapabilityId, dev.nozh.core.bus.CapabilityValue> currentSettings) {
+                        Map<dev.nozh.core.capability.CapabilityId, dev.nozh.core.capability.CapabilityValue> currentSettings) {
                 // OFF mode → no decisions
                 if (mode == GovernorMode.OFF) {
                         return Optional.empty();
@@ -131,7 +131,7 @@ public final class SimulationGovernor {
                         int targetFps,
                         double reverseEpsilonMs,
                         dev.nozh.core.state.BaselineSnapshot baselineSnapshot,
-                        Map<dev.nozh.core.bus.CapabilityId, dev.nozh.core.bus.CapabilityValue> currentSettings) {
+                        Map<dev.nozh.core.capability.CapabilityId, dev.nozh.core.capability.CapabilityValue> currentSettings) {
                 if (baselineSnapshot == null || baselineSnapshot.isEmpty()) {
                         return false;
                 }

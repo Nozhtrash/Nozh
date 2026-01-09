@@ -1,7 +1,7 @@
 package dev.nozh.fabric.capability.providers;
 
-import dev.nozh.core.bus.CapabilityId;
-import dev.nozh.core.bus.CapabilityValue;
+import dev.nozh.core.capability.CapabilityId;
+import dev.nozh.core.capability.CapabilityValue;
 import dev.nozh.core.capability.ApplyResult;
 import dev.nozh.core.capability.CapabilityProvider;
 import dev.nozh.core.capability.CostLevel;

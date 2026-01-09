@@ -1,6 +1,6 @@
 package dev.nozh.core.telemetry;
 
-import dev.nozh.api.Scenario;
+import dev.nozh.core.context.Scenario;
 import dev.nozh.api.PerfSnapshot;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;

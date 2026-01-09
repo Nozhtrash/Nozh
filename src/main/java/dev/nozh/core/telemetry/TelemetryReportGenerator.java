@@ -1,6 +1,6 @@
 package dev.nozh.core.telemetry;
 
-import dev.nozh.api.Scenario;
+import dev.nozh.core.context.Scenario;
 import dev.nozh.core.capability.CapabilityId;
 import java.time.Instant;
 import java.time.ZoneId;

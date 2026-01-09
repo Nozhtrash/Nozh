@@ -11,9 +11,9 @@
  */
 package dev.nozh.core.bus;
 
+import dev.nozh.core.capability.CapabilityId;
 import dev.nozh.core.NozhLogger;
 import dev.nozh.core.state.RuntimeState;
-
 import java.util.LinkedList;
 import java.util.Optional;
 import java.util.Queue;

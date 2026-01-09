@@ -1,4 +1,4 @@
-package dev.nozh.core.bus;
+package dev.nozh.core.capability;
 
 /**
  * Capability identifiers: what can be touched.
