@@ -1,12 +1,8 @@
 package dev.nozh.core.scenario;
 
-import dev.nozh.NozhConstants;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.entity.Entity;
-import net.minecraft.entity.mob.HostileEntity;
-import net.minecraft.entity.mob.MobEntity;
-import net.minecraft.entity.mob.CreeperEntity;
-import net.minecraft.entity.mob.EndermanEntity;
+import net.minecraft.entity.mob.*;
 import net.minecraft.entity.boss.WitherEntity;
 import net.minecraft.entity.boss.dragon.EnderDragonEntity;
 import net.minecraft.util.math.Box;
@@ -16,112 +12,94 @@ import java.util.List;
 
 /**
  * Tracks hostile entities near the player.
- * Provides context for combat scenario detection.
+ * 
+ * ROADMAP: Phase 2, Sprint 3 - Hostile Entity Detection
+ * 
+ * Calculates danger scores based on entity types, distances, and targeting.
  */
 public class HostileEntityTracker {
     
     private static final double DANGER_RADIUS = 16.0; // blocks
-    private static final double COMBAT_RADIUS = 8.0;  // active combat range
+    private static final double COMBAT_RADIUS = 8.0;  // blocks
     
     /**
-     * Analyze hostile entity context around player.
+     * Analyze current hostile entity context.
      */
     public HostileContext analyze(MinecraftClient client) {
-        if (client.world == null || client.player == null) {
+        if (client == null || client.world == null || client.player == null) {
             return HostileContext.safe();
         }
         
-        try {
-            Vec3d playerPos = client.player.getPos();
-            Box searchBox = Box.of(playerPos, DANGER_RADIUS * 2, DANGER_RADIUS * 2, DANGER_RADIUS * 2);
-            
-            // Get all hostile entities nearby
-            List<Entity> nearbyHostiles = client.world.getOtherEntities(
-                client.player, 
-                searchBox, 
-                e -> e instanceof HostileEntity && e.isAlive()
-            );
-            
-            int hostilesNearby = nearbyHostiles.size();
-            
-            // Count hostiles in active combat
-            long hostilesInCombat = nearbyHostiles.stream()
-                .filter(e -> e.distanceTo(client.player) < COMBAT_RADIUS)
-                .filter(e -> {
-                    if (e instanceof MobEntity) {
-                        MobEntity mob = (MobEntity) e;
-                        return mob.getTarget() == client.player;
-                    }
-                    return false;
-                })
-                .count();
-            
-            // Calculate danger score
-            double dangerScore = calculateDangerScore(nearbyHostiles, client);
-            
-            boolean activeCombat = hostilesInCombat > 0;
-            
-            return new HostileContext(
-                hostilesNearby,
-                (int) hostilesInCombat,
-                dangerScore,
-                activeCombat
-            );
-            
-        } catch (Exception e) {
-            NozhConstants.LOGGER.error("Failed to analyze hostile entities", e);
-            return HostileContext.safe();
-        }
+        Vec3d playerPos = client.player.getPos();
+        Box searchBox = Box.of(playerPos, DANGER_RADIUS * 2, 
+                               DANGER_RADIUS * 2, DANGER_RADIUS * 2);
+        
+        List<Entity> nearbyEntities = client.world.getOtherEntities(
+            client.player, 
+            searchBox, 
+            e -> e instanceof HostileEntity
+        );
+        
+        int hostilesNearby = nearbyEntities.size();
+        
+        // Count hostiles actively targeting player
+        int hostilesInCombat = (int) nearbyEntities.stream()
+            .filter(e -> e.distanceTo(client.player) < COMBAT_RADIUS)
+            .filter(e -> e instanceof MobEntity && 
+                        ((MobEntity) e).getTarget() == client.player)
+            .count();
+        
+        double dangerScore = calculateDangerScore(nearbyEntities, client);
+        
+        boolean activeCombat = hostilesInCombat > 0;
+        
+        return new HostileContext(
+            hostilesNearby,
+            hostilesInCombat,
+            dangerScore,
+            activeCombat
+        );
     }
     
     /**
-     * Calculate overall danger score based on hostile entities.
+     * Calculate weighted danger score.
      */
     private double calculateDangerScore(List<Entity> hostiles, MinecraftClient client) {
         return hostiles.stream()
             .mapToDouble(e -> {
                 double distance = e.distanceTo(client.player);
                 double threat = getThreatLevel(e);
-                
-                // Closer = more dangerous (inverse square)
-                double distanceFactor = 1.0 / Math.max(1.0, distance * distance / 16.0);
-                
-                return threat * distanceFactor;
+                // Closer enemies are more dangerous
+                return threat / Math.max(1.0, distance);
             })
             .sum();
     }
     
     /**
-     * Get threat level for specific entity types.
+     * Get threat level for entity type.
      */
     private double getThreatLevel(Entity entity) {
-        // Bosses - extreme threat
+        // Boss mobs
         if (entity instanceof WitherEntity || entity instanceof EnderDragonEntity) {
             return 5.0;
         }
         
-        // Creepers - high threat (explosion damage)
+        // High threat
         if (entity instanceof CreeperEntity) {
-            CreeperEntity creeper = (CreeperEntity) entity;
-            // Charged creepers are extra dangerous
-            return creeper.shouldRenderOverlay() ? 3.0 : 2.0;
+            return 2.0; // Creepers can one-shot
         }
         
-        // Endermen - moderate-high threat
-        if (entity instanceof EndermanEntity) {
+        // Medium-high threat  
+        if (entity instanceof EndermanEntity || entity instanceof WitherSkeletonEntity) {
             return 1.5;
         }
         
-        // Generic hostile - base threat
-        if (entity instanceof HostileEntity) {
-            return 1.0;
-        }
-        
-        return 0.5; // Unknown entity
+        // Standard threat (zombies, skeletons, etc.)
+        return 1.0;
     }
     
     /**
-     * Context about hostile entities.
+     * Container for hostile entity context.
      */
     public static class HostileContext {
         private final int hostilesNearby;
@@ -129,42 +107,20 @@ public class HostileEntityTracker {
         private final double dangerScore;
         private final boolean activeCombat;
         
-        public HostileContext(int hostilesNearby, int hostilesInCombat, 
-                            double dangerScore, boolean activeCombat) {
-            this.hostilesNearby = hostilesNearby;
-            this.hostilesInCombat = hostilesInCombat;
-            this.dangerScore = dangerScore;
-            this.activeCombat = activeCombat;
+        public HostileContext(int nearby, int inCombat, double danger, boolean active) {
+            this.hostilesNearby = nearby;
+            this.hostilesInCombat = inCombat;
+            this.dangerScore = danger;
+            this.activeCombat = active;
         }
         
         public static HostileContext safe() {
             return new HostileContext(0, 0, 0.0, false);
         }
         
-        public int getHostilesNearby() {
-            return hostilesNearby;
-        }
-        
-        public int getHostilesInCombat() {
-            return hostilesInCombat;
-        }
-        
-        public double getDangerScore() {
-            return dangerScore;
-        }
-        
-        public boolean isActiveCombat() {
-            return activeCombat;
-        }
-        
-        public boolean isSafe() {
-            return hostilesNearby == 0 && dangerScore < 0.1;
-        }
-        
-        @Override
-        public String toString() {
-            return String.format("HostileContext{nearby=%d, combat=%d, danger=%.2f, active=%s}",
-                               hostilesNearby, hostilesInCombat, dangerScore, activeCombat);
-        }
+        public int getHostilesNearby() { return hostilesNearby; }
+        public int getHostilesInCombat() { return hostilesInCombat; }
+        public double getDangerScore() { return dangerScore; }
+        public boolean isActiveCombat() { return activeCombat; }
     }
 }
