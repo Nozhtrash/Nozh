@@ -46,9 +46,7 @@ public final class HybridGovernor {
                 reverseEpsilonMs,
                 reverseReady,
                 baselineSnapshot,
-                currentSettings,
-                tuning,
-                spikeCausality);
+                currentSettings);
         if (candidate.isEmpty()) {
             return candidate;
         }

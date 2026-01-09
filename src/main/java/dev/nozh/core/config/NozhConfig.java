@@ -1,6 +1,7 @@
 package dev.nozh.core.config;
 
 import dev.nozh.NozhConstants;
+import dev.nozh.core.governor.OptimizationProfile;
 
 /**
  * NOZH configuration data (PROFESSIONAL SPEC).
@@ -45,8 +46,13 @@ public class NozhConfig {
 
     // Performance Targets
     public int targetFps = 60; // Target FPS aligned with typical 60Hz panels (adjust to 120/144/240).
-    public String optimizationProfile = "BALANCED"; // Overall aggressiveness of tuning.
+    public OptimizationProfile optimizationProfile = OptimizationProfile.BALANCED; // Overall aggressiveness of tuning.
     public double reverseEpsilonMs = 1.5; // Delta before reversing changes (ms).
+    
+    // Modpack-specific settings
+    public int aggressivenessLevel = 5; // Aggressiveness level (0-10) for automated tuning.
+    public double buildingScenarioThreshold = 0.5; // Threshold for detecting building scenario.
+    public double combatScenarioThreshold = 0.5; // Threshold for detecting combat scenario.
 
     // Benchmark & Calibration
     public boolean benchmarkModeEnabled = false; // Enables synthetic benchmarking for calibration.
@@ -104,10 +110,8 @@ public class NozhConfig {
             addCriticalCorrection("targetFps clamped to " + targetFps + " (30-240)");
         }
 
-        if (optimizationProfile == null
-                || (!optimizationProfile.equalsIgnoreCase("BALANCED")
-                        && !optimizationProfile.equalsIgnoreCase("AGGRESSIVE"))) {
-            optimizationProfile = "BALANCED";
+        if (optimizationProfile == null) {
+            optimizationProfile = OptimizationProfile.BALANCED;
             corrected = true;
         }
 

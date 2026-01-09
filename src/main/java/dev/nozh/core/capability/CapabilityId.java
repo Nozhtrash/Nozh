@@ -39,5 +39,19 @@ public enum CapabilityId {
     ARMOR_STANDS,
     ITEM_FRAMES,
     BLOCK_ENTITIES,
-    ANIMATIONS
+    ANIMATIONS,
+
+    // Additional capabilities referenced in CompatMatrix
+    CHUNK_UPDATE_THREADS,
+    MIPMAP_LEVELS,
+    ANISOTROPIC_FILTERING,
+    SHADER_QUALITY,
+    ENTITY_CULLING,
+    ARMOR_STAND_CULLING,
+    ITEM_FRAME_CULLING,
+    BLOCK_ENTITY_CULLING,
+    MAX_FPS,
+    LEAF_QUALITY,
+    GRASS_DETAIL,
+    WATER_QUALITY
 }
