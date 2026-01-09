@@ -125,11 +125,11 @@ public class ImprovedQLearning {
         if (success) {
             // Decay epsilon after successful episodes
             epsilon = Math.max(MIN_EPSILON, epsilon * EPSILON_DECAY);
-            NozhConstants.LOGGER.debug("[Q-Learning] Success! Epsilon decayed to {:.3f}", epsilon);
+            NozhConstants.LOGGER.debug("[Q-Learning] Success! Epsilon decayed to {}", epsilon);
         } else {
             // Increase exploration after failures
             epsilon = Math.min(0.5, epsilon * 1.1);
-            NozhConstants.LOGGER.debug("[Q-Learning] Failure! Epsilon increased to {:.3f}", epsilon);
+            NozhConstants.LOGGER.debug("[Q-Learning] Failure! Epsilon increased to {}", epsilon);
         }
     }
     
