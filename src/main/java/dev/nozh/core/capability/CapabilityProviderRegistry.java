@@ -88,12 +88,19 @@ public class CapabilityProviderRegistry {
     /**
      * Execute an action with the registered provider.
      * 
+     * TEMPORARILY DISABLED - Needs migration to new CapabilityProvider API
+     * 
      * @param actionId the action to execute
      * @param client Minecraft client instance
      * @param params additional parameters for the action
      * @return ActionResult indicating success or failure
      */
     public static ActionResult execute(String actionId, MinecraftClient client, Object... params) {
+        NozhConstants.LOGGER.warn("CapabilityProviderRegistry.execute() is deprecated and disabled");
+        NozhConstants.LOGGER.warn("Please migrate to new CapabilityProvider.apply() API");
+        return ActionResult.error("Method deprecated - needs migration");
+        
+        /* TEMPORARILY DISABLED - NEEDS MIGRATION TO NEW API
         // Validation
         if (actionId == null) {
             NozhConstants.LOGGER.error("Cannot execute action with null actionId");
@@ -120,6 +127,7 @@ public class CapabilityProviderRegistry {
         
         // Execute with safety
         try {
+            // TODO: Migrate to provider.apply() with CapabilityValue
             ActionResult result = provider.execute(client, params);
             
             if (result.isSuccess()) {
@@ -134,17 +142,25 @@ public class CapabilityProviderRegistry {
             NozhConstants.LOGGER.error("Exception during action execution: {}", actionId, e);
             return ActionResult.error("Execution exception: " + e.getMessage());
         }
+        */
     }
     
     /**
      * Restore a setting to a previous value.
      * Used by rollback system.
      * 
+     * TEMPORARILY DISABLED - Needs migration to new CapabilityProvider API
+     * 
      * @param actionId the action that was executed
      * @param snapshot the snapshot containing the old value
      * @return true if restored successfully
      */
     public static boolean restore(String actionId, StateSnapshot snapshot) {
+        NozhConstants.LOGGER.warn("CapabilityProviderRegistry.restore() is deprecated and disabled");
+        NozhConstants.LOGGER.warn("Please migrate to new rollback mechanism");
+        return false;
+        
+        /* TEMPORARILY DISABLED - NEEDS MIGRATION TO NEW API
         if (actionId == null || snapshot == null) {
             NozhConstants.LOGGER.error("Cannot restore with null parameters");
             return false;
@@ -156,19 +172,22 @@ public class CapabilityProviderRegistry {
             return false;
         }
         
-        if (!provider.canRollback()) {
-            NozhConstants.LOGGER.warn("Provider {} does not support rollback", actionId);
-            return false;
-        }
+        // TODO: Check if provider supports rollback in new API
+        // if (!provider.supportsRollback()) {
+        //     NozhConstants.LOGGER.warn("Provider {} does not support rollback", actionId);
+        //     return false;
+        // }
         
         try {
-            provider.rollback(snapshot);
+            // TODO: Implement rollback with new API
+            // provider.rollback(snapshot);
             NozhConstants.LOGGER.info("Rolled back action: {}", actionId);
             return true;
         } catch (Exception e) {
             NozhConstants.LOGGER.error("Failed to rollback action: {}", actionId, e);
             return false;
         }
+        */
     }
     
     /**

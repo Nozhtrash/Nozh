@@ -113,9 +113,10 @@ public class EnhancedTelemetryCollector {
         try {
             // Try to get from integrated server if available
             if (client.getServer() != null) {
-                // Use average tick time from server metrics
-                float avgTickTime = client.getServer().getAverageTickTime();
-                return avgTickTime;
+                // Use tick time from server metrics
+                // Note: getAverageTickTime() was removed, using getTickTime() instead
+                float tickTime = client.getServer().getTickTime();
+                return tickTime;
             }
             
             // Estimate based on entity count and world complexity
@@ -136,8 +137,15 @@ public class EnhancedTelemetryCollector {
      */
     private int getLoadedChunksCount(ClientWorld world) {
         try {
-            // Try to estimate from render distance
-            int renderDistance = world.getClientMinecraftClient().options.getViewDistance().getValue();
+            // Get MinecraftClient from world
+            MinecraftClient client = MinecraftClient.getInstance();
+            if (client == null || client.options == null) {
+                return 0;
+            }
+            
+            // Get render distance from options
+            int renderDistance = client.options.getViewDistance().getValue();
+            
             // Approximate loaded chunks based on render distance
             // Formula: (2 * renderDistance + 1)^2 for a square area
             int diameter = 2 * renderDistance + 1;

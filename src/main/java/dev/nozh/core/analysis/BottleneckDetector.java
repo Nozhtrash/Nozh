@@ -2,6 +2,7 @@ package dev.nozh.core.analysis;
 
 import dev.nozh.NozhConstants;
 import net.minecraft.client.MinecraftClient;
+import net.minecraft.entity.Entity;
 
 import java.util.ArrayDeque;
 import java.util.Deque;
@@ -137,7 +138,11 @@ public class BottleneckDetector {
             
             // Fallback: estimate based on game complexity
             if (client.world != null) {
-                int entities = client.world.getEntities().size();
+                // Count entities by iterating the Iterable
+                int entities = 0;
+                for (Entity entity : client.world.getEntities()) {
+                    entities++;
+                }
                 
                 // Base tick time + entity overhead
                 double baseTickTime = 8.0; // Base 8ms
