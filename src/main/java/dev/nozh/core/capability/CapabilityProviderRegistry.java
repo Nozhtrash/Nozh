@@ -2,7 +2,6 @@ package dev.nozh.core.capability;
 
 import dev.nozh.NozhConstants;
 import dev.nozh.core.capability.providers.*;
-import dev.nozh.core.state.StateSnapshot;
 import net.minecraft.client.MinecraftClient;
 
 import java.util.Map;
