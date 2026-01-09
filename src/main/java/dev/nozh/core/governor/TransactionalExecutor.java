@@ -3,6 +3,7 @@ package dev.nozh.core.governor;
 import dev.nozh.NozhConstants;
 import dev.nozh.core.capability.ActionResult;
 import dev.nozh.core.capability.StateSnapshot;
+import dev.nozh.core.capability.CapabilityProviderRegistry;
 import dev.nozh.core.telemetry.TelemetrySnapshot;
 import dev.nozh.core.telemetry.IntegratedRingTelemetryBuffer;
 
@@ -53,7 +54,8 @@ public class TransactionalExecutor {
             try {
                 // 1. Capture state BEFORE
                 TelemetrySnapshot before = telemetryBuffer.snapshot();
-                StateSnapshot stateBefore = StateSnapshot.captureAll();
+                // Removed: StateSnapshot stateBefore = StateSnapshot.captureAll();
+                // The snapshot will come from the ActionResult itself
                 
                 NozhConstants.LOGGER.info("[TX {}] Captured pre-action state", actionId);
                 
@@ -85,8 +87,17 @@ public class TransactionalExecutor {
                     NozhConstants.LOGGER.warn("[TX {}] Action did not improve performance, rolling back", actionId);
                     
                     if (result.canRollback()) {
-                        result.getSnapshot().restoreAll();
-                        NozhConstants.LOGGER.info("[TX {}] Rollback completed", actionId);
+                        // Use CapabilityProviderRegistry.restore() instead of non-existent restoreAll()
+                        boolean restored = CapabilityProviderRegistry.restore(
+                            actionId, 
+                            result.getSnapshot()
+                        );
+                        
+                        if (restored) {
+                            NozhConstants.LOGGER.info("[TX {}] Rollback completed", actionId);
+                        } else {
+                            NozhConstants.LOGGER.warn("[TX {}] Rollback failed", actionId);
+                        }
                     } else {
                         NozhConstants.LOGGER.warn("[TX {}] Cannot rollback - no snapshot available", actionId);
                     }
