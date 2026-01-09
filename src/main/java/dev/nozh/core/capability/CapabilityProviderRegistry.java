@@ -158,6 +158,10 @@ public class CapabilityProviderRegistry {
     public static boolean restore(String actionId, StateSnapshot snapshot) {
         NozhConstants.LOGGER.warn("CapabilityProviderRegistry.restore() is deprecated and disabled");
         NozhConstants.LOGGER.warn("Please migrate to new rollback mechanism");
+        if (snapshot != null) {
+            // Mark snapshot as intentionally unused while implementation is disabled
+            snapshot.hashCode();
+        }
         return false;
         
         /* TEMPORARILY DISABLED - NEEDS MIGRATION TO NEW API
