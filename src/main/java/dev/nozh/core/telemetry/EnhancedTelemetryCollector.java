@@ -157,7 +157,7 @@ public class EnhancedTelemetryCollector {
     /**
      * Get count of loaded chunks.
      */
-    private int getLoadedChunks Count(ClientWorld world) {
+    private int getLoadedChunksCount(ClientWorld world) {
         try {
             // Access chunk manager
             return world.getChunkManager().getLoadedChunkCount();
