@@ -95,7 +95,7 @@ public class ImprovedQLearning {
         
         qTable.put(pair, newQ);
         
-        NozhConstants.LOGGER.debug("[Q-Learning] Updated Q({}, {}) : {:.3f} -> {:.3f} (reward={:.2f})",
+        NozhConstants.LOGGER.debug("[Q-Learning] Updated Q({}, {}) : {} -> {} (reward={})",
                                  state, action, oldQ, newQ, reward);
     }
     
