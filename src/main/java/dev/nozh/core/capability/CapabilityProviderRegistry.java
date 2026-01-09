@@ -1,204 +1,125 @@
 package dev.nozh.core.capability;
 
 import dev.nozh.NozhConstants;
+import dev.nozh.core.capability.providers.*;
+import dev.nozh.core.state.StateSnapshot;
 import net.minecraft.client.MinecraftClient;
-import net.minecraft.client.option.GameOptions;
-import net.minecraft.client.option.GraphicsMode;
-import net.minecraft.client.option.ParticlesMode;
-import net.minecraft.client.option.CloudRenderMode;
 
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Central registry for all capability providers.
+ * Manages provider lifecycle and execution.
  * 
- * Providers are the actual implementations that modify game settings.
- * This registry manages their lifecycle and provides safe execution.
+ * <p>Thread-safe singleton registry with concurrent provider access.
  * 
- * @since 1.0.0
+ * <p>Providers are registered statically and can be executed by ID.
+ * Each provider can modify game settings and return execution results
+ * with rollback support.
+ * 
+ * @author Nozh Team
+ * @since 0.5.0 (Phase 1 Sprint 1)
  */
-public class CapabilityProviderRegistry {
-    
+public final class CapabilityProviderRegistry {
     private static final Map<String, CapabilityProvider> providers = new ConcurrentHashMap<>();
-    private static boolean initialized = false;
+    private static final Map<String, StateSnapshot> snapshots = new ConcurrentHashMap<>();
     
-    /**
-     * Initialize all built-in providers.
-     * Should be called during mod initialization.
-     * 
-     * TEMPORARY FIX: Disabled until proper integration with IntegratedGovernor
-     */
-    public static synchronized void initialize() {
-        if (initialized) {
-            NozhConstants.LOGGER.warn("CapabilityProviderRegistry already initialized");
-            return;
-        }
+    static {
+        // Register all essential providers (Phase 1 Sprint 1)
+        register("render_distance", new RenderDistanceProvider());
+        register("simulation_distance", new SimulationDistanceProvider());
+        register("particles", new ParticlesProvider());
+        register("entity_distance", new EntityDistanceProvider());
+        register("graphics_mode", new GraphicsModeProvider());
+        register("mipmap_levels", new MipmapLevelsProvider());
+        register("smooth_lighting", new SmoothLightingProvider());
+        register("clouds", new CloudsProvider());
         
-        try {
-            // TODO: Re-enable when IntegratedGovernor properly calls this
-            // For now, providers will be registered lazily when needed
-            
-            /* TEMPORARILY DISABLED - FIX BUILD ISSUE
-            register("render_distance", new RenderDistanceProvider());
-            register("simulation_distance", new SimulationDistanceProvider());
-            register("particles", new ParticlesProvider());
-            register("entity_distance", new EntityDistanceProvider());
-            register("graphics_mode", new GraphicsModeProvider());
-            register("mipmap_levels", new MipmapLevelsProvider());
-            register("smooth_lighting", new SmoothLightingProvider());
-            register("clouds", new CloudsProvider());
-            register("vsync", new VsyncProvider());
-            register("max_fps", new MaxFpsProvider());
-            */
-            
-            initialized = true;
-            NozhConstants.LOGGER.info("CapabilityProviderRegistry initialized (providers disabled temporarily)");
-            
-        } catch (Exception e) {
-            NozhConstants.LOGGER.error("Failed to initialize CapabilityProviderRegistry", e);
-            throw new RuntimeException("Critical: Provider registry initialization failed", e);
-        }
+        // Reduction actions (aliases for optimization)
+        register("reduce_render_distance", new RenderDistanceProvider());
+        register("lower_particles", new ParticlesProvider());
+        register("disable_clouds", new CloudsProvider());
+        register("lower_entity_distance", new EntityDistanceProvider());
+        
+        NozhConstants.LOGGER.info("CapabilityProviderRegistry initialized with {} providers", providers.size());
     }
     
     /**
-     * Register a custom capability provider.
+     * Register a capability provider.
      * 
      * @param actionId unique identifier for the action
-     * @param provider the provider implementation
-     * @throws IllegalArgumentException if actionId is null, empty, or already registered
-     * @throws NullPointerException if provider is null
+     * @param provider provider implementation
      */
     public static void register(String actionId, CapabilityProvider provider) {
-        if (actionId == null || actionId.trim().isEmpty()) {
-            throw new IllegalArgumentException("Action ID cannot be null or empty");
+        if (actionId == null || provider == null) {
+            throw new IllegalArgumentException("actionId and provider must not be null");
         }
-        if (provider == null) {
-            throw new NullPointerException("Provider cannot be null");
-        }
-        
-        if (providers.containsKey(actionId)) {
-            NozhConstants.LOGGER.warn("Overwriting existing provider: {}", actionId);
-        }
-        
         providers.put(actionId, provider);
-        NozhConstants.LOGGER.debug("Registered provider: {}", actionId);
     }
     
     /**
-     * Execute an action with the registered provider.
+     * Execute a capability provider action.
      * 
-     * TEMPORARILY DISABLED - Needs migration to new CapabilityProvider API
-     * 
-     * @param actionId the action to execute
+     * @param actionId action identifier
      * @param client Minecraft client instance
-     * @param params additional parameters for the action
-     * @return ActionResult indicating success or failure
+     * @param params optional parameters for the provider
+     * @return action result with success status and snapshot
      */
     public static ActionResult execute(String actionId, MinecraftClient client, Object... params) {
-        NozhConstants.LOGGER.warn("CapabilityProviderRegistry.execute() is deprecated and disabled");
-        NozhConstants.LOGGER.warn("Please migrate to new CapabilityProvider.apply() API");
-        return ActionResult.error("Method deprecated - needs migration");
-        
-        /* TEMPORARILY DISABLED - NEEDS MIGRATION TO NEW API
-        // Validation
         if (actionId == null) {
-            NozhConstants.LOGGER.error("Cannot execute action with null actionId");
-            return ActionResult.error("Action ID is null");
+            return ActionResult.error("Action ID cannot be null");
         }
         
         if (client == null) {
-            NozhConstants.LOGGER.error("Cannot execute action with null client");
-            return ActionResult.error("MinecraftClient is null");
+            return ActionResult.error("MinecraftClient cannot be null");
         }
         
-        // Check initialization
-        if (!initialized) {
-            NozhConstants.LOGGER.warn("CapabilityProviderRegistry not initialized, auto-initializing...");
-            initialize();
-        }
-        
-        // Get provider
         CapabilityProvider provider = providers.get(actionId);
         if (provider == null) {
-            NozhConstants.LOGGER.warn("No provider found for action: {}", actionId);
             return ActionResult.error("Provider not found: " + actionId);
         }
         
-        // Execute with safety
         try {
-            // TODO: Migrate to provider.apply() with CapabilityValue
             ActionResult result = provider.execute(client, params);
             
-            if (result.isSuccess()) {
-                NozhConstants.LOGGER.info("Successfully executed action: {}", actionId);
-            } else {
-                NozhConstants.LOGGER.warn("Action failed: {} - {}", actionId, result.getError());
+            // Store snapshot for potential rollback
+            if (result.isSuccess() && result.getSnapshot() != null) {
+                snapshots.put(actionId, result.getSnapshot());
             }
             
             return result;
-            
         } catch (Exception e) {
-            NozhConstants.LOGGER.error("Exception during action execution: {}", actionId, e);
-            return ActionResult.error("Execution exception: " + e.getMessage());
+            NozhConstants.LOGGER.error("Provider execution failed for: {}", actionId, e);
+            return ActionResult.error("Execution failed: " + e.getMessage());
         }
-        */
     }
     
     /**
-     * Restore a setting to a previous value.
-     * Used by rollback system.
+     * Restore a specific setting to its previous value.
      * 
-     * TEMPORARILY DISABLED - Needs migration to new CapabilityProvider API
-     * 
-     * @param actionId the action that was executed
-     * @param snapshot the snapshot containing the old value
-     * @return true if restored successfully
+     * @param key setting key
+     * @param value value to restore
      */
-    public static boolean restore(String actionId, StateSnapshot snapshot) {
-        NozhConstants.LOGGER.warn("CapabilityProviderRegistry.restore() is deprecated and disabled");
-        NozhConstants.LOGGER.warn("Please migrate to new rollback mechanism");
-        if (snapshot != null) {
-            // Mark snapshot as intentionally unused while implementation is disabled
-            snapshot.hashCode();
-        }
-        return false;
-        
-        /* TEMPORARILY DISABLED - NEEDS MIGRATION TO NEW API
-        if (actionId == null || snapshot == null) {
-            NozhConstants.LOGGER.error("Cannot restore with null parameters");
-            return false;
+    public static void restore(String key, Object value) {
+        if (key == null || value == null) {
+            NozhConstants.LOGGER.warn("Cannot restore null key or value");
+            return;
         }
         
-        CapabilityProvider provider = providers.get(actionId);
-        if (provider == null) {
-            NozhConstants.LOGGER.warn("Cannot restore unknown action: {}", actionId);
-            return false;
+        // Delegate to appropriate provider
+        CapabilityProvider provider = providers.get(key);
+        if (provider != null && provider.canRollback()) {
+            StateSnapshot snapshot = new StateSnapshot();
+            snapshot.put(key, value);
+            provider.rollback(snapshot);
+        } else {
+            NozhConstants.LOGGER.warn("No rollback support for key: {}", key);
         }
-        
-        // TODO: Check if provider supports rollback in new API
-        // if (!provider.supportsRollback()) {
-        //     NozhConstants.LOGGER.warn("Provider {} does not support rollback", actionId);
-        //     return false;
-        // }
-        
-        try {
-            // TODO: Implement rollback with new API
-            // provider.rollback(snapshot);
-            NozhConstants.LOGGER.info("Rolled back action: {}", actionId);
-            return true;
-        } catch (Exception e) {
-            NozhConstants.LOGGER.error("Failed to rollback action: {}", actionId, e);
-            return false;
-        }
-        */
     }
     
     /**
-     * Check if a provider exists for the given action.
-     * 
-     * @param actionId the action to check
-     * @return true if provider exists
+     * Check if a provider exists.
      */
     public static boolean hasProvider(String actionId) {
         return providers.containsKey(actionId);
@@ -206,27 +127,12 @@ public class CapabilityProviderRegistry {
     
     /**
      * Get all registered action IDs.
-     * 
-     * @return array of action IDs
      */
     public static String[] getRegisteredActions() {
         return providers.keySet().toArray(new String[0]);
     }
     
-    /**
-     * Check if registry is initialized.
-     * 
-     * @return true if initialized
-     */
-    public static boolean isInitialized() {
-        return initialized;
-    }
-    
-    /**
-     * Clear all providers (for testing).
-     */
-    static void clearForTesting() {
-        providers.clear();
-        initialized = false;
+    private CapabilityProviderRegistry() {
+        // Private constructor to prevent instantiation
     }
 }
