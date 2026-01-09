@@ -143,18 +143,18 @@ public class StandardActionExecutor implements ActionExecutor {
         }
     }
 
-    private static dev.nozh.core.bus.CapabilityId resolveCapabilityId(ActionType actionType) {
+    private static dev.nozh.core.capability.CapabilityId resolveCapabilityId(ActionType actionType) {
         if (actionType == null) {
             return null;
         }
         return switch (actionType) {
-            case DECREASE_PARTICLES -> dev.nozh.core.bus.CapabilityId.PARTICLES;
-            case DECREASE_RENDER_DISTANCE -> dev.nozh.core.bus.CapabilityId.RENDER_DISTANCE;
-            case DECREASE_SIMULATION_DISTANCE -> dev.nozh.core.bus.CapabilityId.SIMULATION_DISTANCE;
-            case DECREASE_ENTITY_DISTANCE -> dev.nozh.core.bus.CapabilityId.ENTITY_DISTANCE;
-            case DISABLE_CLOUDS -> dev.nozh.core.bus.CapabilityId.CLOUDS;
-            case DISABLE_ENTITY_SHADOWS -> dev.nozh.core.bus.CapabilityId.ENTITY_SHADOWS;
-            case DECREASE_BIOME_BLEND -> dev.nozh.core.bus.CapabilityId.BIOME_BLEND;
+            case DECREASE_PARTICLES -> dev.nozh.core.capability.CapabilityId.PARTICLES;
+            case DECREASE_RENDER_DISTANCE -> dev.nozh.core.capability.CapabilityId.RENDER_DISTANCE;
+            case DECREASE_SIMULATION_DISTANCE -> dev.nozh.core.capability.CapabilityId.SIMULATION_DISTANCE;
+            case DECREASE_ENTITY_DISTANCE -> dev.nozh.core.capability.CapabilityId.ENTITY_DISTANCE;
+            case DISABLE_CLOUDS -> dev.nozh.core.capability.CapabilityId.CLOUDS;
+            case DISABLE_ENTITY_SHADOWS -> dev.nozh.core.capability.CapabilityId.ENTITY_SHADOWS;
+            case DECREASE_BIOME_BLEND -> dev.nozh.core.capability.CapabilityId.BIOME_BLEND;
             default -> null;
         };
     }

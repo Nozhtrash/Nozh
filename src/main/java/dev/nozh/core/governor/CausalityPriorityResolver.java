@@ -1,6 +1,6 @@
 package dev.nozh.core.governor;
 
-import dev.nozh.core.bus.CapabilityId;
+import dev.nozh.core.capability.CapabilityId;
 import dev.nozh.core.matrix.ActionCandidate;
 import dev.nozh.core.profiler.SpikeCauseType;
 import dev.nozh.core.profiler.SpikeCausalityReport;

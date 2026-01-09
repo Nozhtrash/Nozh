@@ -5,8 +5,8 @@ import dev.nozh.core.bus.ActionBus;
 import dev.nozh.core.bus.Command;
 import dev.nozh.core.bus.CommandExecutionReport;
 import dev.nozh.core.bus.CommandLifecycle;
-import dev.nozh.core.bus.CapabilityId;
-import dev.nozh.core.bus.CapabilityValue;
+import dev.nozh.core.capability.CapabilityId;
+import dev.nozh.core.capability.CapabilityValue;
 import dev.nozh.core.capability.ApplyResult;
 import dev.nozh.core.capability.CapabilityProvider;
 import dev.nozh.core.capability.CostLevel;
@@ -459,7 +459,7 @@ public final class ChaosTestRunner {
         CrashFailureContext context = new CrashFailureContext(
                 System.currentTimeMillis(),
                 "CHAOS_TEST",
-                dev.nozh.core.bus.CapabilityId.RENDER_DISTANCE.name(),
+                dev.nozh.core.capability.CapabilityId.RENDER_DISTANCE.name(),
                 dev.nozh.core.bus.CommandType.APPLY.name(),
                 "32",
                 "Simulated crash loop",
@@ -480,7 +480,7 @@ public final class ChaosTestRunner {
                     "Safe mode activated instead of targeted quarantine", duration);
         }
 
-        if (!state.isCapabilityQuarantined(dev.nozh.core.bus.CapabilityId.RENDER_DISTANCE, now)) {
+        if (!state.isCapabilityQuarantined(dev.nozh.core.capability.CapabilityId.RENDER_DISTANCE, now)) {
             long duration = System.currentTimeMillis() - start;
             return ChaosScenarioResult.fail(ChaosScenario.CRASH_LOOP_RECOVERY,
                     "Capability not quarantined after crash loop recovery", duration);
@@ -494,7 +494,7 @@ public final class ChaosTestRunner {
         }
 
         long afterRetry = decision.retryAtMillis() + 1;
-        if (state.isCapabilityQuarantined(dev.nozh.core.bus.CapabilityId.RENDER_DISTANCE, afterRetry)) {
+        if (state.isCapabilityQuarantined(dev.nozh.core.capability.CapabilityId.RENDER_DISTANCE, afterRetry)) {
             long duration = System.currentTimeMillis() - start;
             return ChaosScenarioResult.fail(ChaosScenario.CRASH_LOOP_RECOVERY,
                     "Capability quarantine did not expire after retry window", duration);

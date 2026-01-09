@@ -34,8 +34,8 @@ public class NozhState {
     public CrashFailureContext lastFailureContext = null;
 
     // Capability quarantine map (crash recovery)
-    public java.util.Map<dev.nozh.core.bus.CapabilityId, Long> quarantinedCapabilities = new java.util.EnumMap<>(
-            dev.nozh.core.bus.CapabilityId.class);
+    public java.util.Map<dev.nozh.core.capability.CapabilityId, Long> quarantinedCapabilities = new java.util.EnumMap<>(
+            dev.nozh.core.capability.CapabilityId.class);
 
     /**
      * Check if safe mode is currently active (any cause).
@@ -143,7 +143,7 @@ public class NozhState {
     /**
      * Quarantine a capability until a given timestamp (epoch millis).
      */
-    public void quarantineCapability(dev.nozh.core.bus.CapabilityId capabilityId, long retryAtMillis) {
+    public void quarantineCapability(dev.nozh.core.capability.CapabilityId capabilityId, long retryAtMillis) {
         if (capabilityId == null) {
             return;
         }
@@ -153,7 +153,7 @@ public class NozhState {
     /**
      * Check if a capability is still quarantined.
      */
-    public boolean isCapabilityQuarantined(dev.nozh.core.bus.CapabilityId capabilityId, long nowMillis) {
+    public boolean isCapabilityQuarantined(dev.nozh.core.capability.CapabilityId capabilityId, long nowMillis) {
         if (capabilityId == null) {
             return false;
         }
@@ -168,7 +168,7 @@ public class NozhState {
         return true;
     }
 
-    public java.util.OptionalLong getCapabilityRetryAt(dev.nozh.core.bus.CapabilityId capabilityId) {
+    public java.util.OptionalLong getCapabilityRetryAt(dev.nozh.core.capability.CapabilityId capabilityId) {
         Long retryAt = quarantinedCapabilities.get(capabilityId);
         return retryAt != null ? java.util.OptionalLong.of(retryAt) : java.util.OptionalLong.empty();
     }

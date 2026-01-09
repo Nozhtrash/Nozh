@@ -383,7 +383,7 @@ public final class JsonMini {
                     long retryAt = getLong(objJson, "retryAt", 0L);
                     if (id != null && retryAt > 0L) {
                         try {
-                            dev.nozh.core.bus.CapabilityId capabilityId = dev.nozh.core.bus.CapabilityId.valueOf(id);
+                            dev.nozh.core.capability.CapabilityId capabilityId = dev.nozh.core.capability.CapabilityId.valueOf(id);
                             state.quarantinedCapabilities.put(capabilityId, retryAt);
                         } catch (IllegalArgumentException ignored) {
                         }

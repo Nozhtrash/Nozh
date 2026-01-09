@@ -1,7 +1,7 @@
 package dev.nozh.core.governor;
 
-import dev.nozh.core.bus.CapabilityId;
-import dev.nozh.core.bus.CapabilityValue;
+import dev.nozh.core.capability.CapabilityId;
+import dev.nozh.core.capability.CapabilityValue;
 import dev.nozh.core.capability.ProviderRegistry;
 import dev.nozh.core.config.NozhConfig;
 import dev.nozh.core.state.BaselineSnapshot;

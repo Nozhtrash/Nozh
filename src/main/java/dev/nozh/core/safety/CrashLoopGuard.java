@@ -236,7 +236,7 @@ public final class CrashLoopGuard {
     /**
      * Check if a capability is quarantined due to crash recovery.
      */
-    public static boolean isCapabilityQuarantined(dev.nozh.core.bus.CapabilityId capabilityId) {
+    public static boolean isCapabilityQuarantined(dev.nozh.core.capability.CapabilityId capabilityId) {
         NozhState state = StateManager.getState();
         if (state == null) {
             return false;
@@ -291,7 +291,7 @@ public final class CrashLoopGuard {
         if (context != null) {
             var capability = context.resolveCapabilityId();
             if (capability.isPresent()) {
-                dev.nozh.core.bus.CapabilityId capabilityId = capability.get();
+                dev.nozh.core.capability.CapabilityId capabilityId = capability.get();
                 if (!state.isCapabilityQuarantined(capabilityId, nowMillis)) {
                     long retryAt = nowMillis + NozhConstants.CRASH_RECOVERY_QUARANTINE_MILLIS;
                     state.quarantineCapability(capabilityId, retryAt);

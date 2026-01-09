@@ -1,7 +1,7 @@
 package dev.nozh.api.capability;
 
-import dev.nozh.core.bus.CapabilityId;
-import dev.nozh.core.bus.CapabilityValue;
+import dev.nozh.core.capability.CapabilityId;
+import dev.nozh.core.capability.CapabilityValue;
 
 import java.util.Collections;
 import java.util.LinkedHashSet;

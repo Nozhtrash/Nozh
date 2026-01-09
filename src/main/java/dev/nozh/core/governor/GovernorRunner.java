@@ -3,7 +3,7 @@ package dev.nozh.core.governor;
 import dev.nozh.core.NozhLogger;
 import dev.nozh.core.bus.ActionBus;
 import dev.nozh.core.bus.Command;
-import dev.nozh.core.bus.CapabilityId;
+import dev.nozh.core.capability.CapabilityId;
 import dev.nozh.core.capability.ProviderRegistry;
 import dev.nozh.core.config.ConfigManager;
 import dev.nozh.core.config.NozhConfig;
@@ -418,7 +418,7 @@ public final class GovernorRunner {
         }
         PerfSnapshot baselineSnapshot = captureSnapshot();
         int observationWindowSeconds = resolveObservationWindowSeconds(config, baselineSnapshot);
-        Optional<dev.nozh.core.bus.CapabilityValue> previousValue = providerRegistry.get(change.capabilityId())
+        Optional<dev.nozh.core.capability.CapabilityValue> previousValue = providerRegistry.get(change.capabilityId())
                 .flatMap(provider -> provider.getCurrentValueSafe());
         Command cmd = new Command.ApplyCapability(change.capabilityId(), change.targetValue());
         PendingAction pending = new PendingAction(
@@ -567,7 +567,7 @@ public final class GovernorRunner {
                 }
             }
             PerfSnapshot baselineSnapshot = captureSnapshot();
-            Optional<dev.nozh.core.bus.CapabilityValue> previousValue = providerRegistry.get(preventiveDecision.capabilityId())
+            Optional<dev.nozh.core.capability.CapabilityValue> previousValue = providerRegistry.get(preventiveDecision.capabilityId())
                     .flatMap(provider -> provider.getCurrentValueSafe());
             Command cmd = new Command.ApplyCapability(
                     preventiveDecision.capabilityId(),
@@ -595,7 +595,7 @@ public final class GovernorRunner {
 
         PerfSnapshot baselineSnapshot = captureSnapshot();
         int observationWindowSeconds = resolveObservationWindowSeconds(config, baselineSnapshot);
-        Optional<dev.nozh.core.bus.CapabilityValue> previousValue = providerRegistry.get(preventiveDecision.capabilityId())
+        Optional<dev.nozh.core.capability.CapabilityValue> previousValue = providerRegistry.get(preventiveDecision.capabilityId())
                 .flatMap(provider -> provider.getCurrentValueSafe());
         Command cmd = new Command.ApplyCapability(
                 preventiveDecision.capabilityId(),

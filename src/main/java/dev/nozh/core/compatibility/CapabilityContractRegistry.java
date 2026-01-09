@@ -2,7 +2,7 @@ package dev.nozh.core.compatibility;
 
 import dev.nozh.api.capability.CapabilityContract;
 import dev.nozh.api.capability.CapabilityContractDeclaration;
-import dev.nozh.core.bus.CapabilityId;
+import dev.nozh.core.capability.CapabilityId;
 
 import java.util.ArrayList;
 import java.util.List;

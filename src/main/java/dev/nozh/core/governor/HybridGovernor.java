@@ -32,7 +32,7 @@ public final class HybridGovernor {
             double reverseEpsilonMs,
             boolean reverseReady,
             dev.nozh.core.state.BaselineSnapshot baselineSnapshot,
-            Map<dev.nozh.core.bus.CapabilityId, dev.nozh.core.bus.CapabilityValue> currentSettings,
+            Map<dev.nozh.core.capability.CapabilityId, dev.nozh.core.capability.CapabilityValue> currentSettings,
             NozhConfig config,
             ActionMatrixTuning tuning,
             dev.nozh.core.profiler.SpikeCausalityReport spikeCausality) {
@@ -88,7 +88,7 @@ public final class HybridGovernor {
             double reverseEpsilonMs,
             boolean reverseReady,
             dev.nozh.core.state.BaselineSnapshot baselineSnapshot,
-            Map<dev.nozh.core.bus.CapabilityId, dev.nozh.core.bus.CapabilityValue> currentSettings,
+            Map<dev.nozh.core.capability.CapabilityId, dev.nozh.core.capability.CapabilityValue> currentSettings,
             NozhConfig config,
             ActionMatrixTuning tuning) {
         return decide(state, mode, currentBound, nowMillis, profile, targetFps, reverseEpsilonMs, reverseReady,

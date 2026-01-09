@@ -4,7 +4,7 @@ import dev.nozh.api.governor.Decision;
 import dev.nozh.api.governor.ActionType;
 import dev.nozh.api.governor.DecisionSeverity;
 import dev.nozh.api.governor.DecisionConfidence;
-import dev.nozh.core.bus.CapabilityId;
+import dev.nozh.core.capability.CapabilityId;
 import dev.nozh.core.config.NozhConfig;
 import dev.nozh.core.safety.NozhState;
 

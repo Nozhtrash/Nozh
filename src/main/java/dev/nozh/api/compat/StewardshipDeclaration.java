@@ -1,6 +1,6 @@
 package dev.nozh.api.compat;
 
-import dev.nozh.core.bus.CapabilityId;
+import dev.nozh.core.capability.CapabilityId;
 
 import java.util.Arrays;
 import java.util.EnumSet;

@@ -1,7 +1,7 @@
 package dev.nozh.core.safety;
 
-import dev.nozh.core.bus.CapabilityId;
-import dev.nozh.core.bus.CapabilityValue;
+import dev.nozh.core.capability.CapabilityId;
+import dev.nozh.core.capability.CapabilityValue;
 import dev.nozh.core.bus.CommandType;
 
 import java.util.Optional;

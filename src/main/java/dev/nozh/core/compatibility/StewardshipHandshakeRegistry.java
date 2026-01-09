@@ -2,7 +2,7 @@ package dev.nozh.core.compatibility;
 
 import dev.nozh.api.compat.StewardshipDeclaration;
 import dev.nozh.api.compat.StewardshipMode;
-import dev.nozh.core.bus.CapabilityId;
+import dev.nozh.core.capability.CapabilityId;
 import net.fabricmc.loader.api.FabricLoader;
 
 import java.util.ArrayList;

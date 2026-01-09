@@ -1,8 +1,8 @@
 package dev.nozh.core.capability;
 
 import dev.nozh.NozhConstants;
-import dev.nozh.core.bus.CapabilityId;
-import dev.nozh.core.bus.CapabilityValue;
+import dev.nozh.core.capability.CapabilityId;
+import dev.nozh.core.capability.CapabilityValue;
 import org.slf4j.Logger;
 
 import java.util.Optional;
