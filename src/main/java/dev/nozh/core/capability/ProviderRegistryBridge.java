@@ -39,13 +39,13 @@ public final class ProviderRegistryBridge {
         
         // Particle and visual effects (reduced/off)
         // FIX: StringValue -> EnumValue
-        DEFAULT_OPTIMIZATION_VALUES.put(CapabilityId.PARTICLES, new CapabilityValue.EnumValue("minimal"));
-        DEFAULT_OPTIMIZATION_VALUES.put(CapabilityId.CLOUDS, new CapabilityValue.BoolValue(false));
+        DEFAULT_OPTIMIZATION_VALUES.put(CapabilityId.PARTICLES, new CapabilityValue.EnumValue("MINIMAL"));
+        DEFAULT_OPTIMIZATION_VALUES.put(CapabilityId.CLOUDS, new CapabilityValue.EnumValue("OFF"));
         DEFAULT_OPTIMIZATION_VALUES.put(CapabilityId.ENTITY_SHADOWS, new CapabilityValue.BoolValue(false));
         
         // Graphics quality
         // FIX: StringValue -> EnumValue
-        DEFAULT_OPTIMIZATION_VALUES.put(CapabilityId.GRAPHICS_MODE, new CapabilityValue.EnumValue("fast"));
+        DEFAULT_OPTIMIZATION_VALUES.put(CapabilityId.GRAPHICS_MODE, new CapabilityValue.EnumValue("FAST"));
         DEFAULT_OPTIMIZATION_VALUES.put(CapabilityId.SMOOTH_LIGHTING, new CapabilityValue.BoolValue(false));
         DEFAULT_OPTIMIZATION_VALUES.put(CapabilityId.MIPMAP_LEVEL, new CapabilityValue.IntValue(0));
         DEFAULT_OPTIMIZATION_VALUES.put(CapabilityId.BIOME_BLEND, new CapabilityValue.IntValue(1));
