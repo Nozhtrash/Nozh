@@ -3,7 +3,7 @@ package dev.nozh.core.capability.providers;
 import dev.nozh.NozhConstants;
 import dev.nozh.core.capability.ActionResult;
 import dev.nozh.core.capability.CapabilityProvider;
-import dev.nozh.core.state.StateSnapshot;
+import dev.nozh.core.capability.StateSnapshot;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.option.CloudRenderMode;
 import net.minecraft.client.option.GameOptions;

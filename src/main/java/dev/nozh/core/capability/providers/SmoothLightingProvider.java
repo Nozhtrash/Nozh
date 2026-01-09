@@ -3,21 +3,11 @@ package dev.nozh.core.capability.providers;
 import dev.nozh.NozhConstants;
 import dev.nozh.core.capability.ActionResult;
 import dev.nozh.core.capability.CapabilityProvider;
-import dev.nozh.core.state.StateSnapshot;
+import dev.nozh.core.capability.StateSnapshot;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.option.GameOptions;
 
-/**
- * Controls smooth lighting setting.
- * Options: enabled/disabled.
- * 
- * <p>Smooth lighting improves visual quality but has minor performance cost.
- * 
- * @author Nozh Team
- * @since 0.5.0 (Phase 1 Sprint 1)
- */
 public class SmoothLightingProvider implements CapabilityProvider {
-    
     @Override
     public ActionResult execute(MinecraftClient client, Object... params) {
         if (client == null || client.options == null) {
@@ -27,12 +17,10 @@ public class SmoothLightingProvider implements CapabilityProvider {
         GameOptions options = client.options;
         boolean oldValue = options.getSmoothLighting().getValue();
         
-        // Determine target value
         boolean targetValue;
         if (params != null && params.length > 0 && params[0] instanceof Boolean) {
             targetValue = (Boolean) params[0];
         } else {
-            // Default: disable for performance
             targetValue = false;
         }
         
@@ -45,7 +33,6 @@ public class SmoothLightingProvider implements CapabilityProvider {
         try {
             options.getSmoothLighting().setValue(targetValue);
             options.write();
-            
             NozhConstants.LOGGER.info("Smooth lighting changed: {} -> {}", oldValue, targetValue);
             return ActionResult.success(snapshot);
         } catch (Exception e) {
@@ -71,11 +58,11 @@ public class SmoothLightingProvider implements CapabilityProvider {
         }
         
         try {
-            Boolean oldValue = snapshot.getBoolean("smooth_lighting");
-            if (oldValue != null) {
-                client.options.getSmoothLighting().setValue(oldValue);
+            Object oldValue = snapshot.get("smooth_lighting");
+            if (oldValue instanceof Boolean value) {
+                client.options.getSmoothLighting().setValue(value);
                 client.options.write();
-                NozhConstants.LOGGER.info("Rolled back smooth lighting to: {}", oldValue);
+                NozhConstants.LOGGER.info("Rolled back smooth lighting to: {}", value);
             }
         } catch (Exception e) {
             NozhConstants.LOGGER.error("Rollback failed for smooth lighting", e);

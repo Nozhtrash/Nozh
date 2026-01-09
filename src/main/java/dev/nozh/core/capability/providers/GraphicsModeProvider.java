@@ -3,23 +3,12 @@ package dev.nozh.core.capability.providers;
 import dev.nozh.NozhConstants;
 import dev.nozh.core.capability.ActionResult;
 import dev.nozh.core.capability.CapabilityProvider;
-import dev.nozh.core.state.StateSnapshot;
+import dev.nozh.core.capability.StateSnapshot;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.option.GameOptions;
 import net.minecraft.client.option.GraphicsMode;
 
-/**
- * Controls graphics mode setting.
- * Options: FANCY, FAST, FABULOUS.
- * 
- * <p>FAST mode disables leaves transparency and other visual effects.
- * FABULOUS enables shaders (performance heavy).
- * 
- * @author Nozh Team
- * @since 0.5.0 (Phase 1 Sprint 1)
- */
 public class GraphicsModeProvider implements CapabilityProvider {
-    
     @Override
     public ActionResult execute(MinecraftClient client, Object... params) {
         if (client == null || client.options == null) {
@@ -29,12 +18,10 @@ public class GraphicsModeProvider implements CapabilityProvider {
         GameOptions options = client.options;
         GraphicsMode oldValue = options.getGraphicsMode().getValue();
         
-        // Determine target value
         GraphicsMode targetValue;
         if (params != null && params.length > 0 && params[0] instanceof GraphicsMode) {
             targetValue = (GraphicsMode) params[0];
         } else {
-            // Default: reduce to FAST
             targetValue = GraphicsMode.FAST;
         }
         
@@ -47,7 +34,6 @@ public class GraphicsModeProvider implements CapabilityProvider {
         try {
             options.getGraphicsMode().setValue(targetValue);
             options.write();
-            
             NozhConstants.LOGGER.info("Graphics mode changed: {} -> {}", oldValue, targetValue);
             return ActionResult.success(snapshot);
         } catch (Exception e) {

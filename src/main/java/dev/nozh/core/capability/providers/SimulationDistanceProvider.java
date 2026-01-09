@@ -3,21 +3,12 @@ package dev.nozh.core.capability.providers;
 import dev.nozh.NozhConstants;
 import dev.nozh.core.capability.ActionResult;
 import dev.nozh.core.capability.CapabilityProvider;
-import dev.nozh.core.state.StateSnapshot;
+import dev.nozh.core.capability.StateSnapshot;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.option.GameOptions;
 
-/**
- * Controls simulation distance setting.
- * Valid range: 2-32 chunks.
- * 
- * <p>Simulation distance controls how far game logic updates (mobs, redstone, etc.)
- * 
- * @author Nozh Team
- * @since 0.5.0 (Phase 1 Sprint 1)
- */
 public class SimulationDistanceProvider implements CapabilityProvider {
-    private static final int MIN_DISTANCE = 2;
+    private static final int MIN_DISTANCE = 5;
     private static final int MAX_DISTANCE = 32;
     
     @Override
@@ -29,16 +20,13 @@ public class SimulationDistanceProvider implements CapabilityProvider {
         GameOptions options = client.options;
         int oldValue = options.getSimulationDistance().getValue();
         
-        // Determine target value
         int targetValue;
         if (params != null && params.length > 0 && params[0] instanceof Integer) {
             targetValue = (Integer) params[0];
         } else {
-            // Default: reduce by 25%
             targetValue = Math.max(MIN_DISTANCE, (int) (oldValue * 0.75));
         }
         
-        // Validate range
         if (targetValue < MIN_DISTANCE || targetValue > MAX_DISTANCE) {
             return ActionResult.invalid("Simulation distance must be between " + MIN_DISTANCE + " and " + MAX_DISTANCE);
         }
@@ -52,8 +40,7 @@ public class SimulationDistanceProvider implements CapabilityProvider {
         try {
             options.getSimulationDistance().setValue(targetValue);
             options.write();
-            
-            NozhConstants.LOGGER.info("Simulation distance changed: {} -> {} chunks", oldValue, targetValue);
+            NozhConstants.LOGGER.info("Simulation distance changed: {} -> {}", oldValue, targetValue);
             return ActionResult.success(snapshot);
         } catch (Exception e) {
             NozhConstants.LOGGER.error("Failed to set simulation distance", e);

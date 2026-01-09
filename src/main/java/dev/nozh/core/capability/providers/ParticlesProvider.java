@@ -3,22 +3,12 @@ package dev.nozh.core.capability.providers;
 import dev.nozh.NozhConstants;
 import dev.nozh.core.capability.ActionResult;
 import dev.nozh.core.capability.CapabilityProvider;
-import dev.nozh.core.state.StateSnapshot;
+import dev.nozh.core.capability.StateSnapshot;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.option.GameOptions;
 import net.minecraft.client.option.ParticlesMode;
 
-/**
- * Controls particle rendering level.
- * Options: ALL, DECREASED, MINIMAL.
- * 
- * <p>Reducing particles can significantly improve FPS in particle-heavy scenarios.
- * 
- * @author Nozh Team
- * @since 0.5.0 (Phase 1 Sprint 1)
- */
 public class ParticlesProvider implements CapabilityProvider {
-    
     @Override
     public ActionResult execute(MinecraftClient client, Object... params) {
         if (client == null || client.options == null) {
@@ -28,16 +18,14 @@ public class ParticlesProvider implements CapabilityProvider {
         GameOptions options = client.options;
         ParticlesMode oldValue = options.getParticles().getValue();
         
-        // Determine target value
         ParticlesMode targetValue;
         if (params != null && params.length > 0 && params[0] instanceof ParticlesMode) {
             targetValue = (ParticlesMode) params[0];
         } else {
-            // Default: reduce by one level
             targetValue = switch (oldValue) {
                 case ALL -> ParticlesMode.DECREASED;
                 case DECREASED -> ParticlesMode.MINIMAL;
-                case MINIMAL -> ParticlesMode.MINIMAL; // Already at minimum
+                case MINIMAL -> ParticlesMode.MINIMAL;
             };
         }
         
@@ -50,7 +38,6 @@ public class ParticlesProvider implements CapabilityProvider {
         try {
             options.getParticles().setValue(targetValue);
             options.write();
-            
             NozhConstants.LOGGER.info("Particles changed: {} -> {}", oldValue, targetValue);
             return ActionResult.success(snapshot);
         } catch (Exception e) {
