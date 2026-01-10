@@ -1,125 +1,253 @@
 package dev.nozh.core.analysis;
 
 import dev.nozh.NozhConstants;
+import dev.nozh.core.util.RollingAverage;
 import net.minecraft.client.MinecraftClient;
-import net.minecraft.entity.Entity;
+import net.minecraft.server.integrated.IntegratedServer;
 
-import java.util.ArrayDeque;
-import java.util.Deque;
-import java.util.Iterator;
 /**
- * Detects whether performance is CPU-bound or GPU-bound.
- * Analyzes tick time vs render time to determine bottleneck.
+ * Detector avanzado de cuellos de botella CPU vs GPU.
+ * 
+ * <p>Analiza tiempos de tick (CPU) y render (GPU) para identificar
+ * qué componente está limitando el rendimiento.
+ * 
+ * <p>Usa métricas precisas del servidor integrado cuando está disponible,
+ * con fallbacks inteligentes para modo multijugador.
+ * 
+ * @author Nozh Team
+ * @since 0.5.0 (Phase 2 Sprint 4)
  */
-public class BottleneckDetector {
+public final class BottleneckDetector {
+    private static final int SAMPLE_WINDOW = 100;
+    private static final double TARGET_FRAME_TIME_MS = 16.67; // 60 FPS
     
-    private final RollingAverage tickTime = new RollingAverage(100);
-    private final RollingAverage renderTime = new RollingAverage(100);
+    private final RollingAverage tickTime = new RollingAverage(SAMPLE_WINDOW);
+    private final RollingAverage renderTime = new RollingAverage(SAMPLE_WINDOW);
+    private final RollingAverage totalFrameTime = new RollingAverage(SAMPLE_WINDOW);
     
+    /**
+     * Tipos de cuello de botella detectables.
+     */
     public enum Bottleneck {
-        CPU_BOUND,      // Tick time is the bottleneck
-        GPU_BOUND,      // Render time is the bottleneck
-        BALANCED,       // Both contribute equally
-        NEITHER         // Performance is good, no bottleneck
+        /** Tick time alto, render aceptable (CPU limitante) */
+        CPU_BOUND,
+        
+        /** Render time alto, tick aceptable (GPU limitante) */
+        GPU_BOUND,
+        
+        /** Ambos contribuyen similarmente */
+        BALANCED,
+        
+        /** Rendimiento bueno, sin limitaciones */
+        NEITHER,
+        
+        /** No hay suficientes datos para determinar */
+        UNKNOWN
     }
     
     /**
-     * Sample current frame timing.
+     * Captura métricas de rendimiento del frame actual.
+     * 
+     * @param client instancia del cliente de Minecraft
      */
     public void sample(MinecraftClient client) {
+        if (client == null) {
+            return;
+        }
+        
         try {
-            // Get tick time (CPU work)
-            double tickMs = estimateTickTime(client);
+            // Obtener tiempo total del frame
+            double frameMs = getFrameTimeMs(client);
+            totalFrameTime.add(frameMs);
+            
+            // Estimar tiempo de tick (CPU)
+            double tickMs = estimateTickTimeMs(client);
             tickTime.add(tickMs);
             
-            // Get total frame time
-            double frameMs = client.getLastFrameDuration();
-            if (frameMs < 1.0) {
-                frameMs *= 1000.0; // Convert to ms if needed
-            }
-            
-            // Render time = total - tick (approximation)
-            double renderMs = Math.max(0, frameMs - tickMs);
+            // Calcular tiempo de render (resto del frame)
+            double renderMs = Math.max(0.0, frameMs - tickMs);
             renderTime.add(renderMs);
             
         } catch (Exception e) {
-            NozhConstants.LOGGER.debug("Failed to sample bottleneck data", e);
+            NozhConstants.LOGGER.debug("Error capturando métricas de bottleneck", e);
         }
     }
     
     /**
-     * Detect current bottleneck type.
+     * Obtiene el tiempo del frame más reciente en milisegundos.
+     */
+    private double getFrameTimeMs(MinecraftClient client) {
+        try {
+            // Obtener duración del último frame
+            float frameDuration = client.getLastFrameDuration();
+            
+            // Si está en segundos, convertir a ms
+            if (frameDuration < 1.0f) {
+                return frameDuration * 1000.0;
+            }
+            return frameDuration;
+            
+        } catch (Exception e) {
+            // Fallback: calcular desde FPS
+            int fps = client.getCurrentFps();
+            return fps > 0 ? 1000.0 / fps : 16.67;
+        }
+    }
+    
+    /**
+     * Estima el tiempo de tick usando múltiples fuentes.
+     * Prioridad: Server integrado > Profiler > Heurística
+     */
+    private double estimateTickTimeMs(MinecraftClient client) {
+        // 1. Intento: Servidor integrado (singleplayer)
+        IntegratedServer server = client.getServer();
+        if (server != null) {
+            try {
+                // getTickTime() devuelve nanosegundos
+                long tickNanos = server.getTickTime();
+                if (tickNanos > 0) {
+                    return tickNanos / 1_000_000.0; // convertir a ms
+                }
+            } catch (Exception e) {
+                NozhConstants.LOGGER.debug("No se pudo obtener tickTime del servidor", e);
+            }
+        }
+        
+        // 2. Intento: Profiler del cliente (si está activo)
+        try {
+            var profiler = client.getProfiler();
+            if (profiler != null) {
+                // Nota: esto requeriría acceso a métricas internas del profiler
+                // Por ahora, usamos heurística
+            }
+        } catch (Exception e) {
+            // Ignorar
+        }
+        
+        // 3. Fallback: Heurística basada en complejidad del mundo
+        return estimateTickTimeHeuristic(client);
+    }
+    
+    /**
+     * Estimación heurística basada en complejidad del mundo.
+     */
+    private double estimateTickTimeHeuristic(MinecraftClient client) {
+        if (client.world == null || client.player == null) {
+            return 5.0; // Mínimo base
+        }
+        
+        double baseTickTime = 5.0; // 5ms base para mundo vacío
+        
+        try {
+            // Factor de entidades
+            int entityCount = client.world.getEntityCount();
+            double entityOverhead = Math.min(entityCount * 0.01, 15.0); // max 15ms
+            
+            // Factor de chunks cargados
+            int renderDistance = client.options.getViewDistance().getValue();
+            double chunkOverhead = renderDistance * 0.5; // ~0.5ms por chunk de distancia
+            
+            // Factor de redstone/tile entities (aproximado)
+            double complexityOverhead = 2.0;
+            
+            return baseTickTime + entityOverhead + chunkOverhead + complexityOverhead;
+            
+        } catch (Exception e) {
+            return 10.0; // Fallback conservador
+        }
+    }
+    
+    /**
+     * Detecta el tipo de cuello de botella actual.
+     * 
+     * @return tipo de bottleneck detectado
      */
     public Bottleneck detect() {
         if (!tickTime.hasEnoughSamples() || !renderTime.hasEnoughSamples()) {
-            return Bottleneck.NEITHER;
+            return Bottleneck.UNKNOWN;
         }
         
         double avgTick = tickTime.getAverage();
         double avgRender = renderTime.getAverage();
         double total = avgTick + avgRender;
         
-        // If total is low, no bottleneck
-        if (total < 16.67) { // 60+ FPS
+        // Si el frame time total es bueno (60+ FPS), no hay bottleneck
+        if (total < TARGET_FRAME_TIME_MS) {
             return Bottleneck.NEITHER;
         }
         
-        // Calculate tick's percentage of total frame time
+        // Calcular ratio de tick sobre total
         double tickRatio = avgTick / total;
         
-        // CPU bound if tick takes >65% of frame time
+        // CPU bound: tick time consume >65% del frame
         if (tickRatio > 0.65) {
             return Bottleneck.CPU_BOUND;
         }
         
-        // GPU bound if render takes >65% (tick <35%)
+        // GPU bound: render time consume >65% del frame (tick <35%)
         if (tickRatio < 0.35) {
             return Bottleneck.GPU_BOUND;
         }
         
-        // Balanced if both contribute
+        // Ambos contribuyen similarmente
         return Bottleneck.BALANCED;
     }
     
     /**
-     * Get detailed analysis string.
+     * Genera un análisis detallado con recomendaciones.
+     * 
+     * @return string formateado con análisis y sugerencias
      */
     public String getDetailedAnalysis() {
         Bottleneck type = detect();
         double avgTick = tickTime.getAverage();
         double avgRender = renderTime.getAverage();
+        double total = avgTick + avgRender;
+        double fps = total > 0 ? 1000.0 / total : 0.0;
         
         StringBuilder sb = new StringBuilder();
-        sb.append("Bottleneck Analysis:\n");
-        sb.append(String.format("  Type: %s\n", type));
-        sb.append(String.format("  Tick time: %.2f ms\n", avgTick));
-        sb.append(String.format("  Render time: %.2f ms\n", avgRender));
-        sb.append(String.format("  Total: %.2f ms (%.1f FPS)\n", 
-                              avgTick + avgRender, 
-                              1000.0 / (avgTick + avgRender)));
+        sb.append("╔═══════════════════════════════════════╗\n");
+        sb.append("║    ANÁLISIS DE BOTTLENECK - NOZH     ║\n");
+        sb.append("╚═══════════════════════════════════════╝\n\n");
         
-        // Add recommendations
-        sb.append("\nRecommendations:\n");
+        sb.append(String.format("Tipo detectado: %s\n", type));
+        sb.append(String.format("Tick time (CPU): %.2f ms\n", avgTick));
+        sb.append(String.format("Render time (GPU): %.2f ms\n", avgRender));
+        sb.append(String.format("Frame time total: %.2f ms (%.1f FPS)\n\n", total, fps));
+        
+        // Agregar recomendaciones específicas
+        sb.append("Recomendaciones:\n");
         switch (type) {
             case CPU_BOUND:
-                sb.append("  - Reduce simulation distance\n");
-                sb.append("  - Lower entity count\n");
-                sb.append("  - Reduce redstone complexity\n");
-                sb.append("  - Disable unnecessary mods\n");
+                sb.append("  🔴 CPU es el cuello de botella\n");
+                sb.append("  • Reducir simulation distance\n");
+                sb.append("  • Limitar entity count\n");
+                sb.append("  • Desactivar redstone complejo\n");
+                sb.append("  • Considerar mods de optimización CPU\n");
                 break;
+                
             case GPU_BOUND:
-                sb.append("  - Reduce render distance\n");
-                sb.append("  - Lower graphics quality\n");
-                sb.append("  - Disable shaders\n");
-                sb.append("  - Reduce particles\n");
+                sb.append("  🔴 GPU es el cuello de botella\n");
+                sb.append("  • Reducir render distance\n");
+                sb.append("  • Bajar calidad gráfica (FAST mode)\n");
+                sb.append("  • Desactivar shaders\n");
+                sb.append("  • Reducir partículas\n");
                 break;
+                
             case BALANCED:
-                sb.append("  - Both CPU and GPU are limiting\n");
-                sb.append("  - Apply balanced optimizations\n");
+                sb.append("  🟡 CPU y GPU contribuyen igualmente\n");
+                sb.append("  • Aplicar optimizaciones balanceadas\n");
+                sb.append("  • Reducir tanto render como simulation distance\n");
                 break;
+                
             case NEITHER:
-                sb.append("  - Performance is good!\n");
-                sb.append("  - No optimizations needed\n");
+                sb.append("  🟢 Rendimiento óptimo\n");
+                sb.append("  • No se requieren optimizaciones\n");
+                break;
+                
+            case UNKNOWN:
+                sb.append("  ⚪ Insuficientes datos para análisis\n");
+                sb.append("  • Esperar más muestras...\n");
                 break;
         }
         
@@ -127,94 +255,42 @@ public class BottleneckDetector {
     }
     
     /**
-     * Estimate tick time from available sources.
-     */
-    private double estimateTickTime(MinecraftClient client) {
-        try {
-            // Try integrated server first (singleplayer)
-            if (client.getServer() != null) {
-                return client.getServer().getTickTime();
-            }
-            
-            // Fallback: estimate based on game complexity
-            if (client.world != null) {
-                // Count entities by iterating the Iterable
-                int entities = 0;
-                Iterator<Entity> it = client.world.getEntities().iterator();
-                while (it.hasNext()) {
-                    it.next();
-                    entities++;
-                }
-                
-                // Base tick time + entity overhead
-                double baseTickTime = 8.0; // Base 8ms
-                double entityOverhead = Math.min(entities * 0.015, 42.0); // Max 42ms
-                
-                return baseTickTime + entityOverhead;
-            }
-            
-            return 10.0; // Default
-            
-        } catch (Exception e) {
-            return 10.0; // Safe default
-        }
-    }
-    
-    /**
-     * Get tick time average.
+     * @return promedio de tick time en milisegundos
      */
     public double getAverageTickTime() {
         return tickTime.getAverage();
     }
     
     /**
-     * Get render time average.
+     * @return promedio de render time en milisegundos
      */
     public double getAverageRenderTime() {
         return renderTime.getAverage();
     }
     
     /**
-     * Reset all collected data.
+     * @return promedio de frame time total en milisegundos
+     */
+    public double getAverageTotalFrameTime() {
+        return totalFrameTime.getAverage();
+    }
+    
+    /**
+     * Limpia todas las métricas recolectadas.
      */
     public void reset() {
         tickTime.clear();
         renderTime.clear();
+        totalFrameTime.clear();
     }
     
     /**
-     * Simple rolling average calculator.
+     * @return información de debug sobre el estado del detector
      */
-    private static class RollingAverage {
-        private final Deque<Double> values;
-        private final int maxSize;
-        private double sum = 0.0;
-        
-        RollingAverage(int maxSize) {
-            this.maxSize = maxSize;
-            this.values = new ArrayDeque<>(maxSize);
-        }
-        
-        void add(double value) {
-            if (values.size() >= maxSize) {
-                double removed = values.removeFirst();
-                sum -= removed;
-            }
-            values.addLast(value);
-            sum += value;
-        }
-        
-        double getAverage() {
-            return values.isEmpty() ? 0.0 : sum / values.size();
-        }
-        
-        boolean hasEnoughSamples() {
-            return values.size() >= 20; // Need at least 20 samples
-        }
-        
-        void clear() {
-            values.clear();
-            sum = 0.0;
-        }
+    public String getDebugInfo() {
+        return String.format(
+            "BottleneckDetector[samples=%d, tickAvg=%.2fms, renderAvg=%.2fms, type=%s]",
+            tickTime.size(), tickTime.getAverage(), renderTime.getAverage(), detect()
+        );
     }
 }
