@@ -281,6 +281,96 @@ public final class SessionLearning {
     }
 
     /**
+     * Apply decay to old historical data.
+     * 
+     * PRIORITY 3 - Optimization Enhancement
+     * 
+     * Older data becomes less relevant over time as hardware/software
+     * changes. This method applies exponential decay to historical stats.
+     * 
+     * @param maxAgeMillis Maximum age for full-weight data (default: 7 days)
+     */
+    public void applyDecay(long maxAgeMillis) {
+        long now = System.currentTimeMillis();
+        long decayThreshold = now - maxAgeMillis;
+        
+        int decayed = 0;
+        for (Map.Entry<String, ActionStats> entry : history.entrySet()) {
+            ActionStats stats = entry.getValue();
+            
+            // Calculate time since last activity
+            long lastActivity = Math.max(stats.lastSuccessTime, stats.lastFailureTime);
+            if (lastActivity < decayThreshold) {
+                // Apply decay: reduce weight of old data by 50%
+                stats.totalAttempts = (int) (stats.totalAttempts * 0.5);
+                stats.successCount = (int) (stats.successCount * 0.5);
+                stats.failureCount = (int) (stats.failureCount * 0.5);
+                stats.neutralCount = (int) (stats.neutralCount * 0.5);
+                
+                // If too little data remains, remove entry
+                if (stats.totalAttempts < 2) {
+                    history.remove(entry.getKey());
+                }
+                decayed++;
+            }
+        }
+        
+        if (decayed > 0) {
+            dirty = true;
+            safeLog("Applied decay to {} old entries", decayed);
+        }
+    }
+
+    /**
+     * Compact historical data by removing low-confidence entries.
+     * 
+     * PRIORITY 3 - Optimization Enhancement
+     * 
+     * Removes entries with very few samples to reduce storage size.
+     * 
+     * @param minAttempts Minimum attempts to keep (default: 3)
+     * @return Number of entries removed
+     */
+    public int compactHistory(int minAttempts) {
+        int removed = 0;
+        
+        // Remove entries with insufficient data
+        history.entrySet().removeIf(entry -> {
+            ActionStats stats = entry.getValue();
+            if (stats.totalAttempts < minAttempts) {
+                removed++;
+                return true;
+            }
+            return false;
+        });
+        
+        if (removed > 0) {
+            dirty = true;
+            safeLog("Compacted history: removed {} low-confidence entries", removed);
+        }
+        
+        return removed;
+    }
+
+    /**
+     * Apply decay with default settings (7 days).
+     * 
+     * PRIORITY 3 - Optimization Enhancement
+     */
+    public void applyDecay() {
+        applyDecay(7 * 24 * 60 * 60 * 1000L); // 7 days
+    }
+
+    /**
+     * Compact history with default settings (min 3 attempts).
+     * 
+     * PRIORITY 3 - Optimization Enhancement
+     */
+    public int compactHistory() {
+        return compactHistory(3);
+    }
+
+    /**
      * Save stats to disk (JSON).
      * Called on shutdown or periodically.
      */
