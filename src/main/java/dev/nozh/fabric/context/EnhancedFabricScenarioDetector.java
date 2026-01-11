@@ -2,6 +2,8 @@ package dev.nozh.fabric.context;
 
 import dev.nozh.core.context.*;
 import dev.nozh.core.input.InputActivityTracker;
+import dev.nozh.core.scenario.ActionWindowAnalyzer;
+import dev.nozh.core.scenario.HostileEntityTracker;
 import dev.nozh.core.util.DebugLogger;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.network.ClientPlayerEntity;
@@ -18,7 +20,7 @@ import java.util.List;
 /**
  * FULLY INTEGRATED Scenario Detector with all Phase 1 enhancements.
  * 
- * Now analyzes 15+ signals:
+ * Now analyzes 20+ signals:
  * - Player actions (combat, building, movement)
  * - Environment (dimension, biome, weather)
  * - Camera (rotation speed, FOV changes)
@@ -26,6 +28,7 @@ import java.util.List;
  * - Time of day
  * - Hostile mobs
  * - Input activity
+ * - Action windows
  * 
  * Uses ScenarioConfidenceCalculator for multi-signal scoring.
  * Accuracy: 90-95% with confidence tracking.
@@ -39,10 +42,13 @@ public final class EnhancedFabricScenarioDetector implements ScenarioDetector {
     private static final int COMBAT_COOLDOWN_TICKS = 100;
     private static final int AFK_THRESHOLD_TICKS = 2400;
     private static final long AFK_INPUT_THRESHOLD_MS = 120_000;
+    private static final int BUILDING_INTENSITY_THRESHOLD = 5;
+    private static final int MINING_INTENSITY_THRESHOLD = 10;
 
     private final MinecraftClient client;
     private final EnvironmentContext environmentContext;
     private final CameraActivityTracker cameraTracker;
+    private final ActionWindowAnalyzer actionWindowAnalyzer;
     
     // Action tracking
     private final Deque<PlayerAction> actionHistory = new ArrayDeque<>();
@@ -68,6 +74,7 @@ public final class EnhancedFabricScenarioDetector implements ScenarioDetector {
         this.client = client;
         this.environmentContext = new EnvironmentContext(client);
         this.cameraTracker = new CameraActivityTracker(client);
+        this.actionWindowAnalyzer = new ActionWindowAnalyzer();
     }
 
     @Override
