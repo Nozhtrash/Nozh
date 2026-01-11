@@ -7,6 +7,7 @@ import dev.nozh.core.capability.CapabilityId;
 import dev.nozh.core.capability.ProviderRegistry;
 import dev.nozh.core.config.ConfigManager;
 import dev.nozh.core.config.NozhConfig;
+import dev.nozh.core.config.OptimizationProfile;
 import dev.nozh.core.context.ScenarioDetector;
 import dev.nozh.core.intelligence.SessionLearning;
 import dev.nozh.core.matrix.ActionCandidate;
@@ -249,16 +250,15 @@ public final class GovernorRunner {
         DecisionBudget decisionBudget = new DecisionBudget(decisionBudgetMs);
         long decisionStartNanos = perfManager != null ? perfManager.startDecisionTimer() : System.nanoTime();
         
-        // FIXED: Use config OptimizationProfile and convert to governor OptimizationProfile
-        dev.nozh.core.config.OptimizationProfile configProfile = dev.nozh.core.config.OptimizationProfile.fromConfig(config.optimizationProfile);
-        OptimizationProfile governorProfile = configProfile.isAggressive() ? OptimizationProfile.AGGRESSIVE : OptimizationProfile.BALANCED;
+        // Use config OptimizationProfile directly
+        OptimizationProfile profile = OptimizationProfile.fromConfig(config.optimizationProfile);
         
         Optional<ActionCandidate> decisionOpt = governor.decide(
                 state,
                 mode,
                 bound,
                 now,
-                governorProfile,
+                profile,
                 config.targetFps,
                 config.reverseEpsilonMs,
                 reverseReady,
@@ -520,9 +520,8 @@ public final class GovernorRunner {
             return false;
         }
 
-        // FIXED: Use config OptimizationProfile and convert
-        dev.nozh.core.config.OptimizationProfile configProfile = dev.nozh.core.config.OptimizationProfile.fromConfig(config.optimizationProfile);
-        OptimizationProfile profile = configProfile.isAggressive() ? OptimizationProfile.AGGRESSIVE : OptimizationProfile.BALANCED;
+        // Use config OptimizationProfile directly
+        OptimizationProfile profile = OptimizationProfile.fromConfig(config.optimizationProfile);
         
         ActionCandidate decision = null;
         List<ActionCandidate> candidates = actionMatrix.generateCandidates(
