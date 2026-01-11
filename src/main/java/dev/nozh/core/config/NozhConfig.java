@@ -1,7 +1,6 @@
 package dev.nozh.core.config;
 
 import dev.nozh.NozhConstants;
-import dev.nozh.core.governor.OptimizationProfile;
 
 /**
  * NOZH configuration data (PROFESSIONAL SPEC).
