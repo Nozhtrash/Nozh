@@ -248,6 +248,84 @@ public final class SessionLearning {
     }
 
     /**
+     * Apply exponential decay to old history data.
+     * Uses Iterator to avoid ConcurrentModificationException.
+     * 
+     * @param maxAgeMillis Maximum age before decay is applied
+     */
+    public void applyDecay(long maxAgeMillis) {
+        java.util.Iterator<Map.Entry<String, ActionStats>> it = history.entrySet().iterator();
+        while (it.hasNext()) {
+            Map.Entry<String, ActionStats> entry = it.next();
+            ActionStats stats = entry.getValue();
+            long lastActivity = Math.max(stats.lastSuccessTime, stats.lastFailureTime);
+            
+            if (lastActivity < System.currentTimeMillis() - maxAgeMillis) {
+                // Apply decay
+                stats.totalAttempts = (int)(stats.totalAttempts * 0.5);
+                stats.successCount = (int)(stats.successCount * 0.5);
+                stats.failureCount = (int)(stats.failureCount * 0.5);
+                stats.neutralCount = (int)(stats.neutralCount * 0.5);
+                stats.totalFpsGain *= 0.5;
+                stats.totalP95DeltaMs *= 0.5;
+                stats.totalSpikeDelta = (int)(stats.totalSpikeDelta * 0.5);
+                
+                // Recalculate averages
+                if (stats.successCount > 0) {
+                    stats.avgFpsGain = stats.totalFpsGain / stats.successCount;
+                }
+                if (stats.totalAttempts > 0) {
+                    stats.avgP95DeltaMs = stats.totalP95DeltaMs / stats.totalAttempts;
+                    stats.avgSpikeDelta = (double) stats.totalSpikeDelta / stats.totalAttempts;
+                }
+                
+                // Remove if decayed too much
+                if (stats.totalAttempts < 2) {
+                    it.remove();
+                }
+                
+                dirty = true;
+            }
+        }
+    }
+
+    /**
+     * Apply decay with default 7-day threshold.
+     */
+    public void applyDecay() {
+        applyDecay(7 * 24 * 60 * 60 * 1000L); // 7 days
+    }
+
+    /**
+     * Remove low-confidence entries from history.
+     * Uses Iterator to avoid ConcurrentModificationException.
+     * 
+     * @param minAttempts Minimum attempts required to keep entry
+     * @return Number of entries removed
+     */
+    public int compactHistory(int minAttempts) {
+        int removed = 0;
+        java.util.Iterator<Map.Entry<String, ActionStats>> it = history.entrySet().iterator();
+        while (it.hasNext()) {
+            if (it.next().getValue().totalAttempts < minAttempts) {
+                it.remove();
+                removed++;
+            }
+        }
+        if (removed > 0) {
+            dirty = true;
+        }
+        return removed;
+    }
+
+    /**
+     * Compact history with default 3-attempt threshold.
+     */
+    public int compactHistory() {
+        return compactHistory(3);
+    }
+
+    /**
      * Get total attempts for this capability.
      */
     public int getTotalAttempts(CapabilityId id) {

@@ -193,6 +193,114 @@ public final class PredictiveAnalyzer {
     }
 
     /**
+     * Predict next frametime using linear regression.
+     * 
+     * @param history List of recent frametimes
+     * @return predicted next frametime, or -1.0 if insufficient data
+     */
+    public double predictNextFrametime(java.util.List<Double> history) {
+        if (history == null || history.size() < 2) return -1.0;
+        
+        int n = history.size();
+        double sumX = 0.0;
+        double sumY = 0.0;
+        double sumXY = 0.0;
+        double sumX2 = 0.0;
+        
+        for (int i = 0; i < n; i++) {
+            double x = i;
+            double y = history.get(i);
+            sumX += x;
+            sumY += y;
+            sumXY += x * y;
+            sumX2 += x * x;
+        }
+        
+        double meanX = sumX / n;
+        double meanY = sumY / n;
+        
+        double numerator = sumXY - n * meanX * meanY;
+        double denominator = sumX2 - n * meanX * meanX;
+        
+        if (Math.abs(denominator) < 0.0001) {
+            return meanY; // No trend, return mean
+        }
+        
+        double slope = numerator / denominator;
+        double intercept = meanY - slope * meanX;
+        
+        // Predict next value
+        return slope * n + intercept;
+    }
+
+    /**
+     * Check if we should wait for performance recovery.
+     * Returns true if short or medium slope indicates improvement.
+     */
+    public boolean shouldWaitForRecovery() {
+        Prediction current = evaluate();
+        if (!current.ready()) return false;
+        return current.shortSlope() < -0.1 || current.mediumSlope() < -0.1;
+    }
+
+    /**
+     * Predict spike probability based on variance analysis.
+     */
+    public SpikePrediction predictSpike() {
+        if (shortSampleCount < SHORT_WINDOW_SAMPLES) {
+            return new SpikePrediction(0.0, -1, "INSUFFICIENT_DATA");
+        }
+        
+        // Calculate variance in short window
+        double sum = 0.0;
+        for (int i = 0; i < shortSampleCount; i++) {
+            sum += readSample(shortWindow, shortSampleCount, SHORT_WINDOW_SAMPLES, shortWriteIndex, i);
+        }
+        double mean = sum / shortSampleCount;
+        
+        double variance = 0.0;
+        for (int i = 0; i < shortSampleCount; i++) {
+            double val = readSample(shortWindow, shortSampleCount, SHORT_WINDOW_SAMPLES, shortWriteIndex, i);
+            double diff = val - mean;
+            variance += diff * diff;
+        }
+        variance /= shortSampleCount;
+        
+        double stdDev = Math.sqrt(variance);
+        
+        // High variance = higher spike probability
+        double probability = Math.min(1.0, stdDev / (mean + 1.0));
+        
+        // Estimate time until spike (based on trend)
+        Prediction pred = evaluate();
+        long expectedInMs = 2000; // Default 2 seconds
+        if (pred.ready() && pred.shortSlope() > 0) {
+            // Faster deterioration = sooner spike
+            expectedInMs = (long) (1000 / Math.max(0.1, pred.shortSlope()));
+        }
+        
+        String cause = "VARIANCE";
+        if (probability > 0.6 && pred.shortSlope() > shortThreshold) {
+            cause = "TREND_AND_VARIANCE";
+        } else if (pred.shortSlope() > shortThreshold) {
+            cause = "TREND";
+        }
+        
+        return new SpikePrediction(probability, expectedInMs, cause);
+    }
+
+    /**
+     * Spike prediction result.
+     */
+    public record SpikePrediction(double probability, long expectedInMs, String cause) {
+        public boolean isLikely() { return probability > 0.6; }
+        public boolean isImminent() { return expectedInMs < 2000; }
+        public String toDisplayString() {
+            return String.format("Spike: %.0f%% in %dms (%s)", probability * 100, expectedInMs, cause);
+        }
+    }
+
+    /**
      * Get current trend description for logging.
      * Only allocates when called (logging only).
      */
