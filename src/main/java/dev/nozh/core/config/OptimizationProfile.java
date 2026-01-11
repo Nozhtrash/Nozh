@@ -32,6 +32,13 @@ public enum OptimizationProfile {
     }
     
     /**
+     * Returns true if this profile is aggressive (aggressiveness >= 0.7).
+     */
+    public boolean isAggressive() {
+        return this.aggressiveness >= 0.7;
+    }
+    
+    /**
      * Convert from config value (either OptimizationProfile or String) to OptimizationProfile enum.
      */
     public static OptimizationProfile fromConfig(Object config) {
