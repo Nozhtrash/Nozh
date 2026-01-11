@@ -13,6 +13,11 @@ public record CapabilityMetrics(
     double gameplayCost,
     double confidence
 ) {
+    /**
+     * Small epsilon to prevent division by zero in efficiency calculation.
+     */
+    private static final double COST_EPSILON = 0.1;
+    
     public static CapabilityMetrics create(double gain, double visual, double gameplay) {
         return new CapabilityMetrics(gain, visual, gameplay, 0.5);
     }
@@ -22,7 +27,7 @@ public record CapabilityMetrics(
      * Higher is better.
      */
     public double efficiency() {
-        return expectedGainMs / (visualCost + gameplayCost + 0.1);
+        return expectedGainMs / (visualCost + gameplayCost + COST_EPSILON);
     }
     
     /**

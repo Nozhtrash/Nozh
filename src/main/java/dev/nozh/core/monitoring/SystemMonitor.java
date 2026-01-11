@@ -239,7 +239,9 @@ public final class SystemMonitor {
     // Helper methods
     public double getCpuLoad() { return getSystemCpuLoad(); }
     public double getMemoryPressure() { return getMemoryUsage(); }
+    // TODO: Implement actual shader detection by querying renderer state
     public boolean areShadersActive() { return false; } // Placeholder
+    // TODO: Implement entity count tracking from world state
     public int getEntityCount() { return 0; } // Placeholder
 
     /**

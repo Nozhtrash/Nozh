@@ -16,6 +16,7 @@ public final class PredictiveAnalyzer {
     private static final double BASE_MEDIUM_THRESHOLD = 0.25;
     private static final double MIN_THRESHOLD = 0.15;
     private static final double MAX_THRESHOLD = 0.6;
+    private static final double EPSILON = 0.0001; // Small value to prevent division by zero
 
     // ZERO ALLOCATION: Use primitive array instead of ArrayList<Double>
     private final double[] shortWindow;
@@ -222,7 +223,7 @@ public final class PredictiveAnalyzer {
         double numerator = sumXY - n * meanX * meanY;
         double denominator = sumX2 - n * meanX * meanX;
         
-        if (Math.abs(denominator) < 0.0001) {
+        if (Math.abs(denominator) < EPSILON) {
             return meanY; // No trend, return mean
         }
         
