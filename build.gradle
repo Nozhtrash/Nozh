@@ -1,7 +1,19 @@
-plugins {
-	id 'fabric-loom' version "${loom_version}"
-	id 'maven-publish'
+buildscript {
+	repositories {
+		maven {
+			name = 'Fabric'
+			url = 'https://maven.fabricmc.net/'
+		}
+		mavenCentral()
+		gradlePluginPortal()
+	}
+	dependencies {
+		classpath "net.fabricmc:fabric-loom:${loom_version}"
+	}
 }
+
+apply plugin: 'fabric-loom'
+apply plugin: 'maven-publish'
 
 version = project.mod_version
 group = project.maven_group
