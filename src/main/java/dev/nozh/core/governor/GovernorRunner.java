@@ -14,7 +14,6 @@ import dev.nozh.core.matrix.ActionMatrix;
 import dev.nozh.core.matrix.ActionSuccessTracker;
 import dev.nozh.core.matrix.ConfidenceCalculator;
 import dev.nozh.core.matrix.ActionMatrixTuning;
-import dev.nozh.core.config.OptimizationProfile;
 import dev.nozh.core.compat.IrisCompat;
 import dev.nozh.core.compatibility.CompatibilityMatrix;
 import dev.nozh.core.profiler.PerfManager;
@@ -249,12 +248,17 @@ public final class GovernorRunner {
         int decisionBudgetMs = Math.min(config.governorDecisionBudgetMs, DECISION_LATENCY_TARGET_MS);
         DecisionBudget decisionBudget = new DecisionBudget(decisionBudgetMs);
         long decisionStartNanos = perfManager != null ? perfManager.startDecisionTimer() : System.nanoTime();
+        
+        // FIXED: Use config OptimizationProfile and convert to governor OptimizationProfile
+        dev.nozh.core.config.OptimizationProfile configProfile = dev.nozh.core.config.OptimizationProfile.fromConfig(config.optimizationProfile);
+        OptimizationProfile governorProfile = configProfile.isAggressive() ? OptimizationProfile.AGGRESSIVE : OptimizationProfile.BALANCED;
+        
         Optional<ActionCandidate> decisionOpt = governor.decide(
                 state,
                 mode,
                 bound,
                 now,
-                OptimizationProfile.fromConfig(config.optimizationProfile),
+                governorProfile,
                 config.targetFps,
                 config.reverseEpsilonMs,
                 reverseReady,
@@ -516,7 +520,10 @@ public final class GovernorRunner {
             return false;
         }
 
-        OptimizationProfile profile = OptimizationProfile.fromConfig(config.optimizationProfile);
+        // FIXED: Use config OptimizationProfile and convert
+        dev.nozh.core.config.OptimizationProfile configProfile = dev.nozh.core.config.OptimizationProfile.fromConfig(config.optimizationProfile);
+        OptimizationProfile profile = configProfile.isAggressive() ? OptimizationProfile.AGGRESSIVE : OptimizationProfile.BALANCED;
+        
         ActionCandidate decision = null;
         List<ActionCandidate> candidates = actionMatrix.generateCandidates(
                 policy,
