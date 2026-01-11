@@ -23,7 +23,7 @@ public enum CapabilityId {
     FOG,
     CHUNK_LOADING,
 
-    // NOZH Specialties (Phase 2)impact
+    // NOZH Specialties (Phase 2)
     RENDER_DISTANCE,
     SIMULATION_DISTANCE,
     ENTITY_DISTANCE,

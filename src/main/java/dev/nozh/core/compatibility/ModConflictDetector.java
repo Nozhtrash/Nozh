@@ -336,4 +336,53 @@ public final class ModConflictDetector {
                 installedMods.contains("vulkanmod") ||
                 installedMods.contains("canvas");
     }
+
+    /**
+     * Get GPU bias adjustment based on installed mods.
+     * Used for Director Mode v2 advanced detection.
+     */
+    public double getGpuBiasAdjustment() {
+        double bias = 1.0;
+        if (installedMods.contains("iris")) bias += 0.3;
+        if (installedMods.contains("distant-horizons")) bias += 0.25;
+        if (installedMods.contains("optifabric")) bias += 0.2;
+        if (installedMods.contains("canvas")) bias += 0.15;
+        if (installedMods.contains("vulkanmod")) bias += 0.15;
+        if (installedMods.contains("nvidium")) bias += 0.1;
+        if (installedMods.contains("fabricskyboxes")) bias += 0.05;
+        if (installedMods.contains("continuity")) bias += 0.05;
+        return bias;
+    }
+
+    /**
+     * Get CPU bias adjustment based on installed mods.
+     * Used for Director Mode v2 advanced detection.
+     */
+    public double getCpuBiasAdjustment() {
+        double bias = 1.0;
+        if (installedMods.contains("lithium")) bias += 0.2;
+        if (installedMods.contains("c2me")) bias += 0.15;
+        if (installedMods.contains("vmp")) bias += 0.15;
+        if (installedMods.contains("servercore")) bias += 0.1;
+        if (installedMods.contains("ferritecore")) bias += 0.05;
+        if (installedMods.contains("starlight") || installedMods.contains("phosphor")) bias += 0.1;
+        return bias;
+    }
+
+    /**
+     * Get count of optimization mods installed.
+     */
+    public int getOptimizationModCount() { return installedMods.size(); }
+
+    /**
+     * Check if a specific mod is loaded.
+     */
+    public boolean isModLoaded(String modId) { return installedMods.contains(modId); }
+
+    /**
+     * Get comma-separated list of installed mods.
+     */
+    public String getModListString() { 
+        return installedMods.isEmpty() ? "None" : String.join(", ", installedMods); 
+    }
 }

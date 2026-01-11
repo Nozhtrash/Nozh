@@ -82,7 +82,7 @@ public final class IntegratedGovernor {
     private final ScheduledExecutorService asyncExecutor;
     
     // State
-    private Scenario currentScenario = Scenario.STANDARD;
+    private volatile Scenario currentScenario = Scenario.STANDARD;
     
     // Store last decision reasoning for /nozh explain command
     private volatile DecisionReasoning lastDecisionReasoning = null;
