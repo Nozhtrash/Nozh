@@ -116,11 +116,15 @@ public record PendingSuggestion(
      * Format CapabilityValue for display.
      */
     private static String formatValue(CapabilityValue value) {
-        return switch (value) {
-            case CapabilityValue.IntValue iv -> String.valueOf(iv.value());
-            case CapabilityValue.EnumValue ev -> ev.name();
-            case CapabilityValue.BoolValue bv -> bv.value() ? "ON" : "OFF";
-            case CapabilityValue.FloatValue fv -> String.format("%.2f", fv.value());
-        };
+        if (value instanceof CapabilityValue.IntValue iv) {
+            return String.valueOf(iv.value());
+        } else if (value instanceof CapabilityValue.EnumValue ev) {
+            return ev.name();
+        } else if (value instanceof CapabilityValue.BoolValue bv) {
+            return bv.value() ? "ON" : "OFF";
+        } else if (value instanceof CapabilityValue.FloatValue fv) {
+            return String.format("%.2f", fv.value());
+        }
+        return value.toString();
     }
 }
