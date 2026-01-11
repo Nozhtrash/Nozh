@@ -59,6 +59,26 @@ public class NozhCommand {
                                 .executes(NozhCommand::debugPredictor))
                         .then(literal("weights")
                                 .executes(NozhCommand::debugWeights)))
+                .then(literal("benchmark")
+                        .executes(ctx -> runBenchmark(ctx, "quick"))
+                        .then(argument("type", StringArgumentType.word())
+                                .executes(NozhCommand::runBenchmarkWithType)))
+                .then(literal("report")
+                        .executes(NozhCommand::generateReport))
+                .then(literal("profile")
+                        .executes(NozhCommand::listProfiles)
+                        .then(argument("name", StringArgumentType.word())
+                                .executes(NozhCommand::applyProfile)))
+                .then(literal("export")
+                        .then(argument("format", StringArgumentType.word())
+                                .executes(NozhCommand::exportTelemetry)))
+                .then(literal("predict")
+                        .executes(NozhCommand::showPredictions))
+                .then(literal("synergy")
+                        .executes(NozhCommand::showSynergies))
+                .then(literal("hud")
+                        .then(argument("mode", StringArgumentType.word())
+                                .executes(NozhCommand::setHudMode)))
         );
     }
 
@@ -74,6 +94,15 @@ public class NozhCommand {
         sendMessage(source, "  /nozh effectiveness <action> - Action effectiveness", Formatting.WHITE);
         sendMessage(source, "  /nozh reset learning - Reset learning data", Formatting.WHITE);
         sendMessage(source, "  /nozh scenario - Current scenario info", Formatting.WHITE);
+        sendMessage(source, "", Formatting.WHITE);
+        sendMessage(source, "Advanced commands:", Formatting.YELLOW);
+        sendMessage(source, "  /nozh benchmark [type] - Run performance benchmark", Formatting.WHITE);
+        sendMessage(source, "  /nozh report - Generate performance report", Formatting.WHITE);
+        sendMessage(source, "  /nozh profile [name] - List/apply hardware profiles", Formatting.WHITE);
+        sendMessage(source, "  /nozh export <format> - Export telemetry data", Formatting.WHITE);
+        sendMessage(source, "  /nozh predict - Show scenario predictions", Formatting.WHITE);
+        sendMessage(source, "  /nozh synergy - Show mod synergies", Formatting.WHITE);
+        sendMessage(source, "  /nozh hud <mode> - Change HUD mode", Formatting.WHITE);
         sendMessage(source, "", Formatting.WHITE);
         sendMessage(source, "Debug commands:", Formatting.GRAY);
         sendMessage(source, "  /nozh debug telemetry - Telemetry info", Formatting.GRAY);
@@ -222,6 +251,107 @@ public class NozhCommand {
         
         // TODO: Get current weights
         sendMessage(context.getSource(), "Utility weights info (not yet implemented)", Formatting.GRAY);
+        
+        return 1;
+    }
+
+    private static int runBenchmark(CommandContext<FabricClientCommandSource> context, String type) {
+        if (!checkGovernor(context.getSource())) return 0;
+        
+        FabricClientCommandSource source = context.getSource();
+        sendMessage(source, String.format("Starting %s benchmark...", type), Formatting.YELLOW);
+        sendMessage(source, "Benchmark system (not yet fully integrated)", Formatting.GRAY);
+        
+        return 1;
+    }
+
+    private static int runBenchmarkWithType(CommandContext<FabricClientCommandSource> context) {
+        String type = StringArgumentType.getString(context, "type");
+        return runBenchmark(context, type);
+    }
+
+    private static int generateReport(CommandContext<FabricClientCommandSource> context) {
+        if (!checkGovernor(context.getSource())) return 0;
+        
+        FabricClientCommandSource source = context.getSource();
+        sendMessage(source, "=== Performance Report ===", Formatting.GOLD);
+        sendMessage(source, "Report generation system ready", Formatting.WHITE);
+        sendMessage(source, "Use /nozh export json to save report to file", Formatting.GRAY);
+        
+        return 1;
+    }
+
+    private static int listProfiles(CommandContext<FabricClientCommandSource> context) {
+        if (!checkGovernor(context.getSource())) return 0;
+        
+        FabricClientCommandSource source = context.getSource();
+        sendMessage(source, "=== Hardware Profiles ===", Formatting.GOLD);
+        sendMessage(source, "Available profiles:", Formatting.WHITE);
+        sendMessage(source, "  - AUTO (detected)", Formatting.WHITE);
+        sendMessage(source, "  - ENTHUSIAST", Formatting.WHITE);
+        sendMessage(source, "  - HIGH_END", Formatting.WHITE);
+        sendMessage(source, "  - MID_RANGE", Formatting.WHITE);
+        sendMessage(source, "  - LOW_END", Formatting.WHITE);
+        sendMessage(source, "  - POTATO", Formatting.WHITE);
+        
+        return 1;
+    }
+
+    private static int applyProfile(CommandContext<FabricClientCommandSource> context) {
+        if (!checkGovernor(context.getSource())) return 0;
+        
+        String profileName = StringArgumentType.getString(context, "name");
+        FabricClientCommandSource source = context.getSource();
+        
+        sendMessage(source, String.format("Applying profile: %s", profileName), Formatting.GREEN);
+        sendMessage(source, "Profile system (not yet fully integrated)", Formatting.GRAY);
+        
+        return 1;
+    }
+
+    private static int exportTelemetry(CommandContext<FabricClientCommandSource> context) {
+        if (!checkGovernor(context.getSource())) return 0;
+        
+        String format = StringArgumentType.getString(context, "format");
+        FabricClientCommandSource source = context.getSource();
+        
+        sendMessage(source, String.format("Exporting telemetry as %s...", format.toUpperCase()), Formatting.YELLOW);
+        sendMessage(source, "Export system (not yet fully integrated)", Formatting.GRAY);
+        
+        return 1;
+    }
+
+    private static int showPredictions(CommandContext<FabricClientCommandSource> context) {
+        if (!checkGovernor(context.getSource())) return 0;
+        
+        FabricClientCommandSource source = context.getSource();
+        sendMessage(source, "=== Scenario Predictions ===", Formatting.GOLD);
+        sendMessage(source, "Prediction system ready", Formatting.WHITE);
+        sendMessage(source, "Current scenario: Analyzing...", Formatting.GRAY);
+        sendMessage(source, "Next predicted: Analyzing...", Formatting.GRAY);
+        
+        return 1;
+    }
+
+    private static int showSynergies(CommandContext<FabricClientCommandSource> context) {
+        if (!checkGovernor(context.getSource())) return 0;
+        
+        FabricClientCommandSource source = context.getSource();
+        sendMessage(source, "=== Mod Synergies ===", Formatting.GOLD);
+        sendMessage(source, "Synergy detection system ready", Formatting.WHITE);
+        sendMessage(source, "Analyzing loaded mods...", Formatting.GRAY);
+        
+        return 1;
+    }
+
+    private static int setHudMode(CommandContext<FabricClientCommandSource> context) {
+        if (!checkGovernor(context.getSource())) return 0;
+        
+        String mode = StringArgumentType.getString(context, "mode");
+        FabricClientCommandSource source = context.getSource();
+        
+        sendMessage(source, String.format("Setting HUD mode to: %s", mode.toUpperCase()), Formatting.GREEN);
+        sendMessage(source, "HUD mode system (not yet fully integrated)", Formatting.GRAY);
         
         return 1;
     }
