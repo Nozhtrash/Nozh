@@ -11,6 +11,7 @@
  */
 package dev.nozh.core.governor;
 
+import dev.nozh.core.config.OptimizationProfile;
 import dev.nozh.core.matrix.ActionCandidate;
 import dev.nozh.core.matrix.ActionMatrix;
 import dev.nozh.core.state.RuntimeState;
