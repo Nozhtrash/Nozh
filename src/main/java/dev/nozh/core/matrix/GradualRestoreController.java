@@ -116,7 +116,11 @@ public final class GradualRestoreController {
             CapabilityValue current,
             List<String> progression) {
         
-        String currentName = current.name();
+        if (!(current instanceof CapabilityValue.EnumValue ev)) {
+            return current; // Not an enum value
+        }
+        
+        String currentName = ev.name();
         int currentIndex = progression.indexOf(currentName);
         
         if (currentIndex < 0 || currentIndex >= progression.size() - 1) {
@@ -124,7 +128,7 @@ public final class GradualRestoreController {
         }
         
         String nextName = progression.get(currentIndex + 1);
-        return CapabilityValue.valueOf(nextName);
+        return new CapabilityValue.EnumValue(nextName);
     }
 
     /**
@@ -134,7 +138,11 @@ public final class GradualRestoreController {
             CapabilityValue current,
             List<String> progression) {
         
-        String currentName = current.name();
+        if (!(current instanceof CapabilityValue.EnumValue ev)) {
+            return current; // Not an enum value
+        }
+        
+        String currentName = ev.name();
         int currentIndex = progression.indexOf(currentName);
         
         if (currentIndex <= 0) {
@@ -142,7 +150,7 @@ public final class GradualRestoreController {
         }
         
         String prevName = progression.get(currentIndex - 1);
-        return CapabilityValue.valueOf(prevName);
+        return new CapabilityValue.EnumValue(prevName);
     }
 
     /**
@@ -152,20 +160,20 @@ public final class GradualRestoreController {
             CapabilityValue current,
             List<Integer> steps) {
         
-        try {
-            int currentInt = Integer.parseInt(current.name());
-            
-            // Find next higher step
-            for (int step : steps) {
-                if (step > currentInt) {
-                    return CapabilityValue.of(String.valueOf(step));
-                }
-            }
-            
-            return current; // Already at or above max
-        } catch (NumberFormatException e) {
-            return current; // Not a number
+        if (!(current instanceof CapabilityValue.IntValue iv)) {
+            return current; // Not an int value
         }
+        
+        int currentInt = iv.value();
+        
+        // Find next higher step
+        for (int step : steps) {
+            if (step > currentInt) {
+                return new CapabilityValue.IntValue(step);
+            }
+        }
+        
+        return current; // Already at or above max
     }
 
     /**
@@ -175,21 +183,21 @@ public final class GradualRestoreController {
             CapabilityValue current,
             List<Integer> steps) {
         
-        try {
-            int currentInt = Integer.parseInt(current.name());
-            
-            // Find previous lower step (iterate in reverse)
-            for (int i = steps.size() - 1; i >= 0; i--) {
-                int step = steps.get(i);
-                if (step < currentInt) {
-                    return CapabilityValue.of(String.valueOf(step));
-                }
-            }
-            
-            return current; // Already at or below min
-        } catch (NumberFormatException e) {
-            return current; // Not a number
+        if (!(current instanceof CapabilityValue.IntValue iv)) {
+            return current; // Not an int value
         }
+        
+        int currentInt = iv.value();
+        
+        // Find previous lower step (iterate in reverse)
+        for (int i = steps.size() - 1; i >= 0; i--) {
+            int step = steps.get(i);
+            if (step < currentInt) {
+                return new CapabilityValue.IntValue(step);
+            }
+        }
+        
+        return current; // Already at or below min
     }
 
     /**

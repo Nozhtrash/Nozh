@@ -45,9 +45,10 @@ public final class ManualModeController {
         if (this.enabled != enabled) {
             this.enabled = enabled;
             if (!enabled) {
+                int size = pendingQueue.size();
                 // Clear queue when disabling manual mode
                 pendingQueue.clear();
-                logger.info("Manual mode disabled, cleared {} pending suggestions", pendingQueue.size());
+                logger.info(String.format("Manual mode disabled, cleared %d pending suggestions", size));
             } else {
                 logger.info("Manual mode enabled");
             }
@@ -70,7 +71,7 @@ public final class ManualModeController {
      */
     public synchronized void suggestAction(ActionCandidate candidate) {
         if (!enabled) {
-            logger.debug("Manual mode disabled, ignoring suggestion for {}", candidate.capabilityId());
+            logger.debug(String.format("Manual mode disabled, ignoring suggestion for %s", candidate.capabilityId()));
             return;
         }
 
@@ -89,11 +90,11 @@ public final class ManualModeController {
         );
 
         pendingQueue.offer(suggestion);
-        logger.info("Queued suggestion: {} → {} ({})",
+        logger.info(String.format("Queued suggestion: %s → %s (%s)",
             candidate.capabilityId(),
             candidate.targetValue(),
             candidate.reason()
-        );
+        ));
     }
 
     /**
@@ -111,10 +112,10 @@ public final class ManualModeController {
             return Optional.empty();
         }
 
-        logger.info("Applied suggestion: {} → {}",
+        logger.info(String.format("Applied suggestion: %s → %s",
             suggestion.capability(),
             suggestion.suggestedValue()
-        );
+        ));
 
         return Optional.of(suggestion);
     }
@@ -133,10 +134,10 @@ public final class ManualModeController {
             return Optional.empty();
         }
 
-        logger.info("Dismissed suggestion: {} → {}",
+        logger.info(String.format("Dismissed suggestion: %s → %s",
             suggestion.capability(),
             suggestion.suggestedValue()
-        );
+        ));
 
         return Optional.of(suggestion);
     }
@@ -168,7 +169,7 @@ public final class ManualModeController {
         int count = pendingQueue.size();
         pendingQueue.clear();
         if (count > 0) {
-            logger.info("Cleared {} pending suggestions", count);
+            logger.info(String.format("Cleared %d pending suggestions", count));
         }
     }
 
@@ -180,14 +181,14 @@ public final class ManualModeController {
         while (!pendingQueue.isEmpty() && pendingQueue.peek().isExpired()) {
             PendingSuggestion expired = pendingQueue.poll();
             removed++;
-            logger.debug("Removed expired suggestion: {} → {}",
+            logger.debug(String.format("Removed expired suggestion: %s → %s",
                 expired.capability(),
                 expired.suggestedValue()
-            );
+            ));
         }
         
         if (removed > 0) {
-            logger.info("Cleaned up {} expired suggestions", removed);
+            logger.info(String.format("Cleaned up %d expired suggestions", removed));
         }
     }
 

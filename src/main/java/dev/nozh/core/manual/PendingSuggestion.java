@@ -103,11 +103,24 @@ public record PendingSuggestion(
      * @return Formatted string like "RENDER_DISTANCE → 8 (Low FPS detected, 45s)"
      */
     public String toDisplayString() {
+        String valueStr = formatValue(suggestedValue);
         return String.format("%s → %s (%s, %ds)",
             capability.name(),
-            suggestedValue.name(),
+            valueStr,
             reason,
             timeRemainingSeconds()
         );
+    }
+
+    /**
+     * Format CapabilityValue for display.
+     */
+    private static String formatValue(CapabilityValue value) {
+        return switch (value) {
+            case CapabilityValue.IntValue iv -> String.valueOf(iv.value());
+            case CapabilityValue.EnumValue ev -> ev.name();
+            case CapabilityValue.BoolValue bv -> bv.value() ? "ON" : "OFF";
+            case CapabilityValue.FloatValue fv -> String.format("%.2f", fv.value());
+        };
     }
 }
