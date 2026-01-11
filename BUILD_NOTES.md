@@ -131,7 +131,7 @@ This will use only locally cached dependencies and skip all network requests.
 
 If build issues persist after trying the above solutions:
 
-1. Check [Fabric Discord](https://discord.gg/v6v4pMv) #toolchain-dev channel
+1. Check Fabric Discord #toolchain-dev channel (https://fabricmc.net/discuss for current invite)
 2. Review [Fabric Wiki](https://fabricmc.net/wiki/) for Loom documentation
 3. Search [Fabric Loom GitHub Issues](https://github.com/FabricMC/fabric-loom/issues)
 4. Check this repository's GitHub Issues for similar problems
