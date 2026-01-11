@@ -15,7 +15,7 @@ import dev.nozh.core.capability.SafetyLevel;
 import dev.nozh.core.capability.SideEffects;
 import dev.nozh.core.context.Scenario;
 import dev.nozh.core.governor.ModePolicy;
-import dev.nozh.core.governor.OptimizationProfile;
+import dev.nozh.core.config.OptimizationProfile;
 import dev.nozh.core.intelligence.SessionLearning;
 import dev.nozh.core.state.BaselineSnapshot;
 import dev.nozh.core.governor.ActionOutcome;

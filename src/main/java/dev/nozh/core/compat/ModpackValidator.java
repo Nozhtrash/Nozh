@@ -1,7 +1,7 @@
 package dev.nozh.core.compat;
 
 import dev.nozh.core.config.NozhConfig;
-import dev.nozh.core.governor.OptimizationProfile;
+import dev.nozh.core.config.OptimizationProfile;
 import net.fabricmc.loader.api.FabricLoader;
 import java.util.*;
 

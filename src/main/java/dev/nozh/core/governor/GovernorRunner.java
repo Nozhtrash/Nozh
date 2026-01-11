@@ -14,7 +14,7 @@ import dev.nozh.core.matrix.ActionMatrix;
 import dev.nozh.core.matrix.ActionSuccessTracker;
 import dev.nozh.core.matrix.ConfidenceCalculator;
 import dev.nozh.core.matrix.ActionMatrixTuning;
-import dev.nozh.core.governor.OptimizationProfile;
+import dev.nozh.core.config.OptimizationProfile;
 import dev.nozh.core.compat.IrisCompat;
 import dev.nozh.core.compatibility.CompatibilityMatrix;
 import dev.nozh.core.profiler.PerfManager;

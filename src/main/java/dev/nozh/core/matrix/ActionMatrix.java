@@ -11,7 +11,7 @@ import dev.nozh.core.capability.SafetyLevel;
 import dev.nozh.core.context.Scenario;
 import dev.nozh.core.governor.DecisionBudget;
 import dev.nozh.core.governor.ModePolicy;
-import dev.nozh.core.governor.OptimizationProfile;
+import dev.nozh.core.config.OptimizationProfile;
 
 import java.util.ArrayList;
 import java.util.Comparator;

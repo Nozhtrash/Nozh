@@ -3,7 +3,7 @@ package dev.nozh.core.matrix;
 import dev.nozh.core.capability.CapabilityId;
 import dev.nozh.core.capability.CapabilityValue;
 import dev.nozh.core.context.Scenario;
-import dev.nozh.core.governor.OptimizationProfile;
+import dev.nozh.core.config.OptimizationProfile;
 
 import java.util.Collections;
 import java.util.EnumMap;

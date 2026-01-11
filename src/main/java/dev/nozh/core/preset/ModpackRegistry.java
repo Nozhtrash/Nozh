@@ -1,6 +1,6 @@
 package dev.nozh.core.preset;
 
-import dev.nozh.core.governor.OptimizationProfile;
+import dev.nozh.core.config.OptimizationProfile;
 import dev.nozh.core.matrix.ActionMatrixTuning;
 import net.fabricmc.loader.api.FabricLoader;
 
