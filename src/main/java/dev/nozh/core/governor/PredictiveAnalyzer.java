@@ -217,6 +217,148 @@ public final class PredictiveAnalyzer {
         return label + "=STABLE(" + String.format("%.3f", slope) + ")";
     }
 
+    /**
+     * Predict next frametime based on linear regression.
+     * 
+     * Uses simple linear regression to predict the next frametime value
+     * based on the trend in recent samples.
+     * 
+     * PRIORITY 3 - Predictive Algorithm Enhancement
+     * 
+     * @param history List of recent frametime samples (in ms)
+     * @return Predicted next frametime, or -1.0 if insufficient data
+     */
+    public double predictNextFrametime(java.util.List<Double> history) {
+        if (history == null || history.size() < 2) {
+            return -1.0;
+        }
+
+        int n = history.size();
+        double sumX = 0.0;
+        double sumY = 0.0;
+        double sumXY = 0.0;
+        double sumX2 = 0.0;
+
+        for (int i = 0; i < n; i++) {
+            double x = i;
+            double y = history.get(i);
+            sumX += x;
+            sumY += y;
+            sumXY += x * y;
+            sumX2 += x * x;
+        }
+
+        double meanX = sumX / n;
+        double meanY = sumY / n;
+
+        double numerator = sumXY - n * meanX * meanY;
+        double denominator = sumX2 - n * meanX * meanX;
+
+        if (Math.abs(denominator) < 0.0001) {
+            // No trend, return average
+            return meanY;
+        }
+
+        double slope = numerator / denominator;
+        double intercept = meanY - slope * meanX;
+
+        // Predict next value (x = n)
+        return slope * n + intercept;
+    }
+
+    /**
+     * Check if performance will auto-recover without intervention.
+     * 
+     * If the trend is improving (negative slope), we should wait
+     * instead of taking action, as the system is recovering naturally.
+     * 
+     * PRIORITY 3 - Auto-recovery Detection
+     * 
+     * @return true if trend indicates auto-recovery
+     */
+    public boolean shouldWaitForRecovery() {
+        Prediction current = evaluate();
+        if (!current.ready()) {
+            return false;
+        }
+
+        // Check if both windows show improving trend
+        boolean shortImproving = current.shortSlope() < -0.1;
+        boolean mediumImproving = current.mediumSlope() < -0.1;
+
+        // Wait if either window shows strong improvement
+        return shortImproving || mediumImproving;
+    }
+
+    /**
+     * Predict spike before it happens based on variance patterns.
+     * 
+     * PRIORITY 3 - Spike Prediction
+     * 
+     * @return Spike prediction with probability and timing
+     */
+    public SpikePrediction predictSpike() {
+        if (shortSampleCount < SHORT_WINDOW_SAMPLES) {
+            return new SpikePrediction(0.0, 0, "Insufficient data");
+        }
+
+        // Calculate variance in short window
+        double sum = 0.0;
+        for (int i = 0; i < shortSampleCount; i++) {
+            sum += readSample(shortWindow, shortSampleCount, SHORT_WINDOW_SAMPLES, shortWriteIndex, i);
+        }
+        double mean = sum / shortSampleCount;
+
+        double variance = 0.0;
+        for (int i = 0; i < shortSampleCount; i++) {
+            double sample = readSample(shortWindow, shortSampleCount, SHORT_WINDOW_SAMPLES, shortWriteIndex, i);
+            double diff = sample - mean;
+            variance += diff * diff;
+        }
+        variance /= shortSampleCount;
+
+        // High variance indicates instability and potential spikes
+        double stdDev = Math.sqrt(variance);
+        double coefficient = stdDev / (mean + 0.1);
+
+        // Probability based on coefficient of variation
+        double probability = Math.min(1.0, coefficient / 0.5);
+
+        // Estimate timing: higher slope = sooner spike
+        Prediction pred = evaluate();
+        double slope = pred.shortSlope();
+        long estimatedMs = slope > 0 ? (long)(1000 / slope) : 5000;
+        estimatedMs = Math.max(100, Math.min(estimatedMs, 10000));
+
+        String cause = coefficient > 0.5 ? "High variance detected" : "Moderate instability";
+
+        return new SpikePrediction(probability, estimatedMs, cause);
+    }
+
+    /**
+     * Spike prediction result.
+     * 
+     * PRIORITY 3 - Spike Prediction
+     */
+    public record SpikePrediction(
+        double probability,      // 0.0 to 1.0
+        long expectedInMs,       // Expected time until spike
+        String cause             // Description of spike cause
+    ) {
+        public boolean isLikely() {
+            return probability > 0.6;
+        }
+
+        public boolean isImminent() {
+            return expectedInMs < 2000;
+        }
+
+        public String toDisplayString() {
+            return String.format("Spike: %.0f%% in %dms (%s)",
+                probability * 100, expectedInMs, cause);
+        }
+    }
+
     public enum Window {
         NONE,
         SHORT,

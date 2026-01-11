@@ -336,4 +336,134 @@ public final class ModConflictDetector {
                 installedMods.contains("vulkanmod") ||
                 installedMods.contains("canvas");
     }
+
+    /**
+     * Get GPU bias adjustment based on installed mods.
+     * 
+     * PRIORITY 2 - Director Mode v2 Enhancement
+     * 
+     * If GPU-heavy mods like Iris are active, increase GPU bias
+     * in bottleneck detection.
+     * 
+     * @return GPU bias multiplier (1.0 = no bias, >1.0 = more GPU-bound)
+     */
+    public double getGpuBiasAdjustment() {
+        double bias = 1.0;
+
+        // Iris adds significant GPU load with shaders
+        if (installedMods.contains("iris")) {
+            bias += 0.3;
+        }
+
+        // Distant Horizons is very GPU-intensive
+        if (installedMods.contains("distant-horizons")) {
+            bias += 0.25;
+        }
+
+        // Shader mods
+        if (installedMods.contains("optifabric")) {
+            bias += 0.2;
+        }
+
+        // Enhanced rendering
+        if (installedMods.contains("canvas")) {
+            bias += 0.15;
+        }
+
+        if (installedMods.contains("vulkanmod")) {
+            bias += 0.15;
+        }
+
+        if (installedMods.contains("nvidium")) {
+            bias += 0.1;
+        }
+
+        // Visual enhancement mods
+        if (installedMods.contains("fabricskyboxes")) {
+            bias += 0.05;
+        }
+
+        if (installedMods.contains("continuity")) {
+            bias += 0.05;
+        }
+
+        return bias;
+    }
+
+    /**
+     * Get CPU bias adjustment based on installed mods.
+     * 
+     * PRIORITY 2 - Director Mode v2 Enhancement
+     * 
+     * If CPU-heavy mods like Lithium are active, increase CPU bias
+     * in bottleneck detection.
+     * 
+     * @return CPU bias multiplier (1.0 = no bias, >1.0 = more CPU-bound)
+     */
+    public double getCpuBiasAdjustment() {
+        double bias = 1.0;
+
+        // Lithium optimizes CPU usage but also means more CPU work
+        if (installedMods.contains("lithium")) {
+            bias += 0.2;
+        }
+
+        // C2ME increases chunk processing (CPU)
+        if (installedMods.contains("c2me")) {
+            bias += 0.15;
+        }
+
+        // VMP (Very Many Players) is CPU-focused
+        if (installedMods.contains("vmp")) {
+            bias += 0.15;
+        }
+
+        // ServerCore optimizes server-side (tick) performance
+        if (installedMods.contains("servercore")) {
+            bias += 0.1;
+        }
+
+        // FerriteCore optimizes memory (CPU-related)
+        if (installedMods.contains("ferritecore")) {
+            bias += 0.05;
+        }
+
+        // Starlight/Phosphor optimize lighting (CPU)
+        if (installedMods.contains("starlight") || installedMods.contains("phosphor")) {
+            bias += 0.1;
+        }
+
+        return bias;
+    }
+
+    /**
+     * Get loaded optimization mod count.
+     * 
+     * @return Number of detected optimization mods
+     */
+    public int getOptimizationModCount() {
+        return installedMods.size();
+    }
+
+    /**
+     * Check if a specific mod is loaded.
+     * 
+     * @param modId Mod identifier
+     * @return true if mod is loaded
+     */
+    public boolean isModLoaded(String modId) {
+        return installedMods.contains(modId);
+    }
+
+    /**
+     * Get formatted mod list for logging.
+     * 
+     * @return Comma-separated list of loaded mods
+     */
+    public String getModListString() {
+        if (installedMods.isEmpty()) {
+            return "None";
+        }
+        return String.join(", ", installedMods);
+    }
 }
