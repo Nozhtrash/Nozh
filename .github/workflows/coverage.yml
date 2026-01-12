@@ -1,0 +1,59 @@
+name: Coverage
+
+on:
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+concurrency:
+  group: coverage-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test-and-coverage:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+
+      - name: Run unit tests
+        run: ./gradlew test --no-daemon
+
+      - name: Generate JaCoCo report (if available)
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ./gradlew -q tasks --all | grep -q "\bjacocoTestReport\b"; then
+            ./gradlew jacocoTestReport --no-daemon
+          else
+            echo "::notice::jacocoTestReport task not found; skipping coverage report"
+          fi
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: |
+            **/build/test-results/test/**
+            **/build/reports/tests/test/**
+          if-no-files-found: ignore
+
+      - name: Upload JaCoCo report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: jacoco-report
+          path: |
+            **/build/reports/jacoco/**
+            **/build/reports/jacoco/test/**
+            **/build/reports/jacoco/test/jacocoTestReport.xml
+          if-no-files-found: ignore

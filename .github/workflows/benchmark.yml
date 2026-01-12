@@ -1,0 +1,45 @@
+name: Benchmarks
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 4 * * 1' # Every Monday 04:00 UTC
+
+concurrency:
+  group: benchmarks-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  jmh:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+
+      - name: Run JMH benchmarks (if available)
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ./gradlew -q tasks --all | grep -q "\bjmh\b"; then
+            ./gradlew jmh --no-daemon
+          else
+            echo "::notice::No jmh Gradle task found; skipping benchmarks"
+          fi
+
+      - name: Upload benchmark artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: jmh-results
+          path: |
+            **/build/reports/jmh/**
+            **/build/reports/jmh/results.json
+          if-no-files-found: ignore
