@@ -50,7 +50,10 @@ public final class PotatoModeEngine {
         LEVEL_4(0.2, 50, "Extreme optimizations for ancient hardware"),
 
         /** Extreme mode, absolute minimum */
-        EXTREME(0.1, 75, "Extreme optimizations - playability over everything");
+        EXTREME(0.1, 75, "Extreme optimizations - playability over everything"),
+
+        /** Survival mode (default/unoptimized) */
+        SURVIVAL(1.0, 0, "Standard gameplay");
 
         /** Quality multiplier (0.0 = minimum, 1.0 = normal) */
         public final double qualityMultiplier;
@@ -67,6 +70,10 @@ public final class PotatoModeEngine {
             this.description = desc;
         }
     }
+    
+    // Global tracker for static access
+    private static volatile boolean globalActive = false;
+
 
     /**
      * Potato mode configuration.
@@ -289,6 +296,8 @@ public final class PotatoModeEngine {
                 currentConfig.renderDistance,
                 currentConfig.entityDistance,
                 (int) (currentConfig.particleMultiplier * 100));
+        
+        globalActive = true;
     }
 
     public int estimateFpsGain(PotatoLevel level) {
@@ -307,6 +316,7 @@ public final class PotatoModeEngine {
      */
     public void deactivate() {
         this.active = false;
+        globalActive = false;
         NozhConstants.LOGGER.info("Potato mode deactivated");
     }
 
@@ -317,6 +327,13 @@ public final class PotatoModeEngine {
      */
     public boolean isActive() {
         return active;
+    }
+    
+    /**
+     * Static check for global potato mode state.
+     */
+    public static boolean isGlobalActive() {
+        return globalActive;
     }
 
     /**

@@ -2,7 +2,7 @@ package dev.nozh.core.governor;
 
 import dev.nozh.NozhConstants;
 import dev.nozh.core.compatibility.ModConflictDetector;
-import dev.nozh.core.context.*;
+import dev.nozh.api.Scenario;
 import dev.nozh.core.learning.*;
 import dev.nozh.core.monitoring.*;
 import dev.nozh.core.safety.*;
@@ -89,6 +89,7 @@ public final class IntegratedGovernor {
     // State
     private volatile Scenario currentScenario = Scenario.STANDARD;
     private volatile DecisionReasoning lastDecisionReasoning = null;
+    private final PerformancePredictor predictor; // Re-using variable name from error log, assumed same as perfPredictor but let's just use perfPredictor correctly
 
     // Thread-safe atomic variables
     private final AtomicLong lastDecisionTimeRaw = new AtomicLong(Double.doubleToRawLongBits(0.0));
@@ -133,6 +134,7 @@ public final class IntegratedGovernor {
             NozhConstants.LOGGER.warn("Failed to get target_fps from config, using default: " + e.getMessage());
         }
         this.perfPredictor = new PerformancePredictor((int) targetFps);
+        this.predictor = this.perfPredictor; // Alias for compatibility
         this.scenarioPredictor = new dev.nozh.core.intelligence.ScenarioPredictor();
 
         // Initialize learning
@@ -195,7 +197,7 @@ public final class IntegratedGovernor {
             if (scenarioPredictor != null && client.player != null) {
                 double velocity = client.player.getVelocity().length();
                 // Estimate recent actions via interaction manager if possible, or 0
-                scenarioPredictor.recordScenario(currentScenario, velocity, 0);
+                scenarioPredictor.recordScenario(dev.nozh.core.intelligence.ScenarioPredictor.Scenario.valueOf(currentScenario.name()), velocity, 0);
             }
 
             TelemetrySample sample = collectTelemetry();
@@ -763,20 +765,7 @@ public final class IntegratedGovernor {
         }
     }
 
-    private String determineHardwareProfile(double fps) {
-        if (fps <= 0 || !Double.isFinite(fps)) {
-            return "medium";
-        }
-
-        double highThreshold = configManager != null ? configManager.getValue("hw_profile_high_fps", 120.0) : 120.0;
-        double mediumThreshold = configManager != null ? configManager.getValue("hw_profile_medium_fps", 60.0) : 60.0;
-
-        if (fps >= highThreshold)
-            return "high";
-        if (fps >= mediumThreshold)
-            return "medium";
-        return "low";
-    }
+    // Removed duplicate determineHardwareProfile method to fix compilation error
 
     private TelemetrySample collectTelemetry() {
         if (client == null || client.world == null) {

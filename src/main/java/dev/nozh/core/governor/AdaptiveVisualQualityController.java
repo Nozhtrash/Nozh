@@ -128,7 +128,7 @@ public final class AdaptiveVisualQualityController {
         if (upshiftStreak >= REQUIRED_UPSHIFT_STREAK && currentStep > minStep) {
             // CONFLICT RESOLUTION: If Potato Mode is active, do not upshift.
             // The user requested maximum performance; restoring quality contradicts that.
-            if (dev.nozh.core.potato.PotatoModeEngine.isActive()) {
+            if (dev.nozh.core.potato.PotatoModeEngine.isGlobalActive()) {
                 return Optional.empty();
             }
 

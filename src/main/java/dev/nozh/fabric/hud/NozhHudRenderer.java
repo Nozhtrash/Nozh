@@ -133,7 +133,10 @@ public final class NozhHudRenderer {
         return String.format("FPS: %d | P95: %.1fms", fps, p95);
     }
     
-    // Removed outdated brittle color logic
+    private int calculateFps(double frametimeMs) {
+        if (frametimeMs <= 0) return 0;
+        return (int) Math.round(1000.0 / frametimeMs);
+    }
 
     private String translate(String key, String fallback) {
         try {
