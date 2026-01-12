@@ -1,6 +1,7 @@
 package dev.nozh.core.governor;
 
 import dev.nozh.NozhConstants;
+import dev.nozh.core.compatibility.ModConflictDetector;
 import dev.nozh.core.context.*;
 import dev.nozh.core.learning.*;
 import dev.nozh.core.monitoring.*;
@@ -9,6 +10,7 @@ import dev.nozh.core.telemetry.*;
 import dev.nozh.core.prediction.PerformancePredictor;
 import dev.nozh.core.config.AdaptiveConfigManager;
 import dev.nozh.fabric.context.EnhancedFabricScenarioDetector;
+import dev.nozh.fabric.telemetry.FabricFrameTickSampler;
 import net.minecraft.client.MinecraftClient;
 import java.nio.file.Path;
 import java.util.Arrays;
@@ -30,24 +32,11 @@ import java.util.concurrent.atomic.*;
  * 9. Health monitoring
  * 
  * This is the production-ready, self-learning governor.
- * 
- * <p>
- * <b>Thread Safety:</b> This class is thread-safe with atomic variables
- * for shared state. Main tick() should be called from game thread, but
- * state can be read safely from other threads.
- * 
- * <p>
- * <b>Null Safety:</b> All public methods validate inputs and handle null
- * gracefully with appropriate logging.
- * 
- * FULL INTEGRATION: Phases 1-4 complete + P0 hardening
- * AUDIT FIX #1: Thread-safe atomic variables for lastDecisionTime and
- * tickCounter
- * AUDIT FIX #24: Removed Thread.sleep from game thread - async execution
- * CRITICAL FIX: makeDecision() fully implemented (v0.4.0)
- * 
- * @author Nozh Team
- * @since 0.3.0
+ *
+ * (Patch) Director Mode v2 wiring:
+ * - Real tickMs via ClientTickEvents.
+ * - Real render frametime via WorldRenderEvents.
+ * - CPU/GPU bias multipliers from ModConflictDetector.
  */
 public final class IntegratedGovernor {
 
@@ -56,6 +45,12 @@ public final class IntegratedGovernor {
     private final IntegratedRingTelemetryBuffer telemetryBuffer;
     private final EnhancedFabricScenarioDetector scenarioDetector;
     private final TransactionalExecutor executor;
+
+    // Director Mode inputs
+    private final FabricFrameTickSampler frameTickSampler;
+    private final ModConflictDetector modConflictDetector;
+    private final double cpuBias;
+    private final double gpuBias;
 
     // Context tracking
     private final EnvironmentContext environmentContext;
@@ -81,30 +76,20 @@ public final class IntegratedGovernor {
     // Safety
     private final ProviderBlacklist blacklist;
 
-    // AUDIT FIX #24: Async action execution
+    // Async action execution
     private final ScheduledExecutorService asyncExecutor;
 
     // State
     private volatile Scenario currentScenario = Scenario.STANDARD;
-
-    // Store last decision reasoning for /nozh explain command
     private volatile DecisionReasoning lastDecisionReasoning = null;
 
-    // AUDIT FIX #1: Thread-safe atomic variables
-    // lastDecisionTime stored as raw long bits for double atomic operations
+    // Thread-safe atomic variables
     private final AtomicLong lastDecisionTimeRaw = new AtomicLong(Double.doubleToRawLongBits(0.0));
     private final AtomicInteger tickCounter = new AtomicInteger(0);
 
     private volatile boolean initialized = false;
     private final ConcurrentHashMap<String, CompletableFuture<ActionResult>> pendingActions = new ConcurrentHashMap<>();
 
-    /**
-     * Constructs a new IntegratedGovernor.
-     * 
-     * @param client  Minecraft client instance (must not be null)
-     * @param logPath path for performance logs (must not be null)
-     * @throws NullPointerException if client or logPath is null
-     */
     public IntegratedGovernor(MinecraftClient client, Path logPath) {
         if (client == null) {
             throw new NullPointerException("MinecraftClient cannot be null");
@@ -115,10 +100,15 @@ public final class IntegratedGovernor {
 
         this.client = client;
 
+        // Director Mode wiring: real tick/render sampling + bias from detected mods
+        this.frameTickSampler = new FabricFrameTickSampler(client);
+        this.modConflictDetector = new ModConflictDetector();
+        this.cpuBias = modConflictDetector.getCpuBiasAdjustment();
+        this.gpuBias = modConflictDetector.getGpuBiasAdjustment();
+
         // Initialize core systems
         this.telemetryBuffer = new IntegratedRingTelemetryBuffer(512);
         this.scenarioDetector = new EnhancedFabricScenarioDetector(client);
-        // FIX: Pass telemetryBuffer to TransactionalExecutor constructor
         this.executor = new TransactionalExecutor(this.telemetryBuffer);
 
         // Initialize context
@@ -130,8 +120,7 @@ public final class IntegratedGovernor {
         this.configManager = new AdaptiveConfigManager();
 
         // Initialize intelligence
-        // FIX: Get target FPS from config instead of hardcoding
-        double targetFps = 60.0; // Default fallback
+        double targetFps = 60.0;
         try {
             targetFps = this.configManager.getValue("target_fps", 60.0);
         } catch (Exception e) {
@@ -153,7 +142,7 @@ public final class IntegratedGovernor {
         this.blacklist = new ProviderBlacklist();
         this.blacklist.initializeDefaults();
 
-        // AUDIT FIX #24: Initialize async executor for non-blocking action execution
+        // Initialize async executor
         this.asyncExecutor = Executors.newScheduledThreadPool(2, r -> {
             Thread t = new Thread(r, "Governor-Async");
             t.setDaemon(true);
@@ -164,7 +153,6 @@ public final class IntegratedGovernor {
         NozhConstants.LOGGER.info("IntegratedGovernor initialized - Full autonomous pipeline active");
     }
 
-    // AUDIT FIX #1: Thread-safe getter/setter for lastDecisionTime
     private double getLastDecisionTime() {
         return Double.longBitsToDouble(lastDecisionTimeRaw.get());
     }
@@ -173,50 +161,31 @@ public final class IntegratedGovernor {
         lastDecisionTimeRaw.set(Double.doubleToRawLongBits(time));
     }
 
-    /**
-     * Main update tick - called every game tick.
-     * 
-     * <p>
-     * <b>Thread Safety:</b> Must be called from main game thread only.
-     * 
-     * <p>
-     * This method is hardened against null values and exceptions. All errors
-     * are logged and recorded in health metrics.
-     * 
-     * AUDIT FIX #1: Uses atomic increment for tickCounter
-     * AUDIT FIX #24: No blocking operations - all async.
-     */
     public void tick() {
         if (!initialized) {
             return;
         }
 
-        // CRITICAL NULL CHECK: World must exist
         if (client == null || client.world == null) {
             return;
         }
 
         try {
-            // AUDIT FIX #1: Atomic increment
             tickCounter.incrementAndGet();
 
-            // Update context trackers (null-safe)
             if (cameraTracker != null) {
                 cameraTracker.tick();
             }
 
-            // Collect telemetry
             TelemetrySample sample = collectTelemetry();
             if (sample != null && telemetryBuffer != null) {
                 telemetryBuffer.add(sample);
 
-                // Feed to predictor
                 if (sample.hasFrametimeData() && predictor != null) {
                     predictor.addSample(sample.frametimeMs());
                 }
             }
 
-            // AUDIT FIX #3: Enhanced null checks with proper error handling
             if (telemetryBuffer == null) {
                 NozhConstants.LOGGER.error("CRITICAL: Telemetry buffer is null");
                 if (healthMonitor != null) {
@@ -234,7 +203,6 @@ public final class IntegratedGovernor {
                 return;
             }
 
-            // Update health monitor (null-safe)
             if (healthMonitor != null) {
                 try {
                     healthMonitor.updateFromTelemetry(snapshot);
@@ -243,7 +211,6 @@ public final class IntegratedGovernor {
                 }
             }
 
-            // Record metrics (null-safe)
             if (metricsCollector != null) {
                 try {
                     metricsCollector.recordTelemetry(snapshot);
@@ -252,8 +219,6 @@ public final class IntegratedGovernor {
                 }
             }
 
-            // Log metrics periodically (every 5 seconds)
-            // AUDIT FIX #1: Use atomic get()
             if (tickCounter.get() % 100 == 0 && eventLogger != null) {
                 try {
                     double avgFps = 1000.0 / snapshot.avgFrametimeMs();
@@ -263,15 +228,11 @@ public final class IntegratedGovernor {
                 }
             }
 
-            // Check if we should make a decision
-            // AUDIT FIX #6 (partial): Uses config value instead of hardcoded
             if (configManager != null) {
                 double decisionInterval = configManager.getValue("decision_interval_ms", 2000.0);
                 double now = System.currentTimeMillis();
-                // AUDIT FIX #1: Use atomic getter
                 if (now - getLastDecisionTime() >= decisionInterval) {
                     makeDecision(snapshot);
-                    // AUDIT FIX #1: Use atomic setter
                     setLastDecisionTime(now);
                 }
             }
@@ -284,20 +245,6 @@ public final class IntegratedGovernor {
         }
     }
 
-    /**
-     * Core decision-making logic - FULLY IMPLEMENTED.
-     * 
-     * Decision pipeline:
-     * 1. Detect current scenario with confidence
-     * 2. Calculate current FPS and compare to target
-     * 3. Check predictor for frame drop prediction
-     * 4. Determine if optimization is needed
-     * 5. Get available actions (filtered by blacklist)
-     * 6. Select best action using Q-learning
-     * 7. Execute action with full reasoning
-     * 
-     * @param snapshot current telemetry data
-     */
     private void makeDecision(TelemetrySnapshot snapshot) {
         if (snapshot == null) {
             NozhConstants.LOGGER.warn("Cannot make decision with null snapshot");
@@ -305,7 +252,6 @@ public final class IntegratedGovernor {
         }
 
         try {
-            // STEP 1: Detect scenario
             Scenario detected = detectScenario();
             if (detected == null) {
                 NozhConstants.LOGGER.warn("Scenario detection failed, using default");
@@ -314,7 +260,6 @@ public final class IntegratedGovernor {
 
             currentScenario = detected;
 
-            // STEP 2: Calculate current FPS
             double currentFps = 1000.0 / snapshot.avgFrametimeMs();
             if (!Double.isFinite(currentFps) || currentFps <= 0) {
                 NozhConstants.LOGGER.warn("Invalid FPS calculated: " + currentFps);
@@ -323,7 +268,6 @@ public final class IntegratedGovernor {
 
             double targetFps = configManager != null ? configManager.getValue("target_fps", 60.0) : 60.0;
 
-            // STEP 3: Check predictor for upcoming issues
             boolean predictedDrop = false;
             if (predictor != null) {
                 try {
@@ -336,14 +280,12 @@ public final class IntegratedGovernor {
                 }
             }
 
-            // STEP 4: Determine if action is needed
             boolean needsOptimization = currentFps < targetFps ||
                     predictedDrop ||
                     snapshot.spikeCount() > 5;
 
             if (!needsOptimization) {
-                // Performance is good, no action needed
-                if (tickCounter.get() % 200 == 0) { // Log every 10 seconds
+                if (tickCounter.get() % 200 == 0) {
                     NozhConstants.LOGGER.debug(String.format(
                             "Performance stable: %.1f FPS (target: %.0f), scenario: %s",
                             currentFps, targetFps, currentScenario));
@@ -351,14 +293,15 @@ public final class IntegratedGovernor {
                 return;
             }
 
-            // STEP 5: Get available actions
             String[] availableActions = getAvailableActions();
             if (availableActions == null || availableActions.length == 0) {
                 NozhConstants.LOGGER.warn("No available actions to optimize performance");
                 return;
             }
 
-            // STEP 6: Select best action using Q-learning
+            // Director Mode: reorder + tie-break using bias multipliers.
+            availableActions = applyDirectorBias(availableActions);
+
             String hardwareProfile = determineHardwareProfile(currentFps);
             PerformanceLearningEngine.GameState currentState = new PerformanceLearningEngine.GameState(
                     currentScenario,
@@ -367,14 +310,9 @@ public final class IntegratedGovernor {
 
             String selectedAction = null;
             if (learningEngine != null) {
-                try {
-                    selectedAction = learningEngine.getBestAction(currentState, availableActions);
-                } catch (Exception e) {
-                    NozhConstants.LOGGER.error("Learning engine action selection failed", e);
-                }
+                selectedAction = selectBestActionWithBias(currentState, availableActions);
             }
 
-            // Fallback: if learning engine fails, pick first action
             if (selectedAction == null && availableActions.length > 0) {
                 selectedAction = availableActions[0];
                 NozhConstants.LOGGER.warn("Using fallback action: " + selectedAction);
@@ -385,7 +323,6 @@ public final class IntegratedGovernor {
                 return;
             }
 
-            // STEP 7: Get Q-value for logging
             double qValue = 0.0;
             if (learningEngine != null) {
                 try {
@@ -395,26 +332,22 @@ public final class IntegratedGovernor {
                 }
             }
 
-            // Create detailed reasoning (without utility score for now)
             DecisionReasoning reasoning = DecisionReasoning.create(
                     currentScenario,
                     currentFps,
                     targetFps,
-                    0.0, // utilityScore - disabled for now
+                    0.0,
                     qValue,
                     predictedDrop,
                     snapshot.spikeCount());
 
-            // Store for /nozh explain command
             this.lastDecisionReasoning = reasoning;
 
-            // Log decision
             NozhConstants.LOGGER.info(String.format(
                     "DECISION: Executing '%s' | %s",
                     selectedAction,
                     reasoning));
 
-            // STEP 8: Execute action
             executeAction(
                     selectedAction,
                     reasoning,
@@ -430,10 +363,77 @@ public final class IntegratedGovernor {
         }
     }
 
-    /**
-     * Detect current scenario using scenario detector.
-     * FIX: Properly extract Scenario from ScenarioSnapshot.
-     */
+    private String selectBestActionWithBias(PerformanceLearningEngine.GameState state, String[] actions) {
+        if (learningEngine == null || actions == null || actions.length == 0) {
+            return null;
+        }
+
+        String best = null;
+        double bestScore = -Double.MAX_VALUE;
+
+        for (String action : actions) {
+            if (action == null) {
+                continue;
+            }
+
+            double q;
+            try {
+                q = learningEngine.getActionValue(state, action);
+            } catch (Exception e) {
+                q = 0.0;
+            }
+
+            double score = q * getActionBiasMultiplier(action);
+            if (best == null || score > bestScore) {
+                best = action;
+                bestScore = score;
+            }
+        }
+
+        return best;
+    }
+
+    private String[] applyDirectorBias(String[] actions) {
+        if (actions == null || actions.length <= 1) {
+            return actions;
+        }
+
+        try {
+            return Arrays.stream(actions)
+                    .sorted((a, b) -> Double.compare(getActionBiasMultiplier(b), getActionBiasMultiplier(a)))
+                    .toArray(String[]::new);
+        } catch (Exception e) {
+            NozhConstants.LOGGER.error("Failed to apply Director Mode bias", e);
+            return actions;
+        }
+    }
+
+    private double getActionBiasMultiplier(String actionId) {
+        if (actionId == null) {
+            return 1.0;
+        }
+
+        boolean gpuAction = switch (actionId) {
+            case "disable_clouds", "reduce_shadows", "lower_particles" -> true;
+            case "reduce_render_distance" -> true;
+            default -> false;
+        };
+
+        boolean cpuAction = switch (actionId) {
+            case "lower_entity_distance" -> true;
+            default -> false;
+        };
+
+        double mult = 1.0;
+        if (gpuAction) {
+            mult *= gpuBias;
+        }
+        if (cpuAction) {
+            mult *= cpuBias;
+        }
+        return mult;
+    }
+
     private Scenario detectScenario() {
         if (scenarioDetector == null) {
             return Scenario.STANDARD;
@@ -451,23 +451,10 @@ public final class IntegratedGovernor {
         }
     }
 
-    /**
-     * AUDIT FIX #3: Enhanced null pointer handling in executeAction.
-     * AUDIT FIX #24: Execute action asynchronously without blocking game thread.
-     * 
-     * All null checks now properly register failures in tracking systems.
-     * 
-     * @param actionId       action to execute (must not be null)
-     * @param reasoning      decision reasoning (for logging/tracking)
-     * @param beforeSnapshot snapshot before action (for analysis)
-     * @param state          game state (must not be null)
-     * @param fpsBefore      FPS before action (must be positive)
-     */
     private void executeAction(String actionId, DecisionReasoning reasoning,
             TelemetrySnapshot beforeSnapshot,
             PerformanceLearningEngine.GameState state,
             double fpsBefore) {
-        // AUDIT FIX #3: Comprehensive input validation with failure recording
         if (actionId == null) {
             NozhConstants.LOGGER.error("CRITICAL: Cannot execute action with null actionId");
             if (healthMonitor != null) {
@@ -523,17 +510,14 @@ public final class IntegratedGovernor {
             return;
         }
 
-        // Check if action is already pending
         if (pendingActions.containsKey(actionId)) {
             NozhConstants.LOGGER.warn("Action already pending: " + actionId);
             return;
         }
 
         long startTime = System.currentTimeMillis();
-        // AUDIT FIX #6: Fixed null check before getValue()
         double expectedFpsDelta = configManager != null ? configManager.getValue("expected_fps_delta", 15.0) : 15.0;
 
-        // Record action start for effectiveness tracking
         if (effectivenessTracker != null) {
             try {
                 effectivenessTracker.recordActionStart(actionId, expectedFpsDelta, reasoning);
@@ -542,13 +526,9 @@ public final class IntegratedGovernor {
             }
         }
 
-        // AUDIT FIX #24: Execute action asynchronously
         CompletableFuture<ActionResult> future = CompletableFuture.supplyAsync(() -> {
             try {
-                // TODO: Execute actual provider action
-                // For now, simulate success
                 boolean executionSuccess = true;
-
                 return new ActionResult(executionSuccess, startTime);
             } catch (Exception e) {
                 NozhConstants.LOGGER.error("Action execution failed: " + actionId, e);
@@ -556,8 +536,6 @@ public final class IntegratedGovernor {
             }
         }, asyncExecutor);
 
-        // AUDIT FIX #24: Schedule measurement after stabilization period (1s)
-        // This runs async - doesn't block game thread
         asyncExecutor.schedule(() -> {
             try {
                 ActionResult result = future.get();
@@ -566,7 +544,6 @@ public final class IntegratedGovernor {
                         expectedFpsDelta, result.executionSuccess, result.startTime);
             } catch (Exception e) {
                 NozhConstants.LOGGER.error("Failed to measure action results: " + actionId, e);
-                // AUDIT FIX #3: Record failure in tracking systems
                 if (effectivenessTracker != null) {
                     effectivenessTracker.recordActionResult(actionId, 0.0, false);
                 }
@@ -581,13 +558,7 @@ public final class IntegratedGovernor {
         pendingActions.put(actionId, future);
     }
 
-    /**
-     * Measure action results and update learning.
-     * Called asynchronously after action stabilization period.
-     * 
-     * AUDIT FIX #3: Enhanced null handling for afterSnapshot.
-     */
-    @SuppressWarnings({ "unused", "java:S1172" }) // Parameters kept for future use
+    @SuppressWarnings({ "unused", "java:S1172" })
     private void measureAndLearnFromAction(
             String actionId,
             DecisionReasoning reasoning,
@@ -598,13 +569,11 @@ public final class IntegratedGovernor {
             long startTime) {
 
         try {
-            // AUDIT FIX #3: Measure results with explicit null handling
             TelemetrySnapshot afterSnapshot = telemetryBuffer != null ? telemetryBuffer.snapshot() : null;
 
             if (afterSnapshot == null) {
                 NozhConstants.LOGGER.error("No telemetry after action execution for: " + actionId);
 
-                // AUDIT FIX #3: Register the failure explicitly
                 if (effectivenessTracker != null) {
                     effectivenessTracker.recordActionResult(actionId, 0.0, false);
                 }
@@ -618,7 +587,7 @@ public final class IntegratedGovernor {
                     metricsCollector.recordAction(actionId, false, duration);
                 }
 
-                return; // Exit early
+                return;
             }
 
             double fpsAfter = 1000.0 / afterSnapshot.avgFrametimeMs();
@@ -627,7 +596,6 @@ public final class IntegratedGovernor {
             long duration = System.currentTimeMillis() - startTime;
             boolean success = executionSuccess && actualFpsDelta > 0;
 
-            // Record results (null-safe)
             if (effectivenessTracker != null) {
                 try {
                     effectivenessTracker.recordActionResult(actionId, actualFpsDelta, success);
@@ -656,13 +624,11 @@ public final class IntegratedGovernor {
                 healthMonitor.recordError("action_failed: " + actionId);
             }
 
-            // Calculate reward for learning
-            double visualImpact = 0.0; // TODO: Measure from provider
-            double gameplayImpact = 0.0; // TODO: Measure from provider
+            double visualImpact = 0.0;
+            double gameplayImpact = 0.0;
             double reward = PerformanceLearningEngine.calculateReward(
                     fpsBefore, fpsAfter, visualImpact, gameplayImpact);
 
-            // Update learning (null-safe)
             if (learningEngine != null) {
                 try {
                     PerformanceLearningEngine.GameState newState = new PerformanceLearningEngine.GameState(
@@ -673,7 +639,6 @@ public final class IntegratedGovernor {
                 }
             }
 
-            // Adapt weights (null-safe)
             if (weightTuner != null) {
                 try {
                     weightTuner.adaptWeights(currentScenario, actionId, actualFpsDelta, visualImpact, gameplayImpact);
@@ -682,7 +647,6 @@ public final class IntegratedGovernor {
                 }
             }
 
-            // Adapt config (null-safe)
             if (configManager != null) {
                 try {
                     configManager.adaptValue("target_fps", fpsAfter, configManager.getValue("target_fps", 60.0));
@@ -696,9 +660,6 @@ public final class IntegratedGovernor {
         }
     }
 
-    /**
-     * Simple result holder for async action execution.
-     */
     private static class ActionResult {
         final boolean executionSuccess;
         final long startTime;
@@ -737,7 +698,6 @@ public final class IntegratedGovernor {
             return "medium";
         }
 
-        // AUDIT FIX #6 (partial): Configurable thresholds
         double highThreshold = configManager != null ? configManager.getValue("hw_profile_high_fps", 120.0) : 120.0;
         double mediumThreshold = configManager != null ? configManager.getValue("hw_profile_medium_fps", 60.0) : 60.0;
 
@@ -754,28 +714,42 @@ public final class IntegratedGovernor {
         }
 
         try {
-            double frametime = client.getLastFrameDuration();
+            double renderMs = frameTickSampler != null ? frameTickSampler.getLastRenderMs() : -1.0;
+
+            double rawFrame = client.getLastFrameDuration();
+            double fallbackFrameMs = rawFrame;
+            if (Double.isFinite(rawFrame) && rawFrame > 0.0 && rawFrame < 1.0) {
+                fallbackFrameMs = rawFrame * 1000.0;
+            }
+
+            double frametimeMs = (renderMs >= 0.0) ? renderMs : fallbackFrameMs;
+
+            double tickMs = frameTickSampler != null ? frameTickSampler.getLastTickMs() : -1.0;
+
             int fps = client.getCurrentFps();
 
-            // Validate collected data
-            if (frametime < 0 || !Double.isFinite(frametime)) {
-                frametime = 16.67; // Default to 60 FPS
+            if (frametimeMs < 0 || !Double.isFinite(frametimeMs)) {
+                frametimeMs = 16.67;
+            }
+
+            if (tickMs < 0 || !Double.isFinite(tickMs)) {
+                tickMs = -1;
             }
 
             if (fps < 0) {
-                fps = 60; // Default FPS
+                fps = 60;
             }
 
             int droppedCount = telemetryBuffer != null ? telemetryBuffer.getDroppedCount() : 0;
 
             return new TelemetrySample(
                     System.currentTimeMillis(),
-                    frametime,
-                    -1, // tick time
+                    frametimeMs,
+                    tickMs,
                     fps,
-                    -1, // entities
-                    -1, // chunks
-                    -1, // draw calls
+                    -1,
+                    -1,
+                    -1,
                     droppedCount);
         } catch (Exception e) {
             NozhConstants.LOGGER.error("Failed to collect telemetry", e);
@@ -783,13 +757,6 @@ public final class IntegratedGovernor {
         }
     }
 
-    // Public API methods
-
-    /**
-     * Get the last decision reasoning (for /nozh explain command).
-     * 
-     * @return last decision reasoning, or null if no decisions made yet
-     */
     public DecisionReasoning getLastDecisionReasoning() {
         return lastDecisionReasoning;
     }
@@ -884,27 +851,15 @@ public final class IntegratedGovernor {
         }
     }
 
-    /**
-     * Get pending actions count (for monitoring).
-     */
     public int getPendingActionsCount() {
         return pendingActions.size();
     }
 
-    /**
-     * Shutdown governor and release resources.
-     * 
-     * AUDIT FIX #4: Enhanced resource cleanup with comprehensive error tracking.
-     * AUDIT FIX #24: Also shutdown async executor.
-     * FIX: Removed call to non-existent executor.shutdown() method.
-     */
     public void shutdown() {
         NozhConstants.LOGGER.info("Starting IntegratedGovernor shutdown...");
 
-        // AUDIT FIX #4: Track all errors during shutdown (but don't throw)
         int errorCount = 0;
 
-        // Shutdown components
         if (eventLogger != null) {
             try {
                 eventLogger.shutdown();
@@ -913,9 +868,6 @@ public final class IntegratedGovernor {
                 NozhConstants.LOGGER.error("Failed to shutdown event logger", e);
             }
         }
-
-        // FIX: TransactionalExecutor doesn't have a shutdown() method
-        // Removed: executor.shutdown()
 
         if (effectivenessTracker != null) {
             try {
@@ -926,7 +878,6 @@ public final class IntegratedGovernor {
             }
         }
 
-        // AUDIT FIX #4 & #24: Shutdown async executor with proper timeout
         if (asyncExecutor != null) {
             asyncExecutor.shutdown();
             try {
@@ -937,7 +888,6 @@ public final class IntegratedGovernor {
                         NozhConstants.LOGGER.warn("Forced shutdown of " + pendingTasks.size() + " pending tasks");
                     }
 
-                    // Wait a bit more for forced shutdown
                     if (!asyncExecutor.awaitTermination(2, TimeUnit.SECONDS)) {
                         errorCount++;
                         NozhConstants.LOGGER.error("Async executor still did not terminate after forced shutdown");
@@ -951,7 +901,6 @@ public final class IntegratedGovernor {
             }
         }
 
-        // Clear pending actions
         try {
             int pending = pendingActions.size();
             if (pending > 0) {
@@ -966,7 +915,6 @@ public final class IntegratedGovernor {
 
         initialized = false;
 
-        // AUDIT FIX #4: Report shutdown status (without throwing)
         if (errorCount == 0) {
             NozhConstants.LOGGER.info("IntegratedGovernor shutdown completed successfully");
         } else {
