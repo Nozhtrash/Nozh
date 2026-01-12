@@ -9,6 +9,9 @@ import dev.nozh.core.safety.*;
 import dev.nozh.core.telemetry.*;
 import dev.nozh.core.prediction.PerformancePredictor;
 import dev.nozh.core.config.AdaptiveConfigManager;
+import dev.nozh.core.capability.ProviderRegistry;
+import dev.nozh.core.capability.ProviderExecutor;
+import dev.nozh.core.capability.ProviderHealthTracker;
 import dev.nozh.fabric.context.EnhancedFabricScenarioDetector;
 import dev.nozh.fabric.telemetry.FabricFrameTickSampler;
 import net.minecraft.client.MinecraftClient;
@@ -75,6 +78,10 @@ public final class IntegratedGovernor {
 
     // Safety
     private final ProviderBlacklist blacklist;
+
+    // Action Execution System
+    private final ProviderRegistry providerRegistry;
+    private final ProviderExecutor providerExecutor;
 
     // Async action execution
     private final ScheduledExecutorService asyncExecutor;
@@ -149,8 +156,15 @@ public final class IntegratedGovernor {
             return t;
         });
 
+        // Initialize provider system - THIS IS CRITICAL FOR ACTUAL ACTION EXECUTION
+        ProviderHealthTracker healthTracker = new ProviderHealthTracker();
+        this.providerRegistry = new ProviderRegistry(healthTracker);
+        ProviderRegistry.discoverProviders(this.providerRegistry);
+        this.providerExecutor = new ProviderExecutor(this.providerRegistry, this.asyncExecutor);
+
         this.initialized = true;
         NozhConstants.LOGGER.info("IntegratedGovernor initialized - Full autonomous pipeline active");
+        NozhConstants.LOGGER.info("Available providers: {}", this.providerRegistry.getRegisteredProviderIds());
     }
 
     private double getLastDecisionTime() {
@@ -526,22 +540,33 @@ public final class IntegratedGovernor {
             }
         }
 
-        CompletableFuture<ActionResult> future = CompletableFuture.supplyAsync(() -> {
-            try {
-                boolean executionSuccess = true;
-                return new ActionResult(executionSuccess, startTime);
-            } catch (Exception e) {
-                NozhConstants.LOGGER.error("Action execution failed: " + actionId, e);
-                return new ActionResult(false, startTime);
-            }
-        }, asyncExecutor);
+        // CRITICAL: Actually execute the action using ProviderExecutor
+        NozhConstants.LOGGER.info("Executing action via ProviderExecutor: {}", actionId);
+        
+        CompletableFuture<ProviderExecutor.ExecutionResult> executionFuture = 
+            providerExecutor.executeAction(actionId);
+        
+        // Wrap the result for our internal tracking
+        CompletableFuture<ActionResult> future = executionFuture.thenApply(result -> {
+            NozhConstants.LOGGER.info("Action '{}' execution result: success={}, message={}, duration={}ms", 
+                actionId, result.isSuccess(), result.getMessage(), result.getExecutionTimeMs());
+            return new ActionResult(result.isSuccess(), startTime);
+        }).exceptionally(ex -> {
+            NozhConstants.LOGGER.error("Action execution failed: " + actionId, ex);
+            return new ActionResult(false, startTime);
+        });
 
         asyncExecutor.schedule(() -> {
             try {
-                ActionResult result = future.get();
+                ActionResult result = future.get(5, TimeUnit.SECONDS);
                 measureAndLearnFromAction(
                         actionId, reasoning, state, fpsBefore,
                         expectedFpsDelta, result.executionSuccess, result.startTime);
+            } catch (TimeoutException e) {
+                NozhConstants.LOGGER.warn("Action execution timed out: {}", actionId);
+                if (effectivenessTracker != null) {
+                    effectivenessTracker.recordActionResult(actionId, 0.0, false);
+                }
             } catch (Exception e) {
                 NozhConstants.LOGGER.error("Failed to measure action results: " + actionId, e);
                 if (effectivenessTracker != null) {
@@ -553,7 +578,7 @@ public final class IntegratedGovernor {
             } finally {
                 pendingActions.remove(actionId);
             }
-        }, 1000, TimeUnit.MILLISECONDS);
+        }, 1500, TimeUnit.MILLISECONDS); // Increased delay to allow action to take effect
 
         pendingActions.put(actionId, future);
     }

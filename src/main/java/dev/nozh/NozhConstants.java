@@ -45,7 +45,7 @@ public final class NozhConstants {
         Path configDir;
         try {
             configDir = FabricLoader.getInstance().getConfigDir().resolve(MOD_ID);
-        } catch (Throwable ignored) {
+        } catch (Exception e) {\r\n            // Fallback if FabricLoader not available (e.g., in tests)
             configDir = Path.of("config").resolve(MOD_ID);
         }
         CONFIG_DIR = configDir;
@@ -64,6 +64,31 @@ public final class NozhConstants {
     // Profiler defaults
     public static final int DEFAULT_RING_BUFFER_SIZE = 300; // ~5 seconds at 60fps
     public static final int STATS_UPDATE_INTERVAL_FRAMES = 30; // Update stats every 30 frames
+
+    // =========================================
+    // Server Performance Callbacks
+    // =========================================
+    
+    private static volatile Runnable serverTickCallback = null;
+    
+    /**
+     * Set callback for server tick notifications.
+     * Called by ServerPerformanceDetector during initialization.
+     */
+    public static void setServerTickCallback(Runnable callback) {
+        serverTickCallback = callback;
+    }
+    
+    /**
+     * Notify that a server tick was received.
+     * Called by MixinClientPlayNetworkHandler.
+     */
+    public static void notifyServerTick() {
+        Runnable callback = serverTickCallback;
+        if (callback != null) {
+            callback.run();
+        }
+    }
 
     private NozhConstants() {
         // Utility class

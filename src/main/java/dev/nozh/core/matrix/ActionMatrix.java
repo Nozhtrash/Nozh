@@ -90,7 +90,7 @@ public final class ActionMatrix {
     private static dev.nozh.core.compatibility.CompatibilityMatrix createCompatibilityMatrixSafe() {
         try {
             return new dev.nozh.core.compatibility.CompatibilityMatrix();
-        } catch (Throwable e) {
+        } catch (Exception e) {
             // Tests don't have FabricLoader available
             return null;
         }

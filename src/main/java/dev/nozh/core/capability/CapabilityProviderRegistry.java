@@ -13,6 +13,10 @@ import java.util.concurrent.ConcurrentHashMap;
 /**
  * Central registry for all capability providers.
  * 
+ * @deprecated This is the LEGACY provider registry. The modern system uses
+ * {@link ProviderRegistry} with {@link OptimizationProvider} implementations.
+ * See ProviderRegistry.discoverProviders() for the active provider registration.
+ * 
  * Providers are the actual implementations that modify game settings.
  * This registry manages their lifecycle and provides safe execution.
  * 
@@ -27,7 +31,9 @@ public class CapabilityProviderRegistry {
      * Initialize all built-in providers.
      * Should be called during mod initialization.
      * 
-     * TEMPORARY FIX: Disabled until proper integration with IntegratedGovernor
+     * NOTE: This legacy registry is no longer actively used.
+     * The new system uses ProviderRegistry with OptimizationProvider.
+     * See IntegratedGovernor constructor for the modern initialization.
      */
     public static synchronized void initialize() {
         if (initialized) {
@@ -36,24 +42,11 @@ public class CapabilityProviderRegistry {
         }
         
         try {
-            // TODO: Re-enable when IntegratedGovernor properly calls this
-            // For now, providers will be registered lazily when needed
-            
-            /* TEMPORARILY DISABLED - FIX BUILD ISSUE
-            register("render_distance", new RenderDistanceProvider());
-            register("simulation_distance", new SimulationDistanceProvider());
-            register("particles", new ParticlesProvider());
-            register("entity_distance", new EntityDistanceProvider());
-            register("graphics_mode", new GraphicsModeProvider());
-            register("mipmap_levels", new MipmapLevelsProvider());
-            register("smooth_lighting", new SmoothLightingProvider());
-            register("clouds", new CloudsProvider());
-            register("vsync", new VsyncProvider());
-            register("max_fps", new MaxFpsProvider());
-            */
+            // Legacy registry - providers have been migrated to ProviderRegistry
+            // See dev.nozh.core.capability.providers package for modern providers
             
             initialized = true;
-            NozhConstants.LOGGER.info("CapabilityProviderRegistry initialized (providers disabled temporarily)");
+            NozhConstants.LOGGER.info("CapabilityProviderRegistry initialized (legacy API - use ProviderRegistry instead)");
             
         } catch (Exception e) {
             NozhConstants.LOGGER.error("Failed to initialize CapabilityProviderRegistry", e);
@@ -88,7 +81,8 @@ public class CapabilityProviderRegistry {
     /**
      * Execute an action with the registered provider.
      * 
-     * TEMPORARILY DISABLED - Needs migration to new CapabilityProvider API
+     * @deprecated Use {@link ProviderRegistry} with {@link ProviderExecutor} instead.
+     * The new system uses OptimizationProvider implementations in the providers/ package.
      * 
      * @param actionId the action to execute
      * @param client Minecraft client instance
@@ -149,7 +143,7 @@ public class CapabilityProviderRegistry {
      * Restore a setting to a previous value.
      * Used by rollback system.
      * 
-     * TEMPORARILY DISABLED - Needs migration to new CapabilityProvider API
+     * @deprecated Use the rollback mechanism in {@link ProviderExecutor} instead.
      * 
      * @param actionId the action that was executed
      * @param snapshot the snapshot containing the old value

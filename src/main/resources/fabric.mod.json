@@ -11,10 +11,8 @@
   "license": "MIT",
   "environment": "*",
   "entrypoints": {
-    "main": [
-      "dev.nozh.NozhMod"
-    ],
     "client": [
+      "dev.nozh.NozhMod",
       "dev.nozh.client.NozhModClient",
       "dev.nozh.fabric.priority2.NozhPriority2Client"
     ],

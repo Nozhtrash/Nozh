@@ -67,7 +67,7 @@ public final class HudViewModelBuilder {
         CompatibilityMatrix compatibilityMatrix = null;
         try {
             compatibilityMatrix = new CompatibilityMatrix();
-        } catch (Throwable e) {
+        } catch (Exception e) {
             // Ignore compatibility initialization failures (tests/headless)
         }
         List<HudViewModel.ProviderViewModel> providerVMs = new ArrayList<>();

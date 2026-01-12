@@ -38,6 +38,13 @@ public final class SessionLearning {
     private static final String STATS_TMP_FILE = "nozh_session.json.tmp";
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
     private static final long SAVE_INTERVAL_MILLIS = 60000;
+    
+    // Memory management constants
+    private static final int MAX_HISTORY_ENTRIES = 500; // Maximum action-scenario pairs
+    private static final long STALE_ENTRY_AGE_MS = 24 * 60 * 60 * 1000L; // 24 hours
+    private static final int MIN_ATTEMPTS_TO_KEEP = 3; // Minimum attempts to survive compaction
+    private static final double DECAY_FACTOR = 0.5; // Weight halves every decay cycle
+    private static final long DECAY_CYCLE_MS = 7 * 24 * 60 * 60 * 1000L; // 7 days
 
     private static final String DEFAULT_SESSION_KEY = "DEFAULT";
     private final Map<String, ActionStats> history = new HashMap<>();
@@ -48,6 +55,7 @@ public final class SessionLearning {
     private final Path tmpPath;
     private int lastSavedHash = 0;
     private long lastSaveMillis = 0;
+    private long lastCompactionMillis = 0;
     private boolean dirty = false;
     private String sessionKey = DEFAULT_SESSION_KEY;
 
@@ -123,6 +131,85 @@ public final class SessionLearning {
         stats.totalSpikeDelta += spikeDelta;
         stats.avgSpikeDelta = (double) stats.totalSpikeDelta / stats.totalAttempts;
         dirty = true;
+        
+        // Automatic memory management: compact if over limit
+        enforceMemoryLimits();
+    }
+    
+    /**
+     * Enforces memory limits by compacting history when needed.
+     * Removes stale and low-value entries to stay under MAX_HISTORY_ENTRIES.
+     */
+    private void enforceMemoryLimits() {
+        if (history.size() <= MAX_HISTORY_ENTRIES) {
+            return;
+        }
+        
+        long now = System.currentTimeMillis();
+        
+        // Don't compact too frequently (at most once per minute)
+        if (now - lastCompactionMillis < 60_000) {
+            return;
+        }
+        lastCompactionMillis = now;
+        
+        int initialSize = history.size();
+        
+        // Phase 1: Remove stale entries with few attempts
+        java.util.Iterator<Map.Entry<String, ActionStats>> it = history.entrySet().iterator();
+        while (it.hasNext() && history.size() > MAX_HISTORY_ENTRIES * 0.8) {
+            Map.Entry<String, ActionStats> entry = it.next();
+            ActionStats stats = entry.getValue();
+            long lastActivity = Math.max(stats.lastSuccessTime, stats.lastFailureTime);
+            
+            // Remove if old and low attempts
+            if (stats.totalAttempts < MIN_ATTEMPTS_TO_KEEP 
+                && now - lastActivity > STALE_ENTRY_AGE_MS) {
+                it.remove();
+            }
+        }
+        
+        // Phase 2: If still over limit, remove lowest-value entries
+        if (history.size() > MAX_HISTORY_ENTRIES) {
+            // Sort by value (success rate * attempts) and remove bottom 20%
+            java.util.List<Map.Entry<String, ActionStats>> sorted = 
+                new java.util.ArrayList<>(history.entrySet());
+            sorted.sort((a, b) -> {
+                double valueA = calculateEntryValue(a.getValue());
+                double valueB = calculateEntryValue(b.getValue());
+                return Double.compare(valueA, valueB);
+            });
+            
+            int toRemove = history.size() - (int)(MAX_HISTORY_ENTRIES * 0.8);
+            for (int i = 0; i < toRemove && i < sorted.size(); i++) {
+                history.remove(sorted.get(i).getKey());
+            }
+        }
+        
+        int removed = initialSize - history.size();
+        if (removed > 0) {
+            safeLog("Memory compaction: removed {} entries ({} -> {})", 
+                removed, initialSize, history.size());
+        }
+    }
+    
+    /**
+     * Calculates the value of a history entry for compaction decisions.
+     * Higher value = more worth keeping.
+     */
+    private double calculateEntryValue(ActionStats stats) {
+        if (stats.totalAttempts == 0) {
+            return 0.0;
+        }
+        double successRate = (double) stats.successCount / stats.totalAttempts;
+        double recency = 1.0;
+        long lastActivity = Math.max(stats.lastSuccessTime, stats.lastFailureTime);
+        long age = System.currentTimeMillis() - lastActivity;
+        if (age > DECAY_CYCLE_MS) {
+            recency = DECAY_FACTOR;
+        }
+        // Value = attempts * success_rate * recency
+        return stats.totalAttempts * successRate * recency;
     }
 
     public void recordPredictionOutcome(boolean predictedSpike, boolean actualSpike, double confidence) {
@@ -490,7 +577,7 @@ public final class SessionLearning {
             if (NozhConstants.LOGGER != null) {
                 NozhConstants.LOGGER.info(message, args);
             }
-        } catch (Throwable ignored) {
+        } catch (Exception e) {
             // Tests may not have logger initialized
         }
     }
@@ -500,7 +587,7 @@ public final class SessionLearning {
             if (NozhConstants.LOGGER != null) {
                 NozhConstants.LOGGER.warn(message, args);
             }
-        } catch (Throwable ignored) {
+        } catch (Exception e) {
             // Tests may not have logger initialized
         }
     }

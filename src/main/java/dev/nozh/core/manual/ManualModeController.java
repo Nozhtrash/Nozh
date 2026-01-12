@@ -170,7 +170,7 @@ public final class ManualModeController {
             if (NozhConstants.LOGGER != null) {
                 NozhConstants.LOGGER.info(message, args);
             }
-        } catch (Throwable ignored) {
+        } catch (Exception e) {
             // Logger may not be initialized
         }
     }

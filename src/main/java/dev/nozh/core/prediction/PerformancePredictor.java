@@ -1,6 +1,8 @@
 package dev.nozh.core.prediction;
 
 import dev.nozh.NozhConstants;
+import dev.nozh.core.math.ExponentialMovingAverage;
+import dev.nozh.core.math.RollingVariance;
 import java.util.ArrayDeque;
 import java.util.Deque;
 
@@ -40,9 +42,12 @@ import java.util.Deque;
 public class PerformancePredictor {
     private static final int HISTORY_SIZE = 60; // 3 seconds at 20 TPS
     private static final double SPIKE_THRESHOLD = 1.5; // 50% increase
+    private static final double MICRO_STUTTER_THRESHOLD = 1.3; // 30% increase for micro-stutters
     private static final double PREDICTION_CONFIDENCE_MIN = 0.6;
     private static final double EPSILON = 1e-10; // Numerical stability threshold
     private static final double MAX_VALID_FRAMETIME = 10000.0; // 10 seconds max
+    private static final double EMA_FAST_ALPHA = 0.4; // Fast EMA for recent trend
+    private static final double EMA_SLOW_ALPHA = 0.1; // Slow EMA for baseline
     
     // P1 #6: Array reuse optimization
     private static final int MAX_REUSE_SIZE = 100; // Prevent unbounded growth
@@ -53,6 +58,13 @@ public class PerformancePredictor {
     
     private final int targetFps;
     private final Deque<Double> frametimeHistory;
+    
+    // Enhanced prediction components
+    private final ExponentialMovingAverage emaFast; // Fast-responding trend
+    private final ExponentialMovingAverage emaSlow; // Slow baseline
+    private final RollingVariance rollingVariance; // Variance tracking
+    private int microStutterCount = 0; // Recent micro-stutters
+    private double lastFrametime = 0.0; // Previous sample for delta
     
     // Reusable array buffer (P1 #6 optimization + AUDIT FIX #2 shrinking)
     private Double[] reusableArray;
@@ -78,6 +90,11 @@ public class PerformancePredictor {
         this.reusableArray = new Double[HISTORY_SIZE];
         this.lastArraySize = 0;
         this.maxObservedSize = 0;
+        
+        // Initialize enhanced prediction components
+        this.emaFast = new ExponentialMovingAverage(EMA_FAST_ALPHA);
+        this.emaSlow = new ExponentialMovingAverage(EMA_SLOW_ALPHA);
+        this.rollingVariance = new RollingVariance(20);
     }
     
     /**
@@ -109,6 +126,20 @@ public class PerformancePredictor {
             frametimeHistory.removeFirst();
         }
         frametimeHistory.addLast(frametimeMs);
+        
+        // Update EMA and variance trackers
+        emaFast.addSample(frametimeMs);
+        emaSlow.addSample(frametimeMs);
+        rollingVariance.addSample(frametimeMs);
+        
+        // Track micro-stutters (small spikes)
+        if (lastFrametime > 0 && frametimeMs > lastFrametime * MICRO_STUTTER_THRESHOLD) {
+            microStutterCount++;
+        } else if (microStutterCount > 0 && frametimeMs <= lastFrametime * 1.1) {
+            // Decay stutter count when stable
+            microStutterCount = Math.max(0, microStutterCount - 1);
+        }
+        lastFrametime = frametimeMs;
     }
     
     /**
@@ -431,8 +462,14 @@ public class PerformancePredictor {
         lastArraySize = 0;
         arrayAccessCount = 0;
         maxObservedSize = 0;
+        microStutterCount = 0;
+        lastFrametime = 0.0;
         // Shrink to base size on reset
         reusableArray = new Double[HISTORY_SIZE];
+        // Reset enhanced components
+        emaFast.reset();
+        emaSlow.reset();
+        rollingVariance.reset();
     }
     
     /**
@@ -477,4 +514,136 @@ public class PerformancePredictor {
             arrayAccessCount
         );
     }
+    
+    // ============ ENHANCED PREDICTION METHODS ============
+    
+    /**
+     * Gets the EMA-based trend direction.
+     * 
+     * @return Positive = performance degrading, Negative = improving, 0 = stable
+     */
+    public double getEmaTrend() {
+        if (!emaFast.isInitialized() || !emaSlow.isInitialized()) {
+            return 0.0;
+        }
+        // Fast EMA > Slow EMA = recent performance is worse = degrading
+        return emaFast.getValue() - emaSlow.getValue();
+    }
+    
+    /**
+     * Checks if performance is showing signs of degradation using EMA crossover.
+     * 
+     * @return true if fast EMA crosses above slow EMA (degradation signal)
+     */
+    public boolean isShowingDegradation() {
+        double trend = getEmaTrend();
+        double threshold = emaSlow.getValue() * 0.1; // 10% of baseline
+        return trend > threshold && trend > 0.5; // At least 0.5ms difference
+    }
+    
+    /**
+     * Gets the current micro-stutter count.
+     * Higher values indicate jittery performance.
+     * 
+     * @return Number of recent micro-stutters (small spikes)
+     */
+    public int getMicroStutterCount() {
+        return microStutterCount;
+    }
+    
+    /**
+     * Checks if micro-stutters are frequent (jank detection).
+     * 
+     * @return true if experiencing frequent small spikes
+     */
+    public boolean hasFrequentMicroStutters() {
+        return microStutterCount >= 3;
+    }
+    
+    /**
+     * Gets the stability score based on variance.
+     * Higher = more stable performance.
+     * 
+     * @return Stability score (0-1)
+     */
+    public double getStabilityScore() {
+        if (!rollingVariance.isFull()) {
+            return 0.5; // Neutral if not enough data
+        }
+        double cv = rollingVariance.getCoefficientOfVariation();
+        // CV < 0.1 = very stable, CV > 0.5 = very unstable
+        if (cv < 0.1) return 1.0;
+        if (cv > 0.5) return 0.0;
+        return 1.0 - (cv / 0.5);
+    }
+    
+    /**
+     * Comprehensive prediction result combining all signals.
+     */
+    public record EnhancedPrediction(
+        boolean dropExpected,
+        double confidence,
+        boolean degradationTrend,
+        boolean hasMicroStutters,
+        double stabilityScore,
+        String reason
+    ) {
+        public static EnhancedPrediction noData() {
+            return new EnhancedPrediction(false, 0.0, false, false, 0.5, "Insufficient data");
+        }
+    }
+    
+    /**
+     * Gets enhanced prediction combining all signals.
+     * 
+     * @return Comprehensive prediction result
+     */
+    public EnhancedPrediction getEnhancedPrediction() {
+        if (!isWarmedUp()) {
+            return EnhancedPrediction.noData();
+        }
+        
+        boolean dropPredicted = predictFpsDrop();
+        boolean degradation = isShowingDegradation();
+        boolean stutters = hasFrequentMicroStutters();
+        double stability = getStabilityScore();
+        double baseConfidence = getPredictionConfidence();
+        
+        // Combine signals for stronger prediction
+        int positiveSignals = 0;
+        if (dropPredicted) positiveSignals++;
+        if (degradation) positiveSignals++;
+        if (stutters) positiveSignals++;
+        if (stability < 0.5) positiveSignals++;
+        
+        // Require at least 2 signals for high confidence
+        boolean finalPrediction = positiveSignals >= 2;
+        double finalConfidence = positiveSignals >= 3 ? 
+            Math.min(0.95, baseConfidence + 0.2) :
+            positiveSignals >= 2 ? baseConfidence :
+            baseConfidence * 0.7;
+        
+        String reason = buildPredictionReason(dropPredicted, degradation, stutters, stability);
+        
+        return new EnhancedPrediction(
+            finalPrediction,
+            finalConfidence,
+            degradation,
+            stutters,
+            stability,
+            reason
+        );
+    }
+    
+    private String buildPredictionReason(boolean drop, boolean degradation, 
+                                         boolean stutters, double stability) {
+        StringBuilder sb = new StringBuilder();
+        if (drop) sb.append("FPS_DROP ");
+        if (degradation) sb.append("EMA_DEGRADATION ");
+        if (stutters) sb.append("MICRO_STUTTERS ");
+        if (stability < 0.5) sb.append("UNSTABLE ");
+        if (sb.isEmpty()) sb.append("STABLE");
+        return sb.toString().trim();
+    }
 }
+

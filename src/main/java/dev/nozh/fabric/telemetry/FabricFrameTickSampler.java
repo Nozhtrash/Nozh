@@ -38,8 +38,8 @@ public final class FabricFrameTickSampler {
         try {
             WorldRenderEvents.START.register(this::onRenderStart);
             WorldRenderEvents.END.register(this::onRenderEnd);
-        } catch (Throwable t) {
-            NozhConstants.LOGGER.warn("WorldRenderEvents unavailable; render-time sampling disabled", t);
+        } catch (Exception e) {
+            NozhConstants.LOGGER.warn("WorldRenderEvents unavailable; render-time sampling disabled", e);
         }
     }
 

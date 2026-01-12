@@ -376,14 +376,14 @@ public final class SystemMonitor {
     /**
      * Detect performance bottleneck based on system metrics.
      *
-     * PRIORITY 2: Advanced detection logic.
+     * PRIORITY 2: Advanced detection logic with chunk awareness.
      *
      * @param tickTimeMs      Average tick time in ms
      * @param renderTimeMs    Average render time in ms
      * @param entityCount     Current entity count
      * @param shadersActive   Whether shaders are active
      * @param resolutionScale Current resolution scale
-     * @return "CPU", "GPU", or "BALANCED"
+     * @return "CPU", "GPU", "MEMORY", or "BALANCED"
      */
     public String detectBottleneck(
             double tickTimeMs,
@@ -391,50 +391,194 @@ public final class SystemMonitor {
             int entityCount,
             boolean shadersActive,
             double resolutionScale) {
+        return detectBottleneck(tickTimeMs, renderTimeMs, entityCount, shadersActive, resolutionScale, 0);
+    }
+    
+    /**
+     * Enhanced bottleneck detection with chunk loading awareness.
+     *
+     * @param tickTimeMs         Average tick time in ms
+     * @param renderTimeMs       Average render time in ms
+     * @param entityCount        Current entity count
+     * @param shadersActive      Whether shaders are active
+     * @param resolutionScale    Current resolution scale
+     * @param recentChunksLoaded Chunks loaded in last second
+     * @return "CPU", "GPU", "MEMORY", or "BALANCED"
+     */
+    public String detectBottleneck(
+            double tickTimeMs,
+            double renderTimeMs,
+            int entityCount,
+            boolean shadersActive,
+            double resolutionScale,
+            int recentChunksLoaded) {
 
         int cpuScore = 0;
         int gpuScore = 0;
+        int memoryScore = 0;
 
-        // 1. Ratio de tiempo tick vs render
-        if (tickTimeMs > renderTimeMs * 2.0) {
-            cpuScore += 3;
-        } else if (renderTimeMs > tickTimeMs * 2.0) {
-            gpuScore += 3;
+        // 1. Ratio de tiempo tick vs render (weighted heavily)
+        if (tickTimeMs > 0 && renderTimeMs > 0) {
+            double ratio = tickTimeMs / renderTimeMs;
+            if (ratio > 2.0) {
+                cpuScore += 4;
+            } else if (ratio > 1.5) {
+                cpuScore += 2;
+            } else if (ratio < 0.5) {
+                gpuScore += 4;
+            } else if (ratio < 0.67) {
+                gpuScore += 2;
+            }
         }
 
-        // 2. Carga del sistema
+        // 2. Carga del sistema CPU
         double systemCpuLoad = getSystemCpuLoad();
-        if (systemCpuLoad > 0.80) {
+        if (systemCpuLoad > 0.90) {
+            cpuScore += 3;
+        } else if (systemCpuLoad > 0.80) {
             cpuScore += 2;
         } else if (systemCpuLoad > 0.60) {
             cpuScore += 1;
         }
 
-        // 3. Heurísticas de contexto
-        if (entityCount > 200) {
-            cpuScore += 1; // Muchas entidades = CPU-bound
+        // 3. Entity count - high entity counts heavily favor CPU
+        if (entityCount > 500) {
+            cpuScore += 3;
+        } else if (entityCount > 300) {
+            cpuScore += 2;
+        } else if (entityCount > 150) {
+            cpuScore += 1;
         }
 
+        // 4. Shaders - strongly favor GPU
         if (shadersActive) {
-            gpuScore += 2; // Shaders = casi siempre GPU-bound
+            gpuScore += 3;
         }
 
-        if (resolutionScale > 1.0) {
-            gpuScore += 1; // Resolución alta = GPU-bound
+        // 5. Resolution scale
+        if (resolutionScale > 2.0) {
+            gpuScore += 3;
+        } else if (resolutionScale > 1.5) {
+            gpuScore += 2;
+        } else if (resolutionScale > 1.0) {
+            gpuScore += 1;
         }
 
-        // 4. Memoria
-        if (isMemoryPressure()) {
-            cpuScore += 1; // Memory thrashing afecta CPU
+        // 6. Chunk loading - CPU-bound indicator
+        if (recentChunksLoaded > 30) {
+            cpuScore += 3;
+        } else if (recentChunksLoaded > 15) {
+            cpuScore += 2;
+        } else if (recentChunksLoaded > 5) {
+            cpuScore += 1;
         }
 
-        // 5. Decisión final
-        if (cpuScore > gpuScore + 1) {
+        // 7. Memory pressure - can cause both CPU and GPU stalls
+        double memUsage = getMemoryUsage();
+        if (memUsage > MEMORY_CRITICAL_THRESHOLD) {
+            memoryScore += 4;
+        } else if (memUsage > MEMORY_PRESSURE_THRESHOLD) {
+            memoryScore += 2;
+        }
+
+        // 8. Check for memory being the primary constraint
+        if (memoryScore >= 4 && memoryScore > cpuScore && memoryScore > gpuScore) {
+            return "MEMORY";
+        }
+
+        // 9. Final decision with margin
+        int diff = cpuScore - gpuScore;
+        if (diff >= 2) {
             return "CPU";
-        } else if (gpuScore > cpuScore + 1) {
+        } else if (diff <= -2) {
             return "GPU";
         } else {
             return "BALANCED";
+        }
+    }
+    
+    /**
+     * Get a detailed bottleneck report with all scores.
+     */
+    public BottleneckReport getBottleneckReport(
+            double tickTimeMs,
+            double renderTimeMs,
+            int entityCount,
+            boolean shadersActive,
+            double resolutionScale,
+            int recentChunksLoaded) {
+        
+        int cpuScore = 0;
+        int gpuScore = 0;
+        int memoryScore = 0;
+        
+        // Calculate all scores (same logic as detectBottleneck)
+        if (tickTimeMs > 0 && renderTimeMs > 0) {
+            double ratio = tickTimeMs / renderTimeMs;
+            if (ratio > 2.0) cpuScore += 4;
+            else if (ratio > 1.5) cpuScore += 2;
+            else if (ratio < 0.5) gpuScore += 4;
+            else if (ratio < 0.67) gpuScore += 2;
+        }
+        
+        double systemCpuLoad = getSystemCpuLoad();
+        if (systemCpuLoad > 0.90) cpuScore += 3;
+        else if (systemCpuLoad > 0.80) cpuScore += 2;
+        else if (systemCpuLoad > 0.60) cpuScore += 1;
+        
+        if (entityCount > 500) cpuScore += 3;
+        else if (entityCount > 300) cpuScore += 2;
+        else if (entityCount > 150) cpuScore += 1;
+        
+        if (shadersActive) gpuScore += 3;
+        
+        if (resolutionScale > 2.0) gpuScore += 3;
+        else if (resolutionScale > 1.5) gpuScore += 2;
+        else if (resolutionScale > 1.0) gpuScore += 1;
+        
+        if (recentChunksLoaded > 30) cpuScore += 3;
+        else if (recentChunksLoaded > 15) cpuScore += 2;
+        else if (recentChunksLoaded > 5) cpuScore += 1;
+        
+        double memUsage = getMemoryUsage();
+        if (memUsage > MEMORY_CRITICAL_THRESHOLD) memoryScore += 4;
+        else if (memUsage > MEMORY_PRESSURE_THRESHOLD) memoryScore += 2;
+        
+        String bound;
+        if (memoryScore >= 4 && memoryScore > cpuScore && memoryScore > gpuScore) {
+            bound = "MEMORY";
+        } else if (cpuScore - gpuScore >= 2) {
+            bound = "CPU";
+        } else if (gpuScore - cpuScore >= 2) {
+            bound = "GPU";
+        } else {
+            bound = "BALANCED";
+        }
+        
+        return new BottleneckReport(bound, cpuScore, gpuScore, memoryScore,
+            systemCpuLoad, memUsage, entityCount, recentChunksLoaded, shadersActive);
+    }
+    
+    /**
+     * Detailed bottleneck analysis report.
+     */
+    public record BottleneckReport(
+        String bound,
+        int cpuScore,
+        int gpuScore,
+        int memoryScore,
+        double systemCpuLoad,
+        double memoryUsage,
+        int entityCount,
+        int chunksLoaded,
+        boolean shadersActive
+    ) {
+        public String summary() {
+            return String.format(
+                "Bound: %s | Scores: CPU=%d GPU=%d MEM=%d | CPU:%.0f%% MEM:%.0f%% | Entities:%d Chunks:%d Shaders:%s",
+                bound, cpuScore, gpuScore, memoryScore,
+                systemCpuLoad * 100, memoryUsage * 100,
+                entityCount, chunksLoaded, shadersActive ? "ON" : "OFF");
         }
     }
 
