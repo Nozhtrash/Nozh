@@ -229,10 +229,14 @@ public final class ConfidenceCalculator {
         }
         return switch (scenario) {
             case COMBAT -> COMBAT_MODIFIER;
-            case BUILDING, MINING -> BUILDING_MODIFIER;
+            case BUILDING -> BUILDING_MODIFIER;
+            case MINING -> BUILDING_MODIFIER;
             case EXPLORATION -> EXPLORATION_MODIFIER;
-            case IDLE, AFK, MENU -> IDLE_MODIFIER;
-            case LOADING, WORLD_LOADING -> LOADING_MODIFIER;
+            case IDLE -> IDLE_MODIFIER;
+            case AFK -> IDLE_MODIFIER;
+            case MENU -> IDLE_MODIFIER;
+            case LOADING -> LOADING_MODIFIER;
+            case WORLD_LOADING -> LOADING_MODIFIER;
             case HIGH_ENTITY_DENSITY -> COMBAT_MODIFIER; // Conservative
             case UNKNOWN -> 1.0;
         };
