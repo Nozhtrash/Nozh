@@ -97,5 +97,8 @@
   "nozh.status.mode.passive": "PASSIEF",
   "nozh.status.mode.safemode": "VEILIGE MODUS",
   "nozh.status.uptime": "Uptime: %d seconden",
-  "nozh.status.target": "Doel FPS: %d"
+  "nozh.status.target": "Doel FPS: %d",
+
+  "key.nozh.apply_suggestion": "Suggestie toepassen",
+  "category.nozh": "NOZH"
 }

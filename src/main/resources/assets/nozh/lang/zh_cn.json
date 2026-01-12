@@ -97,5 +97,8 @@
   "nozh.status.mode.passive": "被动",
   "nozh.status.mode.safemode": "安全模式",
   "nozh.status.uptime": "运行时间：%d秒",
-  "nozh.status.target": "目标FPS：%d"
+  "nozh.status.target": "目标FPS：%d",
+
+  "key.nozh.apply_suggestion": "应用建议",
+  "category.nozh": "NOZH"
 }

@@ -97,5 +97,8 @@
   "nozh.status.mode.passive": "수동",
   "nozh.status.mode.safemode": "안전 모드",
   "nozh.status.uptime": "가동 시간: %d초",
-  "nozh.status.target": "목표 FPS: %d"
+  "nozh.status.target": "목표 FPS: %d",
+
+  "key.nozh.apply_suggestion": "제안 적용",
+  "category.nozh": "NOZH"
 }
