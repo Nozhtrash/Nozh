@@ -177,13 +177,23 @@ public final class NozhNotificationSystem {
     }
 
     private String formatValue(CapabilityValue value) {
-        return switch (value) {
-            case CapabilityValue.IntValue iv -> String.valueOf(iv.value());
-            case CapabilityValue.BoolValue bv -> bv.value() ? "ON" : "OFF";
-            case CapabilityValue.EnumValue ev -> ev.name();
-            case CapabilityValue.FloatValue fv -> String.format("%.2f", fv.value());
-            case null -> "null";
-        };
+        // Java 17 compatible: using instanceof instead of pattern matching switch
+        if (value == null) {
+            return "null";
+        }
+        if (value instanceof CapabilityValue.IntValue) {
+            return String.valueOf(((CapabilityValue.IntValue) value).value());
+        }
+        if (value instanceof CapabilityValue.BoolValue) {
+            return ((CapabilityValue.BoolValue) value).value() ? "ON" : "OFF";
+        }
+        if (value instanceof CapabilityValue.EnumValue) {
+            return ((CapabilityValue.EnumValue) value).name();
+        }
+        if (value instanceof CapabilityValue.FloatValue) {
+            return String.format("%.2f", ((CapabilityValue.FloatValue) value).value());
+        }
+        return value.toString();
     }
 
     /**
