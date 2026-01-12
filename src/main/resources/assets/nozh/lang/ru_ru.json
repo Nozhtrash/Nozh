@@ -97,5 +97,8 @@
   "nozh.status.mode.passive": "ПАССИВЕН",
   "nozh.status.mode.safemode": "БЕЗОПАСНЫЙ РЕЖИМ",
   "nozh.status.uptime": "Время работы: %d секунд",
-  "nozh.status.target": "Целевой FPS: %d"
+  "nozh.status.target": "Целевой FPS: %d",
+
+  "key.nozh.apply_suggestion": "Применить предложение",
+  "category.nozh": "NOZH"
 }
