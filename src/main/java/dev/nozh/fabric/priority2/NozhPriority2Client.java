@@ -58,6 +58,9 @@ public final class NozhPriority2Client implements ClientModInitializer {
         // (6) Suggestion engine (manual mode building block).
         final Priority2SuggestionEngine suggestionEngine = new Priority2SuggestionEngine();
 
+        // (7) Action applier: maps suggestions to real settings.
+        final Priority2ActionApplier actionApplier = new Priority2ActionApplier();
+
         // HUD overlay for visibility (big step: no need to modify existing HUD).
         Priority2HudOverlay.register(client, PENDING);
 
@@ -74,7 +77,7 @@ public final class NozhPriority2Client implements ClientModInitializer {
             return ActionResult.PASS;
         });
 
-        // Manual confirm: pop queue and notify.
+        // Manual confirm: pop queue, apply real changes, and notify.
         new ManualConfirmKeybind(client, () -> {
             var next = PENDING.poll();
             if (next == null) {
@@ -84,14 +87,17 @@ public final class NozhPriority2Client implements ClientModInitializer {
                 return;
             }
 
+            Priority2ActionApplier.Result r = actionApplier.applySuggestion(client, next.id);
+
             if (client.inGameHud != null) {
-                client.inGameHud.getChatHud().addMessage(Text.literal("[NOZH] Confirmed suggestion: " + next.id));
+                client.inGameHud.getChatHud().addMessage(Text.literal("[NOZH] Confirmed: " + next.id + " -> " + r.result));
                 if (next.reason != null && !next.reason.isBlank()) {
                     client.inGameHud.getChatHud().addMessage(Text.literal("Reason: " + next.reason));
                 }
+                if (r.message != null && !r.message.isBlank()) {
+                    client.inGameHud.getChatHud().addMessage(Text.literal("Result: " + r.message));
+                }
             }
-
-            // Next mega-step: map suggestion IDs to real capabilities/actions in ActionBus.
         });
 
         // Runtime signal refresh.
@@ -99,7 +105,6 @@ public final class NozhPriority2Client implements ClientModInitializer {
             if (c != client) return;
             if (client.player == null) return;
 
-            // Update snapshots.
             DeepScenarioSnapshot scenarioSnap = deepScenario.snapshot();
             DirectorBiasHints hints = director.computeBiasHints();
 
@@ -136,8 +141,17 @@ public final class NozhPriority2Client implements ClientModInitializer {
             if (s != null) {
                 PENDING.add(s.id, s.reason);
             }
+
+            // v0.3-ish: gradual recovery if we are stable and no pending suggestions.
+            if (PENDING.size() == 0 && Priority2PerfGate.performanceVeryGood(tickMs, renderMs, bottleneck)) {
+                try {
+                    actionApplier.tryGradualRecovery(client, true);
+                } catch (Throwable t) {
+                    NozhConstants.LOGGER.debug("Gradual recovery skipped due to exception", t);
+                }
+            }
         });
 
-        NozhConstants.LOGGER.info("Priority2 mega wiring loaded: signals + HUD + manual suggestions");
+        NozhConstants.LOGGER.info("Priority2 mega actions loaded: suggestions -> real settings + gradual recovery");
     }
 }
