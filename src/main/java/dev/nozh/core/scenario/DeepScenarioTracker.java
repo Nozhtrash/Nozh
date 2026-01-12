@@ -64,7 +64,8 @@ public final class DeepScenarioTracker {
         try {
             Identifier id = client.world.getRegistryKey().getValue();
             dim = id != null ? id.toString() : "unknown";
-        } catch (Exception e) {\r\n            // Registry key may not be available
+        } catch (Exception e) {
+            // Registry key may not be available
         }
 
         long now = nowMs();
