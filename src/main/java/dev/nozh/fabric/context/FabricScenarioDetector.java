@@ -1,7 +1,6 @@
 package dev.nozh.fabric.context;
 
 import dev.nozh.core.context.Scenario;
-import dev.nozh.core.context.ScenarioConfidence;
 import dev.nozh.core.context.ScenarioDetector;
 import dev.nozh.core.context.ScenarioSnapshot;
 import dev.nozh.core.input.InputActivityTracker;
@@ -19,7 +18,7 @@ import java.util.List;
 
 /**
  * PRIORITY 2: Advanced scenario detection with deep context analysis.
- * 
+ *
  * Analyzes:
  * - Player actions (last 30s window)
  * - Nearby hostile mobs
@@ -27,12 +26,13 @@ import java.util.List;
  * - Dimension context (Nether, End)
  * - Movement patterns
  * - Inventory interactions
- * 
+ *
  * Accuracy: 85-95% scenario identification
  */
 public final class FabricScenarioDetector implements ScenarioDetector {
 
-    private static final int ACTION_HISTORY_SIZE = 60; // 30s @ 20 TPS
+    // FIXED: 30 seconds @ 20 TPS = 600 ticks.
+    private static final int ACTION_HISTORY_SIZE = 600;
     private static final int HOSTILE_MOB_RANGE = 32;
     private static final int COMBAT_COOLDOWN_TICKS = 100; // 5s
     private static final int AFK_THRESHOLD_TICKS = 2400; // 120s
@@ -40,7 +40,7 @@ public final class FabricScenarioDetector implements ScenarioDetector {
     private static final double MOVEMENT_EPSILON_SQUARED = 0.0004;
 
     private final MinecraftClient client;
-    
+
     // Action tracking
     private final Deque<PlayerAction> actionHistory = new ArrayDeque<>();
     private long lastAttackTick = 0;
@@ -55,7 +55,7 @@ public final class FabricScenarioDetector implements ScenarioDetector {
     private double lastX = 0.0;
     private double lastY = 0.0;
     private double lastZ = 0.0;
-    
+
     // Stability tracking
     private Scenario lastScenario = Scenario.STANDARD;
     private int stableCount = 0;
@@ -75,14 +75,14 @@ public final class FabricScenarioDetector implements ScenarioDetector {
         long currentTick = client.world.getTime();
 
         // Clean old actions (> 30s)
-        while (!actionHistory.isEmpty() && 
-               currentTick - actionHistory.peekFirst().tick() > ACTION_HISTORY_SIZE) {
+        while (!actionHistory.isEmpty() &&
+                currentTick - actionHistory.peekFirst().tick() > ACTION_HISTORY_SIZE) {
             actionHistory.pollFirst();
         }
 
         // Detect scenario
         Scenario detected = detectAdvanced(player, client.world, currentTick);
-        
+
         // Stability calculation
         if (detected == lastScenario) {
             stableCount++;
@@ -135,7 +135,7 @@ public final class FabricScenarioDetector implements ScenarioDetector {
         // === COMBAT DETECTION ===
         long ticksSinceAttack = currentTick - lastAttackTick;
         long ticksSinceDamage = currentTick - lastDamageTick;
-        
+
         if (ticksSinceAttack < COMBAT_COOLDOWN_TICKS) {
             combatScore += 5;
         }
@@ -189,9 +189,9 @@ public final class FabricScenarioDetector implements ScenarioDetector {
         }
 
         // === FINAL DECISION ===
-        int maxScore = Math.max(combatScore, Math.max(afkScore, 
-                       Math.max(buildingScore, Math.max(exploringScore, 
-                       Math.max(menuScore, loadingScore)))));
+        int maxScore = Math.max(combatScore, Math.max(afkScore,
+                Math.max(buildingScore, Math.max(exploringScore,
+                        Math.max(menuScore, loadingScore)))));
 
         if (maxScore == menuScore && menuScore > 0) {
             return Scenario.MENU;
@@ -219,10 +219,9 @@ public final class FabricScenarioDetector implements ScenarioDetector {
     private int countNearbyHostileMobs(ClientPlayerEntity player, World world) {
         Box searchBox = player.getBoundingBox().expand(HOSTILE_MOB_RANGE);
         List<HostileEntity> hostiles = world.getEntitiesByClass(
-            HostileEntity.class, 
-            searchBox, 
-            entity -> entity.isAlive()
-        );
+                HostileEntity.class,
+                searchBox,
+                entity -> entity.isAlive());
         return hostiles.size();
     }
 
@@ -237,9 +236,7 @@ public final class FabricScenarioDetector implements ScenarioDetector {
         };
 
         // Adjust by stability
-        double finalConfidence = baseConfidence * (0.5 + 0.5 * stability);
-
-        return finalConfidence;
+        return baseConfidence * (0.5 + 0.5 * stability);
     }
 
     // === ACTION RECORDING ===
@@ -266,9 +263,10 @@ public final class FabricScenarioDetector implements ScenarioDetector {
         lastBlockPlacedTick = tick;
         blocksPlacedRecent++;
         actionHistory.offer(new PlayerAction(tick, ActionType.BLOCK_PLACE));
-        
-        // Decay counter
-        if (blocksPlacedRecent > 20) blocksPlacedRecent = 20;
+
+        // Cap counter
+        if (blocksPlacedRecent > 20)
+            blocksPlacedRecent = 20;
     }
 
     public void recordBlockBroken() {
@@ -276,9 +274,10 @@ public final class FabricScenarioDetector implements ScenarioDetector {
         lastBlockBrokenTick = tick;
         blocksBrokenRecent++;
         actionHistory.offer(new PlayerAction(tick, ActionType.BLOCK_BREAK));
-        
-        // Decay counter
-        if (blocksBrokenRecent > 20) blocksBrokenRecent = 20;
+
+        // Cap counter
+        if (blocksBrokenRecent > 20)
+            blocksBrokenRecent = 20;
     }
 
     public void recordInventoryOpen() {
@@ -311,8 +310,10 @@ public final class FabricScenarioDetector implements ScenarioDetector {
                 lastZ = currentZ;
             }
         }
-        if (blocksPlacedRecent > 0) blocksPlacedRecent--;
-        if (blocksBrokenRecent > 0) blocksBrokenRecent--;
+        if (blocksPlacedRecent > 0)
+            blocksPlacedRecent--;
+        if (blocksBrokenRecent > 0)
+            blocksBrokenRecent--;
     }
 
     public void logTelemetry() {
@@ -338,7 +339,8 @@ public final class FabricScenarioDetector implements ScenarioDetector {
         return count;
     }
 
-    private record PlayerAction(long tick, ActionType type) {}
+    private record PlayerAction(long tick, ActionType type) {
+    }
 
     private enum ActionType {
         ATTACK, DAMAGE, BLOCK_PLACE, BLOCK_BREAK, INVENTORY

@@ -7,7 +7,7 @@ import java.util.*;
 /**
  * Automatically resolves conflicts between mods.
  * Adjusts NOZH behavior to avoid stepping on other mods.
- * 
+ *
  * @since 0.3.0
  * @author NOZH Team
  */
@@ -26,6 +26,20 @@ public final class ModConflictResolver {
         public String describe() {
             return String.format("%s vs %s: %s wins (%s)", modA, modB, winner, resolution);
         }
+    }
+
+    /**
+     * PRIORITY 2: Director Mode bias profile.
+     *
+     * <p>
+     * This is intentionally generic (CPU/GPU focus) so it can be applied by the Governor
+     * without hard dependencies on specific mod APIs.
+     */
+    public record DirectorBiasProfile(
+            double cpuBias,
+            double gpuBias,
+            Set<String> detectedSynergies,
+            String summary) {
     }
 
     private final Set<String> loadedMods;
@@ -113,6 +127,50 @@ public final class ModConflictResolver {
                 winner,
                 resolution,
                 true);
+    }
+
+    /**
+     * PRIORITY 2: Director Mode V2 - compute bias based on detected mod synergies.
+     *
+     * <p>
+     * Heuristics:
+     * - Sodium + Iris tends to move bottlenecks toward GPU; bias GPU-friendly actions.
+     * - Lithium + C2ME tends to reduce CPU world-gen/tick pressure; bias toward GPU/visual.
+     * - Distant Horizons can become GPU/memory heavy; advise conservative GPU actions.
+     */
+    public DirectorBiasProfile computeDirectorBiasProfile() {
+        boolean sodium = loadedMods.contains("sodium");
+        boolean iris = loadedMods.contains("iris");
+        boolean lithium = loadedMods.contains("lithium");
+        boolean c2me = loadedMods.contains("c2me") || loadedMods.contains("c2me-fabric");
+        boolean distantHorizons = loadedMods.contains("distanthorizons");
+
+        double cpuBias = 1.0;
+        double gpuBias = 1.0;
+        Set<String> synergies = new HashSet<>();
+
+        if (sodium && iris) {
+            synergies.add("sodium+iris");
+            // Shaders pipeline can become GPU-heavy; reduce aggressiveness on GPU-heavy changes.
+            gpuBias *= 1.15;
+        }
+
+        if (lithium && c2me) {
+            synergies.add("lithium+c2me");
+            // CPU side is already optimized; slightly bias toward visual quality/less CPU cuts.
+            cpuBias *= 0.90;
+        }
+
+        if (distantHorizons) {
+            // Can increase GPU + VRAM pressure; be conservative.
+            gpuBias *= 1.25;
+        }
+
+        String summary = "DirectorBias cpu=" + String.format(Locale.ROOT, "%.2f", cpuBias)
+                + " gpu=" + String.format(Locale.ROOT, "%.2f", gpuBias)
+                + " synergies=" + synergies;
+
+        return new DirectorBiasProfile(cpuBias, gpuBias, Collections.unmodifiableSet(synergies), summary);
     }
 
     /**

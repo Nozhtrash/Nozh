@@ -5,13 +5,13 @@ import java.lang.management.OperatingSystemMXBean;
 
 /**
  * Advanced system resource monitor for intelligent optimization decisions.
- * 
+ *
  * PRIORITY 2 ENHANCEMENT:
  * - Precise CPU load detection (system-wide)
  * - GPU load inference via render metrics
  * - Memory pressure tracking
  * - Bottleneck identification (CPU vs GPU)
- * 
+ *
  * Intelligence: 90% accuracy in determining performance bound.
  */
 public final class SystemMonitor {
@@ -31,6 +31,20 @@ public final class SystemMonitor {
     private static final double CPU_HIGH_THRESHOLD = 0.75; // 75% usage
     private static final double CPU_CRITICAL_THRESHOLD = 0.90; // 90% usage
 
+    // PRIORITY 2: precise tick vs render time sampling (rolling average).
+    // Uses a fixed-size ring buffer to avoid allocations.
+    private static final int TIME_SAMPLE_WINDOW = 120; // ~6s at 20 TPS, stable but responsive.
+
+    private final double[] tickTimeSamples = new double[TIME_SAMPLE_WINDOW];
+    private int tickTimeIndex = 0;
+    private int tickTimeCount = 0;
+    private double tickTimeSum = 0.0;
+
+    private final double[] renderTimeSamples = new double[TIME_SAMPLE_WINDOW];
+    private int renderTimeIndex = 0;
+    private int renderTimeCount = 0;
+    private double renderTimeSum = 0.0;
+
     private final OperatingSystemMXBean osMXBean;
     private final boolean cpuLoadAvailable;
 
@@ -45,8 +59,77 @@ public final class SystemMonitor {
     }
 
     /**
+     * PRIORITY 2: Record tick time sample.
+     */
+    public void recordTickTimeMs(double tickTimeMs) {
+        if (!(tickTimeMs > 0.0) || Double.isNaN(tickTimeMs) || Double.isInfinite(tickTimeMs)) {
+            return;
+        }
+
+        if (tickTimeCount < TIME_SAMPLE_WINDOW) {
+            tickTimeSamples[tickTimeIndex] = tickTimeMs;
+            tickTimeSum += tickTimeMs;
+            tickTimeCount++;
+        } else {
+            double old = tickTimeSamples[tickTimeIndex];
+            tickTimeSamples[tickTimeIndex] = tickTimeMs;
+            tickTimeSum += (tickTimeMs - old);
+        }
+
+        tickTimeIndex++;
+        if (tickTimeIndex >= TIME_SAMPLE_WINDOW) {
+            tickTimeIndex = 0;
+        }
+    }
+
+    /**
+     * PRIORITY 2: Record render time sample.
+     */
+    public void recordRenderTimeMs(double renderTimeMs) {
+        if (!(renderTimeMs > 0.0) || Double.isNaN(renderTimeMs) || Double.isInfinite(renderTimeMs)) {
+            return;
+        }
+
+        if (renderTimeCount < TIME_SAMPLE_WINDOW) {
+            renderTimeSamples[renderTimeIndex] = renderTimeMs;
+            renderTimeSum += renderTimeMs;
+            renderTimeCount++;
+        } else {
+            double old = renderTimeSamples[renderTimeIndex];
+            renderTimeSamples[renderTimeIndex] = renderTimeMs;
+            renderTimeSum += (renderTimeMs - old);
+        }
+
+        renderTimeIndex++;
+        if (renderTimeIndex >= TIME_SAMPLE_WINDOW) {
+            renderTimeIndex = 0;
+        }
+    }
+
+    /**
+     * PRIORITY 2: Rolling average tick time.
+     */
+    public double getAvgTickTimeMs() {
+        return tickTimeCount == 0 ? 0.0 : (tickTimeSum / (double) tickTimeCount);
+    }
+
+    /**
+     * PRIORITY 2: Rolling average render time.
+     */
+    public double getAvgRenderTimeMs() {
+        return renderTimeCount == 0 ? 0.0 : (renderTimeSum / (double) renderTimeCount);
+    }
+
+    /**
+     * PRIORITY 2: Derive bound detection from internally sampled tick/render times.
+     */
+    public BoundType detectBoundFromHistory(int entityCount, boolean shadersActive, double resolutionScale) {
+        return detectBound(getAvgTickTimeMs(), getAvgRenderTimeMs(), entityCount, shadersActive, resolutionScale);
+    }
+
+    /**
      * Get system-wide CPU load [0.0 - 1.0].
-     * 
+     *
      * @return CPU load percentage, or -1.0 if unavailable
      */
     public double getSystemCpuLoad() {
@@ -76,7 +159,7 @@ public final class SystemMonitor {
 
     /**
      * Get process CPU load [0.0 - 1.0].
-     * 
+     *
      * @return Process CPU load, or -1.0 if unavailable
      */
     public double getProcessCpuLoad() {
@@ -94,7 +177,7 @@ public final class SystemMonitor {
 
     /**
      * Check if CPU is under high load.
-     * 
+     *
      * @return true if system CPU > 75%
      */
     public boolean isCpuHigh() {
@@ -107,7 +190,7 @@ public final class SystemMonitor {
 
     /**
      * Check if CPU is critically loaded.
-     * 
+     *
      * @return true if system CPU > 90%
      */
     public boolean isCpuCritical() {
@@ -120,7 +203,7 @@ public final class SystemMonitor {
 
     /**
      * Check if system is under memory pressure.
-     * 
+     *
      * @return true if memory usage > 85%
      */
     public boolean isMemoryPressure() {
@@ -134,7 +217,7 @@ public final class SystemMonitor {
 
     /**
      * Check if memory situation is critical (OOM risk).
-     * 
+     *
      * @return true if memory usage > 95%
      */
     public boolean isMemoryCritical() {
@@ -255,16 +338,16 @@ public final class SystemMonitor {
 
     /**
      * Check if shaders are currently active.
-     * 
+     *
      * NOTE: Requires integration with Minecraft's shader system or Iris/Optifine
      * detection.
      * Currently returns false as a safe default.
-     * 
+     *
      * Integration points:
      * - For Vanilla: Check GameRenderer.getShader()
      * - For Iris: Check IrisApi.getInstance().isShaderPackInUse()
      * - For Optifine: Check Reflector.Shaders_shaderPackLoaded
-     * 
+     *
      * @return true if shaders are active, false otherwise (placeholder)
      */
     public boolean areShadersActive() {
@@ -274,15 +357,15 @@ public final class SystemMonitor {
 
     /**
      * Get current entity count from the world.
-     * 
+     *
      * NOTE: Requires integration with MinecraftClient.world.getEntities()
      * Currently returns 0 as a safe default.
-     * 
+     *
      * Integration approach:
      * - Add MinecraftClient parameter to this class
      * - Call client.world.getEntities().size() when world is not null
      * - Cache value for 1 second to avoid repeated iteration
-     * 
+     *
      * @return entity count (placeholder returns 0)
      */
     public int getEntityCount() {
@@ -292,9 +375,9 @@ public final class SystemMonitor {
 
     /**
      * Detect performance bottleneck based on system metrics.
-     * 
+     *
      * PRIORITY 2: Advanced detection logic.
-     * 
+     *
      * @param tickTimeMs      Average tick time in ms
      * @param renderTimeMs    Average render time in ms
      * @param entityCount     Current entity count
@@ -366,7 +449,9 @@ public final class SystemMonitor {
                 isMemoryPressure(),
                 isMemoryCritical(),
                 isCpuHigh(),
-                isCpuCritical());
+                isCpuCritical(),
+                getAvgTickTimeMs(),
+                getAvgRenderTimeMs());
     }
 
     /**
@@ -379,12 +464,16 @@ public final class SystemMonitor {
             boolean memoryPressure,
             boolean memoryCritical,
             boolean cpuHigh,
-            boolean cpuCritical) {
+            boolean cpuCritical,
+            double avgTickTimeMs,
+            double avgRenderTimeMs) {
         public String summary() {
             return String.format(
-                    "CPU: %.1f%% | Memory: %.1f%% | Pressure: %s",
+                    "CPU: %.1f%% | Memory: %.1f%% | Tick: %.2fms | Render: %.2fms | Pressure: %s",
                     systemCpuLoad * 100,
                     memoryUsage * 100,
+                    avgTickTimeMs,
+                    avgRenderTimeMs,
                     (cpuCritical || memoryCritical) ? "CRITICAL" : (cpuHigh || memoryPressure) ? "HIGH" : "OK");
         }
     }
