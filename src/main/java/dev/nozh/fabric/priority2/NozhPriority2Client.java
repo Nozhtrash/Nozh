@@ -8,6 +8,9 @@ import dev.nozh.core.manual.PendingSuggestionQueue;
 import dev.nozh.core.priority2.Priority2Signals;
 import dev.nozh.core.priority2.Priority2Suggestion;
 import dev.nozh.core.priority2.Priority2SuggestionEngine;
+import dev.nozh.core.priority3.EfficiencyScorer;
+import dev.nozh.core.priority3.PredictiveAnalyzer;
+import dev.nozh.core.priority3.SpikePrediction;
 import dev.nozh.core.scenario.DeepScenarioSnapshot;
 import dev.nozh.core.scenario.DeepScenarioTracker;
 import dev.nozh.core.system.BottleneckSnapshot;
@@ -23,6 +26,7 @@ import net.minecraft.item.BlockItem;
 import net.minecraft.text.Text;
 import net.minecraft.util.ActionResult;
 
+import java.util.Locale;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
@@ -40,31 +44,20 @@ public final class NozhPriority2Client implements ClientModInitializer {
     public void onInitializeClient() {
         final MinecraftClient client = MinecraftClient.getInstance();
 
-        // (1) Telemetry: tick + render time.
         final FabricFrameTickSampler frameSampler = new FabricFrameTickSampler(client);
-
-        // (2) OS load sampling.
         final SystemLoadSampler loadSampler = new SystemLoadSampler();
-
-        // (3) Deep scenario tracker.
         final DeepScenarioTracker deepScenario = new DeepScenarioTracker(client);
-
-        // (4) Director Mode V2 hints.
         final DirectorModeV2 director = new DirectorModeV2(FabricLoader.getInstance());
-
-        // (5) Bottleneck classification.
         final CpuGpuBottleneckClassifier classifier = new CpuGpuBottleneckClassifier();
-
-        // (6) Suggestion engine (manual mode building block).
         final Priority2SuggestionEngine suggestionEngine = new Priority2SuggestionEngine();
-
-        // (7) Action applier: maps suggestions to real settings.
         final Priority2ActionApplier actionApplier = new Priority2ActionApplier();
 
-        // HUD overlay for visibility (big step: no need to modify existing HUD).
+        // v0.3 bundle:
+        final PredictiveAnalyzer predictive = new PredictiveAnalyzer(40);
+        final EfficiencyScorer scorer = new EfficiencyScorer();
+
         Priority2HudOverlay.register(client, PENDING);
 
-        // Track block placements: best-effort signal.
         UseBlockCallback.EVENT.register((player, world, hand, hitResult) -> {
             if (world == null || !world.isClient()) return ActionResult.PASS;
             if (player == null || client.player == null) return ActionResult.PASS;
@@ -77,7 +70,6 @@ public final class NozhPriority2Client implements ClientModInitializer {
             return ActionResult.PASS;
         });
 
-        // Manual confirm: pop queue, apply real changes, and notify.
         new ManualConfirmKeybind(client, () -> {
             var next = PENDING.poll();
             if (next == null) {
@@ -100,7 +92,6 @@ public final class NozhPriority2Client implements ClientModInitializer {
             }
         });
 
-        // Runtime signal refresh.
         ClientTickEvents.END_CLIENT_TICK.register(c -> {
             if (c != client) return;
             if (client.player == null) return;
@@ -110,6 +101,9 @@ public final class NozhPriority2Client implements ClientModInitializer {
 
             double tickMs = frameSampler.getLastTickMs();
             double renderMs = frameSampler.getLastRenderMs();
+
+            double frameMs = safe(tickMs) + safe(renderMs);
+            predictive.addSampleMs(frameMs);
 
             double procLoad = loadSampler.getProcessCpuLoad().orElse(-1.0);
             double sysLoad = loadSampler.getSystemCpuLoad().orElse(-1.0);
@@ -131,18 +125,31 @@ public final class NozhPriority2Client implements ClientModInitializer {
             LAST_DIRECTOR_HINTS.set(hints);
             LAST_BOTTLENECK.set(bottleneck);
 
-            // Publish stable core signals.
             Priority2Signals.deepScenario.set(scenarioSnap);
             Priority2Signals.directorHints.set(hints);
             Priority2Signals.bottleneck.set(bottleneck);
 
-            // Suggestion queueing (defensive + de-dup).
-            Priority2Suggestion s = suggestionEngine.compute(scenarioSnap, bottleneck, hints);
-            if (s != null) {
-                PENDING.add(s.id, s.reason);
+            // Predictive gating: if recovery is already expected, avoid enqueuing new suggestions.
+            if (PENDING.size() == 0 && predictive.shouldWaitForRecovery()) {
+                return;
             }
 
-            // v0.3-ish: gradual recovery if we are stable and no pending suggestions.
+            SpikePrediction spike = predictive.predictSpike();
+
+            Priority2Suggestion s = suggestionEngine.compute(scenarioSnap, bottleneck, hints);
+            if (s != null) {
+                double conf = bottleneck == null ? 0.0 : bottleneck.confidence01;
+                EfficiencyScorer.Score score = scorer.score(s, conf);
+
+                String extra = " score=" + String.format(Locale.ROOT, "%.2f", score.finalScore)
+                        + " eff=" + String.format(Locale.ROOT, "%.2f", score.efficiency);
+                if (spike.likely) {
+                    extra += " spike(p=" + String.format(Locale.ROOT, "%.2f", spike.probability01) + ")";
+                }
+
+                PENDING.add(s.id, (s.reason == null ? "" : s.reason) + extra);
+            }
+
             if (PENDING.size() == 0 && Priority2PerfGate.performanceVeryGood(tickMs, renderMs, bottleneck)) {
                 try {
                     actionApplier.tryGradualRecovery(client, true);
@@ -152,6 +159,12 @@ public final class NozhPriority2Client implements ClientModInitializer {
             }
         });
 
-        NozhConstants.LOGGER.info("Priority2 mega actions loaded: suggestions -> real settings + gradual recovery");
+        NozhConstants.LOGGER.info("Priority3 bundle enabled: predictive + efficiency scoring + i18n (pending)");
+    }
+
+    private static double safe(double ms) {
+        if (!Double.isFinite(ms) || ms < 0.0) return 0.0;
+        if (ms > 60_000.0) return 60_000.0;
+        return ms;
     }
 }
