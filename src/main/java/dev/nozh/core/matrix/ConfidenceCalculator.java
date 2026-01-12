@@ -235,7 +235,6 @@ public final class ConfidenceCalculator {
             case IDLE -> IDLE_MODIFIER;
             case AFK -> IDLE_MODIFIER;
             case MENU -> IDLE_MODIFIER;
-            case LOADING -> LOADING_MODIFIER;
             case WORLD_LOADING -> LOADING_MODIFIER;
             case HIGH_ENTITY_DENSITY -> COMBAT_MODIFIER; // Conservative
             case UNKNOWN -> 1.0;
