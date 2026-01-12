@@ -188,21 +188,13 @@ public class NozhCommand {
         String key = StringArgumentType.getString(context, "key");
         double value = DoubleArgumentType.getDouble(context, "value");
 
-        try {
-            dev.nozh.core.config.NozhConfig config = dev.nozh.core.config.ConfigManager.getConfig();
-            // Config is immutable, need to use specific setters if available
-            // For now, show message that config needs to be modified in file
-            sendMessage(context.getSource(),
-                    String.format("Config key '%s' -> %.2f", key, value),
-                    Formatting.GREEN);
-            sendMessage(context.getSource(),
-                    "Note: Config changes require restart. Edit config/nozh.json5 directly.",
-                    Formatting.YELLOW);
-        } catch (Exception e) {
-            sendMessage(context.getSource(),
-                    "Failed to access config: " + e.getMessage(),
-                    Formatting.RED);
-        }
+        // Config is immutable, show message that config needs to be modified in file
+        sendMessage(context.getSource(),
+                String.format("Config key '%s' -> %.2f", key, value),
+                Formatting.GREEN);
+        sendMessage(context.getSource(),
+                "Note: Config changes require restart. Edit config/nozh.json5 directly.",
+                Formatting.YELLOW);
 
         return 1;
     }

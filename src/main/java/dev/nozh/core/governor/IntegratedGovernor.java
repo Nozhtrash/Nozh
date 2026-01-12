@@ -133,9 +133,7 @@ public final class IntegratedGovernor {
         // FIX: Get target FPS from config instead of hardcoding
         double targetFps = 60.0; // Default fallback
         try {
-            if (this.configManager != null) {
-                targetFps = this.configManager.getValue("target_fps", 60.0);
-            }
+            targetFps = this.configManager.getValue("target_fps", 60.0);
         } catch (Exception e) {
             NozhConstants.LOGGER.warn("Failed to get target_fps from config, using default: " + e.getMessage());
         }
