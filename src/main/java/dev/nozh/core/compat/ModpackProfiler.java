@@ -111,7 +111,7 @@ public final class ModpackProfiler {
         ModpackType type = determineType(loadedMods.size(), optimizationMods, contentMods, categoryBreakdown);
 
         // Generate recommendations
-        List<String> recommendations = generateRecommendations(type, optimizationMods, loadedMods);
+        List<String> recommendations = generateRecommendations(type, loadedMods);
 
         return new ModpackProfile(
                 type,
@@ -139,6 +139,9 @@ public final class ModpackProfiler {
 
         // Check for tech/magic heavy
         int techMods = breakdown.getOrDefault(ModKnowledgeBase.ModCategory.CONTENT, 0);
+        if (techMods > total * 0.3) {
+            return ModpackType.TECH_HEAVY;
+        }
 
         if (total > 100) {
             return ModpackType.KITCHEN_SINK;
@@ -154,7 +157,7 @@ public final class ModpackProfiler {
     /**
      * Generates recommendations for the modpack.
      */
-    private List<String> generateRecommendations(ModpackType type, int optimizationMods, Set<String> mods) {
+    private List<String> generateRecommendations(ModpackType type, Set<String> mods) {
         List<String> recs = new ArrayList<>();
 
         // Check for missing essential mods

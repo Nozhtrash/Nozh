@@ -179,9 +179,10 @@ public final class PotatoModeEngine {
     /**
      * Detects hardware capabilities.
      */
+    @SuppressWarnings("deprecation") // No alternative in newer Java - method still works
     private void detectHardware() {
         try {
-            // Get RAM
+            // Get RAM - using deprecated method as no replacement exists
             OperatingSystemMXBean osBean = (OperatingSystemMXBean) ManagementFactory.getOperatingSystemMXBean();
             totalRamMb = osBean.getTotalPhysicalMemorySize() / 1024 / 1024;
 

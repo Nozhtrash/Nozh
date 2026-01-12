@@ -43,6 +43,30 @@ public final class AutoUpdater {
     private boolean notifyOnUpdate;
 
     /**
+     * Sanitizes a string for safe logging by removing control characters and line
+     * breaks.
+     * Prevents log injection attacks.
+     *
+     * @param value string to sanitize
+     * @return sanitized string safe for logging
+     */
+    private static String sanitizeForLogging(String value) {
+        if (value == null) {
+            return null;
+        }
+        StringBuilder sb = new StringBuilder(value.length());
+        for (int i = 0; i < value.length(); i++) {
+            char c = value.charAt(i);
+            if (c == '\r' || c == '\n' || Character.isISOControl(c)) {
+                sb.append(' ');
+            } else {
+                sb.append(c);
+            }
+        }
+        return sb.toString();
+    }
+
+    /**
      * Constructs a new AutoUpdater.
      */
     public AutoUpdater() {
@@ -85,14 +109,15 @@ public final class AutoUpdater {
             String latestVersion = fetchLatestVersionFromGitHub();
 
             if (latestVersion != null && isNewerVersion(latestVersion)) {
+                // Sanitize version string before storing/logging to prevent log injection
+                String safeLatestVersion = sanitizeForLogging(latestVersion);
                 UpdateInfo info = new UpdateInfo(
                         true,
                         CURRENT_VERSION,
-                        latestVersion,
+                        safeLatestVersion,
                         "https://github.com/Nozhtrash/Nozh-Testing/releases/latest",
                         null,
                         false);
-
                 cachedResult = info;
                 lastCheckTime = System.currentTimeMillis();
 
