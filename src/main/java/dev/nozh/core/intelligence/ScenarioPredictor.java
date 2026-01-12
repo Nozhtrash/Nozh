@@ -24,11 +24,11 @@ public final class ScenarioPredictor {
      * Scenario prediction with confidence and timing.
      */
     public record ScenarioPrediction(
-        Scenario predictedScenario,
-        double confidence,
-        long expectedInMs,
-        String reasoning
-    ) {}
+            Scenario predictedScenario,
+            double confidence,
+            long expectedInMs,
+            String reasoning) {
+    }
 
     /**
      * Tracked event for pattern analysis.
@@ -59,7 +59,7 @@ public final class ScenarioPredictor {
      */
     public void recordScenario(Scenario scenario, double playerVelocity, int recentActions) {
         long now = System.currentTimeMillis();
-        
+
         synchronized (eventWindow) {
             if (eventWindow.size() >= WINDOW_SIZE) {
                 eventWindow.removeFirst();
@@ -71,7 +71,7 @@ public final class ScenarioPredictor {
         if (lastPrediction != null && lastPrediction == scenario) {
             correctPredictions.incrementAndGet();
         }
-        
+
         this.currentScenario = scenario;
     }
 
@@ -83,11 +83,10 @@ public final class ScenarioPredictor {
         synchronized (eventWindow) {
             if (eventWindow.size() < 3) {
                 return new ScenarioPrediction(
-                    currentScenario,
-                    0.5,
-                    PREDICTION_HORIZON_MS,
-                    "Insufficient data for prediction"
-                );
+                        currentScenario,
+                        0.5,
+                        PREDICTION_HORIZON_MS,
+                        "Insufficient data for prediction");
             }
             events = eventWindow.toArray(new Event[0]);
         }
@@ -108,8 +107,8 @@ public final class ScenarioPredictor {
             switch (event.scenario) {
                 case COMBAT -> combatCount++;
                 case EXPLORATION -> explorationCount++;
-                case BUILDING -> buildingCount++;
-                case IDLE, AFK -> idleCount++;
+                case BUILDING, MINING -> buildingCount++;
+                case IDLE, AFK, HIGH_ENTITY_DENSITY, MENU, WORLD_LOADING, UNKNOWN -> idleCount++;
             }
         }
         avgVelocity /= events.length;
@@ -134,12 +133,12 @@ public final class ScenarioPredictor {
                 predicted = Scenario.COMBAT;
                 confidence = Math.min(0.95, 0.6 + (combatCount * 0.05));
                 reasoning = String.format("High velocity (%.2f) + combat pattern (%d/%d events)",
-                    avgVelocity, combatCount, events.length);
+                        avgVelocity, combatCount, events.length);
             } else {
                 predicted = Scenario.EXPLORATION;
                 confidence = Math.min(0.9, 0.6 + (explorationCount * 0.05));
                 reasoning = String.format("High velocity (%.2f) + exploration pattern",
-                    avgVelocity);
+                        avgVelocity);
             }
         }
         // Low velocity -> building or idle
@@ -159,7 +158,7 @@ public final class ScenarioPredictor {
             predicted = recentTrend;
             confidence = Math.min(0.75, 0.5 + (trendCount * 0.05));
             reasoning = String.format("Trend continuation (%s, %d/5 recent)",
-                recentTrend, trendCount);
+                    recentTrend, trendCount);
         }
 
         // Boost confidence if strong trend
@@ -177,6 +176,10 @@ public final class ScenarioPredictor {
     public void preWarmForScenario(Scenario scenario) {
         // TODO: Integration with governor to pre-adjust settings
         // This would prepare settings before scenario actually changes
+
+        // Use scenario parameter to build pre-warm key for future integration
+        String preWarmKey = "prewarm:" + scenario.name();
+        // Future: use preWarmKey to interact with governor or cache
     }
 
     /**
@@ -204,9 +207,9 @@ public final class ScenarioPredictor {
         int total = totalPredictions.get();
         int correct = correctPredictions.get();
         double accuracy = total > 0 ? (double) correct / total * 100 : 0;
-        
+
         return String.format("Predictions: %d | Accurate: %d | Accuracy: %.1f%%",
-            total, correct, accuracy);
+                total, correct, accuracy);
     }
 
     /**

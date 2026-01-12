@@ -33,25 +33,24 @@ public final class SmartProfileManager {
      * Hardware classification tiers.
      */
     public enum HardwareClass {
-        POTATO,      // <4GB RAM, integrated GPU
-        LOW_END,     // 4-8GB RAM, entry GPU
-        MID_RANGE,   // 8-16GB RAM, mid GPU
-        HIGH_END,    // 16GB+ RAM, high-end GPU
-        ENTHUSIAST   // 32GB+ RAM, flagship GPU
+        POTATO, // <4GB RAM, integrated GPU
+        LOW_END, // 4-8GB RAM, entry GPU
+        MID_RANGE, // 8-16GB RAM, mid GPU
+        HIGH_END, // 16GB+ RAM, high-end GPU
+        ENTHUSIAST // 32GB+ RAM, flagship GPU
     }
 
     /**
      * Hardware profile with recommended settings.
      */
     public record HardwareProfile(
-        HardwareClass hardwareClass,
-        int recommendedRenderDistance,
-        int recommendedSimulationDistance,
-        int recommendedEntityDistance,
-        String graphicsMode,
-        boolean enableShaders,
-        Map<CapabilityId, CapabilityValue> baselineSettings
-    ) {
+            HardwareClass hardwareClass,
+            int recommendedRenderDistance,
+            int recommendedSimulationDistance,
+            int recommendedEntityDistance,
+            String graphicsMode,
+            boolean enableShaders,
+            Map<CapabilityId, CapabilityValue> baselineSettings) {
         public HardwareProfile {
             // Make defensive copies
             baselineSettings = Map.copyOf(baselineSettings);
@@ -81,7 +80,7 @@ public final class SmartProfileManager {
 
         // Classify hardware
         HardwareClass hwClass = classifyHardware(totalMemoryMB, processors);
-        
+
         // Build profile based on classification
         return buildProfile(hwClass);
     }
@@ -102,7 +101,7 @@ public final class SmartProfileManager {
 
     private HardwareProfile buildProfile(HardwareClass hwClass) {
         Map<CapabilityId, CapabilityValue> settings = new HashMap<>();
-        
+
         switch (hwClass) {
             case ENTHUSIAST -> {
                 settings.put(CapabilityId.PARTICLES, new CapabilityValue.EnumValue("ALL"));
@@ -110,8 +109,7 @@ public final class SmartProfileManager {
                 settings.put(CapabilityId.SMOOTH_LIGHTING, new CapabilityValue.BoolValue(true));
                 settings.put(CapabilityId.MIPMAP_LEVEL, new CapabilityValue.IntValue(4));
                 return new HardwareProfile(
-                    hwClass, 32, 12, 128, "FABULOUS", true, settings
-                );
+                        hwClass, 32, 12, 128, "FABULOUS", true, settings);
             }
             case HIGH_END -> {
                 settings.put(CapabilityId.PARTICLES, new CapabilityValue.EnumValue("ALL"));
@@ -119,8 +117,7 @@ public final class SmartProfileManager {
                 settings.put(CapabilityId.SMOOTH_LIGHTING, new CapabilityValue.BoolValue(true));
                 settings.put(CapabilityId.MIPMAP_LEVEL, new CapabilityValue.IntValue(4));
                 return new HardwareProfile(
-                    hwClass, 24, 10, 96, "FANCY", true, settings
-                );
+                        hwClass, 24, 10, 96, "FANCY", true, settings);
             }
             case MID_RANGE -> {
                 settings.put(CapabilityId.PARTICLES, new CapabilityValue.EnumValue("DECREASED"));
@@ -128,8 +125,7 @@ public final class SmartProfileManager {
                 settings.put(CapabilityId.SMOOTH_LIGHTING, new CapabilityValue.BoolValue(true));
                 settings.put(CapabilityId.MIPMAP_LEVEL, new CapabilityValue.IntValue(3));
                 return new HardwareProfile(
-                    hwClass, 16, 8, 64, "FANCY", false, settings
-                );
+                        hwClass, 16, 8, 64, "FANCY", false, settings);
             }
             case LOW_END -> {
                 settings.put(CapabilityId.PARTICLES, new CapabilityValue.EnumValue("MINIMAL"));
@@ -137,8 +133,7 @@ public final class SmartProfileManager {
                 settings.put(CapabilityId.SMOOTH_LIGHTING, new CapabilityValue.BoolValue(false));
                 settings.put(CapabilityId.MIPMAP_LEVEL, new CapabilityValue.IntValue(2));
                 return new HardwareProfile(
-                    hwClass, 12, 6, 48, "FAST", false, settings
-                );
+                        hwClass, 12, 6, 48, "FAST", false, settings);
             }
             case POTATO -> {
                 settings.put(CapabilityId.PARTICLES, new CapabilityValue.EnumValue("MINIMAL"));
@@ -148,15 +143,13 @@ public final class SmartProfileManager {
                 settings.put(CapabilityId.CLOUDS, new CapabilityValue.BoolValue(false));
                 settings.put(CapabilityId.ENTITY_SHADOWS, new CapabilityValue.BoolValue(false));
                 return new HardwareProfile(
-                    hwClass, 8, 4, 32, "FAST", false, settings
-                );
+                        hwClass, 8, 4, 32, "FAST", false, settings);
             }
         }
-        
+
         // Fallback
         return new HardwareProfile(
-            HardwareClass.MID_RANGE, 12, 6, 48, "FANCY", false, settings
-        );
+                HardwareClass.MID_RANGE, 12, 6, 48, "FANCY", false, settings);
     }
 
     /**
@@ -195,7 +188,8 @@ public final class SmartProfileManager {
      */
     public List<String> getAvailableProfiles() {
         List<String> profiles = new ArrayList<>(customProfiles.keySet());
-        profiles.add(0, "AUTO (Detected: " + (detectedProfile != null ? detectedProfile.hardwareClass() : "Unknown") + ")");
+        profiles.add(0,
+                "AUTO (Detected: " + (detectedProfile != null ? detectedProfile.hardwareClass() : "Unknown") + ")");
         return profiles;
     }
 
@@ -220,13 +214,11 @@ public final class SmartProfileManager {
 
         try (FileReader reader = new FileReader(profilesFile)) {
             JsonObject root = JsonParser.parseReader(reader).getAsJsonObject();
-            
+
             if (root.has("custom_profiles")) {
                 JsonObject profiles = root.getAsJsonObject("custom_profiles");
-                for (String key : profiles.keySet()) {
-                    // TODO: Deserialize profiles
-                    // For now, skip - would need custom deserializer for CapabilityValue
-                }
+                // TODO: Deserialize profiles
+                // For now, skip - would need custom deserializer for CapabilityValue
             }
         } catch (IOException e) {
             // Silent fail on load
@@ -237,15 +229,15 @@ public final class SmartProfileManager {
         try {
             JsonObject root = new JsonObject();
             JsonObject profiles = new JsonObject();
-            
+
             // TODO: Serialize custom profiles
             // For now, just save structure
-            
+
             root.add("custom_profiles", profiles);
-            
+
             String json = GSON.toJson(root);
             Files.writeString(profilesFile.toPath(), json, StandardCharsets.UTF_8,
-                StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
+                    StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
         } catch (IOException e) {
             // Silent fail on save
         }
@@ -258,16 +250,15 @@ public final class SmartProfileManager {
         if (detectedProfile == null) {
             return "Hardware: Not detected";
         }
-        
+
         Runtime runtime = Runtime.getRuntime();
         long maxMemory = runtime.maxMemory();
         int processors = runtime.availableProcessors();
-        
+
         return String.format("Hardware: %s | Memory: %d MB | Cores: %d | Render Distance: %d",
-            detectedProfile.hardwareClass(),
-            maxMemory / (1024 * 1024),
-            processors,
-            detectedProfile.recommendedRenderDistance()
-        );
+                detectedProfile.hardwareClass(),
+                maxMemory / (1024 * 1024),
+                processors,
+                detectedProfile.recommendedRenderDistance());
     }
 }
