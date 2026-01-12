@@ -5,6 +5,9 @@ import dev.nozh.core.director.DirectorBiasHints;
 import dev.nozh.core.director.DirectorModeV2;
 import dev.nozh.core.manual.ManualConfirmKeybind;
 import dev.nozh.core.manual.PendingSuggestionQueue;
+import dev.nozh.core.priority2.Priority2Signals;
+import dev.nozh.core.priority2.Priority2Suggestion;
+import dev.nozh.core.priority2.Priority2SuggestionEngine;
 import dev.nozh.core.scenario.DeepScenarioSnapshot;
 import dev.nozh.core.scenario.DeepScenarioTracker;
 import dev.nozh.core.system.BottleneckSnapshot;
@@ -12,6 +15,7 @@ import dev.nozh.core.system.CpuGpuBottleneckClassifier;
 import dev.nozh.core.system.SystemLoadSampler;
 import dev.nozh.fabric.telemetry.FabricFrameTickSampler;
 import net.fabricmc.api.ClientModInitializer;
+import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.event.player.UseBlockCallback;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.MinecraftClient;
@@ -23,34 +27,13 @@ import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Priority 2 (v0.2) integration entrypoint.
- *
- * <p>Big-step wiring that activates the new modules without rewriting the existing governor core.
- * It intentionally focuses on:
- * - capturing signals (tick/render + OS load)
- * - tracking deep scenarios
- * - enabling manual confirmation input (keybind K)
- * - exposing computed snapshots for other components to consume
  */
 public final class NozhPriority2Client implements ClientModInitializer {
 
-    /**
-     * Exposed, last-known deep scenario snapshot.
-     */
     public static final AtomicReference<DeepScenarioSnapshot> LAST_DEEP_SCENARIO = new AtomicReference<>();
-
-    /**
-     * Exposed, last-known CPU/GPU classification result.
-     */
     public static final AtomicReference<CpuGpuBottleneckClassifier.Result> LAST_BOTTLENECK = new AtomicReference<>();
-
-    /**
-     * Exposed, last-known Director bias hints.
-     */
     public static final AtomicReference<DirectorBiasHints> LAST_DIRECTOR_HINTS = new AtomicReference<>();
 
-    /**
-     * Manual suggestion queue (max 3, 60s TTL).
-     */
     public static final PendingSuggestionQueue PENDING = new PendingSuggestionQueue();
 
     @Override
@@ -68,10 +51,15 @@ public final class NozhPriority2Client implements ClientModInitializer {
 
         // (4) Director Mode V2 hints.
         final DirectorModeV2 director = new DirectorModeV2(FabricLoader.getInstance());
-        LAST_DIRECTOR_HINTS.set(director.computeBiasHints());
 
         // (5) Bottleneck classification.
         final CpuGpuBottleneckClassifier classifier = new CpuGpuBottleneckClassifier();
+
+        // (6) Suggestion engine (manual mode building block).
+        final Priority2SuggestionEngine suggestionEngine = new Priority2SuggestionEngine();
+
+        // HUD overlay for visibility (big step: no need to modify existing HUD).
+        Priority2HudOverlay.register(client, PENDING);
 
         // Track block placements: best-effort signal.
         UseBlockCallback.EVENT.register((player, world, hand, hitResult) -> {
@@ -81,7 +69,6 @@ public final class NozhPriority2Client implements ClientModInitializer {
 
             var stack = player.getStackInHand(hand);
             if (stack != null && stack.getItem() instanceof BlockItem) {
-                // This callback does not guarantee actual placement, but it is a useful proxy.
                 deepScenario.recordBlockPlaced();
             }
             return ActionResult.PASS;
@@ -98,21 +85,23 @@ public final class NozhPriority2Client implements ClientModInitializer {
             }
 
             if (client.inGameHud != null) {
-                client.inGameHud.getChatHud().addMessage(Text.literal("[NOZH] Applying suggestion: " + next.id));
-                client.inGameHud.getChatHud().addMessage(Text.literal("Reason: " + next.reason));
+                client.inGameHud.getChatHud().addMessage(Text.literal("[NOZH] Confirmed suggestion: " + next.id));
+                if (next.reason != null && !next.reason.isBlank()) {
+                    client.inGameHud.getChatHud().addMessage(Text.literal("Reason: " + next.reason));
+                }
             }
 
-            // Integration point:
-            // In the next wiring PR, this should trigger the real ActionBus / governor apply path.
+            // Next mega-step: map suggestion IDs to real capabilities/actions in ActionBus.
         });
 
-        // Low-frequency update loop: refresh snapshots and publish as atomics.
-        net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents.END_CLIENT_TICK.register(c -> {
+        // Runtime signal refresh.
+        ClientTickEvents.END_CLIENT_TICK.register(c -> {
             if (c != client) return;
             if (client.player == null) return;
 
-            LAST_DEEP_SCENARIO.set(deepScenario.snapshot());
-            LAST_DIRECTOR_HINTS.set(director.computeBiasHints());
+            // Update snapshots.
+            DeepScenarioSnapshot scenarioSnap = deepScenario.snapshot();
+            DirectorBiasHints hints = director.computeBiasHints();
 
             double tickMs = frameSampler.getLastTickMs();
             double renderMs = frameSampler.getLastRenderMs();
@@ -131,9 +120,24 @@ public final class NozhPriority2Client implements ClientModInitializer {
                     0
             );
 
-            LAST_BOTTLENECK.set(classifier.classify(snap));
+            CpuGpuBottleneckClassifier.Result bottleneck = classifier.classify(snap);
+
+            LAST_DEEP_SCENARIO.set(scenarioSnap);
+            LAST_DIRECTOR_HINTS.set(hints);
+            LAST_BOTTLENECK.set(bottleneck);
+
+            // Publish stable core signals.
+            Priority2Signals.deepScenario.set(scenarioSnap);
+            Priority2Signals.directorHints.set(hints);
+            Priority2Signals.bottleneck.set(bottleneck);
+
+            // Suggestion queueing (defensive + de-dup).
+            Priority2Suggestion s = suggestionEngine.compute(scenarioSnap, bottleneck, hints);
+            if (s != null) {
+                PENDING.add(s.id, s.reason);
+            }
         });
 
-        NozhConstants.LOGGER.info("Priority2 integration loaded: deep-scenarios + bottleneck + manual-confirm + director-v2");
+        NozhConstants.LOGGER.info("Priority2 mega wiring loaded: signals + HUD + manual suggestions");
     }
 }
