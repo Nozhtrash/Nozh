@@ -151,7 +151,8 @@ public final class ChaosTestRunner {
         }
     }
 
-    // Scenario implementations (chaos scenarios using fakes and pure core components)
+    // Scenario implementations (chaos scenarios using fakes and pure core
+    // components)
 
     private static ChaosScenarioResult testProviderInitFailure(long start) {
         // Malicious: 50% intermittent init failures with different exceptions
@@ -583,7 +584,7 @@ public final class ChaosTestRunner {
     }
 
     private static ChaosScenarioResult testShaderLoad(long start) {
-        String[] shaderPacks = {"OFF", "RAIN_STORM", "CINEMATIC", "PERFORMANCE"};
+        String[] shaderPacks = { "OFF", "RAIN_STORM", "CINEMATIC", "PERFORMANCE" };
         String current = shaderPacks[0];
         int toggles = 0;
         double shaderCost = 0.0;
@@ -675,7 +676,7 @@ public final class ChaosTestRunner {
                     "Chunk spam did not reach stress threshold", duration);
         }
 
-        String[] shaderPacks = {"OFF", "RAIN_STORM", "CINEMATIC", "PERFORMANCE"};
+        String[] shaderPacks = { "OFF", "RAIN_STORM", "CINEMATIC", "PERFORMANCE" };
         String current = shaderPacks[0];
         int toggles = 0;
         double shaderCost = 0.0;
@@ -820,7 +821,8 @@ public final class ChaosTestRunner {
         for (int i = 0; i + 1 < extras.length; i += 2) {
             builder.append(" ").append(extras[i]).append("=").append(extras[i + 1]);
         }
-        System.out.println(builder);
+        // Use logger for structured output (was: System.out.println)
+        dev.nozh.NozhConstants.LOGGER.debug(builder.toString());
     }
 
     private static final class SimulatedEntity {

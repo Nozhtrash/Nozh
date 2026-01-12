@@ -20,10 +20,10 @@ public final class SystemMonitor {
      * Performance bound type for advanced detection.
      */
     public enum BoundType {
-        CPU_BOUND,    // Tick time dominates
-        GPU_BOUND,    // Render time dominates
-        MIXED,        // Both high
-        BALANCED      // Neither dominates
+        CPU_BOUND, // Tick time dominates
+        GPU_BOUND, // Render time dominates
+        MIXED, // Both high
+        BALANCED // Neither dominates
     }
 
     private static final double MEMORY_PRESSURE_THRESHOLD = 0.85; // 85% usage
@@ -196,7 +196,7 @@ public final class SystemMonitor {
             int entityCount,
             boolean shadersActive,
             double resolutionScale) {
-        
+
         int cpuScore = 0;
         int gpuScore = 0;
 
@@ -209,22 +209,30 @@ public final class SystemMonitor {
 
         // System CPU load
         double systemCpuLoad = getSystemCpuLoad();
-        if (systemCpuLoad > 0.80) cpuScore += 2;
-        else if (systemCpuLoad > 0.60) cpuScore += 1;
+        if (systemCpuLoad > 0.80)
+            cpuScore += 2;
+        else if (systemCpuLoad > 0.60)
+            cpuScore += 1;
 
         // Entity count (200+, 300+ thresholds)
-        if (entityCount > 300) cpuScore += 2;
-        else if (entityCount > 200) cpuScore += 1;
+        if (entityCount > 300)
+            cpuScore += 2;
+        else if (entityCount > 200)
+            cpuScore += 1;
 
         // Shaders = GPU bias
-        if (shadersActive) gpuScore += 2;
+        if (shadersActive)
+            gpuScore += 2;
 
         // Resolution scale
-        if (resolutionScale > 1.5) gpuScore += 2;
-        else if (resolutionScale > 1.0) gpuScore += 1;
+        if (resolutionScale > 1.5)
+            gpuScore += 2;
+        else if (resolutionScale > 1.0)
+            gpuScore += 1;
 
         // Memory pressure
-        if (isMemoryPressure()) cpuScore += 1;
+        if (isMemoryPressure())
+            cpuScore += 1;
 
         // Decision
         int diff = Math.abs(cpuScore - gpuScore);
@@ -237,22 +245,60 @@ public final class SystemMonitor {
     }
 
     // Helper methods
-    public double getCpuLoad() { return getSystemCpuLoad(); }
-    public double getMemoryPressure() { return getMemoryUsage(); }
-    // TODO: Implement actual shader detection by querying renderer state
-    public boolean areShadersActive() { return false; } // Placeholder
-    // TODO: Implement entity count tracking from world state
-    public int getEntityCount() { return 0; } // Placeholder
+    public double getCpuLoad() {
+        return getSystemCpuLoad();
+    }
+
+    public double getMemoryPressure() {
+        return getMemoryUsage();
+    }
+
+    /**
+     * Check if shaders are currently active.
+     * 
+     * NOTE: Requires integration with Minecraft's shader system or Iris/Optifine
+     * detection.
+     * Currently returns false as a safe default.
+     * 
+     * Integration points:
+     * - For Vanilla: Check GameRenderer.getShader()
+     * - For Iris: Check IrisApi.getInstance().isShaderPackInUse()
+     * - For Optifine: Check Reflector.Shaders_shaderPackLoaded
+     * 
+     * @return true if shaders are active, false otherwise (placeholder)
+     */
+    public boolean areShadersActive() {
+        // Placeholder - shader detection requires Minecraft client integration
+        return false;
+    }
+
+    /**
+     * Get current entity count from the world.
+     * 
+     * NOTE: Requires integration with MinecraftClient.world.getEntities()
+     * Currently returns 0 as a safe default.
+     * 
+     * Integration approach:
+     * - Add MinecraftClient parameter to this class
+     * - Call client.world.getEntities().size() when world is not null
+     * - Cache value for 1 second to avoid repeated iteration
+     * 
+     * @return entity count (placeholder returns 0)
+     */
+    public int getEntityCount() {
+        // Placeholder - entity count requires MinecraftClient integration
+        return 0;
+    }
 
     /**
      * Detect performance bottleneck based on system metrics.
      * 
      * PRIORITY 2: Advanced detection logic.
      * 
-     * @param tickTimeMs Average tick time in ms
-     * @param renderTimeMs Average render time in ms
-     * @param entityCount Current entity count
-     * @param shadersActive Whether shaders are active
+     * @param tickTimeMs      Average tick time in ms
+     * @param renderTimeMs    Average render time in ms
+     * @param entityCount     Current entity count
+     * @param shadersActive   Whether shaders are active
      * @param resolutionScale Current resolution scale
      * @return "CPU", "GPU", or "BALANCED"
      */
@@ -262,7 +308,7 @@ public final class SystemMonitor {
             int entityCount,
             boolean shadersActive,
             double resolutionScale) {
-        
+
         int cpuScore = 0;
         int gpuScore = 0;
 
@@ -314,36 +360,32 @@ public final class SystemMonitor {
      */
     public SystemStatus getStatus() {
         return new SystemStatus(
-            getSystemCpuLoad(),
-            getProcessCpuLoad(),
-            getMemoryUsage(),
-            isMemoryPressure(),
-            isMemoryCritical(),
-            isCpuHigh(),
-            isCpuCritical()
-        );
+                getSystemCpuLoad(),
+                getProcessCpuLoad(),
+                getMemoryUsage(),
+                isMemoryPressure(),
+                isMemoryCritical(),
+                isCpuHigh(),
+                isCpuCritical());
     }
 
     /**
      * System status snapshot.
      */
     public record SystemStatus(
-        double systemCpuLoad,
-        double processCpuLoad,
-        double memoryUsage,
-        boolean memoryPressure,
-        boolean memoryCritical,
-        boolean cpuHigh,
-        boolean cpuCritical
-    ) {
+            double systemCpuLoad,
+            double processCpuLoad,
+            double memoryUsage,
+            boolean memoryPressure,
+            boolean memoryCritical,
+            boolean cpuHigh,
+            boolean cpuCritical) {
         public String summary() {
             return String.format(
-                "CPU: %.1f%% | Memory: %.1f%% | Pressure: %s",
-                systemCpuLoad * 100,
-                memoryUsage * 100,
-                (cpuCritical || memoryCritical) ? "CRITICAL" : 
-                (cpuHigh || memoryPressure) ? "HIGH" : "OK"
-            );
+                    "CPU: %.1f%% | Memory: %.1f%% | Pressure: %s",
+                    systemCpuLoad * 100,
+                    memoryUsage * 100,
+                    (cpuCritical || memoryCritical) ? "CRITICAL" : (cpuHigh || memoryPressure) ? "HIGH" : "OK");
         }
     }
 }

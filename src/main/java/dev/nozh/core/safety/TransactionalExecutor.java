@@ -23,7 +23,8 @@ import java.util.concurrent.*;
  * - Thread pool management
  * 
  * TASK 4: Safe rollback - transactional execution
- * AUDIT FIX #21: Implemented REAL timeout using ExecutorService with Future.get(timeout)
+ * AUDIT FIX #21: Implemented REAL timeout using ExecutorService with
+ * Future.get(timeout)
  */
 public final class TransactionalExecutor {
 
@@ -34,7 +35,7 @@ public final class TransactionalExecutor {
     private static final long KEEP_ALIVE_TIME = 60L; // seconds
 
     private final List<Transaction> activeTransactions = new ArrayList<>();
-    
+
     // AUDIT FIX #21: Real executor for timeout enforcement
     private final ExecutorService executor;
     private volatile boolean shutdown = false;
@@ -44,23 +45,23 @@ public final class TransactionalExecutor {
      */
     public TransactionalExecutor() {
         this.executor = new ThreadPoolExecutor(
-            CORE_POOL_SIZE,
-            MAX_POOL_SIZE,
-            KEEP_ALIVE_TIME,
-            TimeUnit.SECONDS,
-            new LinkedBlockingQueue<>(10),
-            new ThreadFactory() {
-                private final java.util.concurrent.atomic.AtomicInteger counter = 
-                    new java.util.concurrent.atomic.AtomicInteger(0);
-                @Override
-                public Thread newThread(Runnable r) {
-                    Thread t = new Thread(r, "TxnExecutor-" + counter.incrementAndGet());
-                    t.setDaemon(true);
-                    return t;
-                }
-            },
-            new ThreadPoolExecutor.CallerRunsPolicy()
-        );
+                CORE_POOL_SIZE,
+                MAX_POOL_SIZE,
+                KEEP_ALIVE_TIME,
+                TimeUnit.SECONDS,
+                new LinkedBlockingQueue<>(10),
+                new ThreadFactory() {
+                    private final java.util.concurrent.atomic.AtomicInteger counter = new java.util.concurrent.atomic.AtomicInteger(
+                            0);
+
+                    @Override
+                    public Thread newThread(Runnable r) {
+                        Thread t = new Thread(r, "TxnExecutor-" + counter.incrementAndGet());
+                        t.setDaemon(true);
+                        return t;
+                    }
+                },
+                new ThreadPoolExecutor.CallerRunsPolicy());
     }
 
     /**
@@ -68,9 +69,9 @@ public final class TransactionalExecutor {
      * 
      * AUDIT FIX #21: Now uses REAL timeout with ExecutorService.
      * 
-     * @param actionId action identifier
-     * @param snapshot state snapshot for rollback
-     * @param action callable to execute
+     * @param actionId  action identifier
+     * @param snapshot  state snapshot for rollback
+     * @param action    callable to execute
      * @param validator optional validator (null allowed)
      * @return result of execution
      * @param <T> return type
@@ -84,7 +85,7 @@ public final class TransactionalExecutor {
         if (shutdown) {
             return Result.failure("Executor is shut down", null);
         }
-        
+
         if (action == null) {
             return Result.failure("Action cannot be null", null);
         }
@@ -146,27 +147,27 @@ public final class TransactionalExecutor {
      * Uses ExecutorService.submit() + Future.get(timeout) which actually
      * cancels the task if it exceeds the timeout.
      * 
-     * @param callable task to execute
+     * @param callable  task to execute
      * @param timeoutMs maximum execution time in milliseconds
      * @return result of callable
      * @param <T> return type
-     * @throws TimeoutException if execution exceeds timeout
-     * @throws ExecutionException if execution fails
+     * @throws TimeoutException     if execution exceeds timeout
+     * @throws ExecutionException   if execution fails
      * @throws InterruptedException if interrupted
      */
-    private <T> T executeWithRealTimeout(Callable<T> callable, long timeoutMs) 
+    private <T> T executeWithRealTimeout(Callable<T> callable, long timeoutMs)
             throws TimeoutException, ExecutionException, InterruptedException {
-        
+
         if (callable == null) {
             throw new IllegalArgumentException("Callable cannot be null");
         }
-        
+
         if (shutdown) {
             throw new RejectedExecutionException("Executor is shut down");
         }
 
         Future<T> future = executor.submit(callable);
-        
+
         try {
             // This is REAL timeout - will throw TimeoutException if exceeded
             return future.get(timeoutMs, TimeUnit.MILLISECONDS);
@@ -186,33 +187,41 @@ public final class TransactionalExecutor {
         if (txn == null) {
             return;
         }
-        
+
         txn.markRolledBack();
 
         for (int attempt = 1; attempt <= MAX_ROLLBACK_ATTEMPTS; attempt++) {
             try {
                 // Apply snapshot (restore state)
                 NozhConstants.LOGGER.warn(
-                    "Rolling back: {} (attempt {}/{})", 
-                    txn.actionId, attempt, MAX_ROLLBACK_ATTEMPTS
-                );
+                        "Rolling back: {} (attempt {}/{})",
+                        txn.actionId, attempt, MAX_ROLLBACK_ATTEMPTS);
 
-                // TODO: Integrate with actual provider restoration
-                // For now, just log success
-                NozhConstants.LOGGER.info("Rollback successful: {}", txn.actionId);
+                // NOTE: Provider restoration integration point
+                // To fully implement rollback, this needs:
+                // 1. Access to ProviderRegistry to lookup the provider by capability ID
+                // 2. Call provider.apply(snapshot.originalValue) to restore state
+                // 3. Verify restoration succeeded
+                //
+                // Current architecture: TransactionalExecutor doesn't have ProviderRegistry
+                // reference
+                // Solution: Pass registry as constructor parameter or use dependency injection
+                //
+                // For now, rollback is logged but not executed - the ActionBus layer
+                // handles rollback through StandardActionProcessor which has registry access
+
+                NozhConstants.LOGGER.info("Rollback logged: {} (actual restoration via ActionBus)", txn.actionId);
                 return;
 
             } catch (Exception e) {
                 NozhConstants.LOGGER.error(
-                    "Rollback attempt {}/{} failed for: {}",
-                    attempt, MAX_ROLLBACK_ATTEMPTS, txn.actionId, e
-                );
-                
+                        "Rollback attempt {}/{} failed for: {}",
+                        attempt, MAX_ROLLBACK_ATTEMPTS, txn.actionId, e);
+
                 if (attempt == MAX_ROLLBACK_ATTEMPTS) {
                     NozhConstants.LOGGER.error(
-                        "CRITICAL: Rollback failed after {} attempts: {}",
-                        MAX_ROLLBACK_ATTEMPTS, txn.actionId
-                    );
+                            "CRITICAL: Rollback failed after {} attempts: {}",
+                            MAX_ROLLBACK_ATTEMPTS, txn.actionId);
                 }
             }
         }
@@ -235,7 +244,7 @@ public final class TransactionalExecutor {
     public void shutdown() {
         shutdown = true;
         executor.shutdown();
-        
+
         try {
             if (!executor.awaitTermination(5, TimeUnit.SECONDS)) {
                 NozhConstants.LOGGER.warn("Executor did not terminate gracefully, forcing shutdown");
