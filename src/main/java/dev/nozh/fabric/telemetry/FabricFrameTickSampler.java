@@ -2,6 +2,7 @@ package dev.nozh.fabric.telemetry;
 
 import dev.nozh.NozhConstants;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
+import net.fabricmc.fabric.api.client.rendering.v1.WorldRenderContext;
 import net.fabricmc.fabric.api.client.rendering.v1.WorldRenderEvents;
 import net.minecraft.client.MinecraftClient;
 
@@ -70,14 +71,14 @@ public final class FabricFrameTickSampler {
         }
     }
 
-    private void onRenderStart(WorldRenderEvents.Context ctx) {
+    private void onRenderStart(WorldRenderContext ctx) {
         if (this.client.world == null) {
             return;
         }
         renderStartNs.set(System.nanoTime());
     }
 
-    private void onRenderEnd(WorldRenderEvents.Context ctx) {
+    private void onRenderEnd(WorldRenderContext ctx) {
         if (this.client.world == null) {
             return;
         }
