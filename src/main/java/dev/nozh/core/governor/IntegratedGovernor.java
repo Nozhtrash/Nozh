@@ -2,15 +2,12 @@ package dev.nozh.core.governor;
 
 import dev.nozh.NozhConstants;
 import dev.nozh.core.compatibility.ModConflictDetector;
+import dev.nozh.core.context.Scenario;
 import dev.nozh.core.learning.*;
 import dev.nozh.core.monitoring.*;
 import dev.nozh.core.safety.*;
 import dev.nozh.core.context.CameraActivityTracker;
-import dev.nozh.core.context.DecisionReasoning;
-import dev.nozh.core.context.Scenario;
 import dev.nozh.core.context.ScenarioSnapshot;
-import dev.nozh.core.context.TelemetrySample;
-import dev.nozh.core.context.TelemetrySnapshot;
 import dev.nozh.core.telemetry.*;
 import dev.nozh.core.prediction.PerformancePredictor;
 import dev.nozh.core.config.AdaptiveConfigManager;
@@ -202,7 +199,7 @@ public final class IntegratedGovernor {
             if (scenarioPredictor != null && client.player != null) {
                 double velocity = client.player.getVelocity().length();
                 // Estimate recent actions via interaction manager if possible, or 0
-                scenarioPredictor.recordScenario(dev.nozh.core.intelligence.ScenarioPredictor.Scenario.valueOf(currentScenario.name()), velocity, 0);
+                scenarioPredictor.recordScenario(toApiScenario(currentScenario), velocity, 0);
             }
 
             TelemetrySample sample = collectTelemetry();
@@ -988,5 +985,20 @@ public final class IntegratedGovernor {
 
     public boolean isInitialized() {
         return initialized;
+    }
+
+    private dev.nozh.api.Scenario toApiScenario(Scenario contextScenario) {
+        if (contextScenario == null) return dev.nozh.api.Scenario.UNKNOWN;
+        try {
+            // Try explicit mapping for mismatched names, otherwise valueOf
+            switch (contextScenario) {
+                case STANDARD: return dev.nozh.api.Scenario.EXPLORATION;
+                case EXPLORING: return dev.nozh.api.Scenario.EXPLORATION;
+                case LOADING: return dev.nozh.api.Scenario.WORLD_LOADING;
+                default: return dev.nozh.api.Scenario.valueOf(contextScenario.name());
+            }
+        } catch (IllegalArgumentException e) {
+            return dev.nozh.api.Scenario.UNKNOWN;
+        }
     }
 }
