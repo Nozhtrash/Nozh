@@ -49,8 +49,8 @@ public final class PotatoModeEngine {
         /** Minimum viable game, bare essentials */
         LEVEL_4(0.2, 50, "Extreme optimizations for ancient hardware"),
 
-        /** Emergency mode, absolute minimum */
-        SURVIVAL(0.1, 70, "Emergency mode - playability over everything");
+        /** Extreme mode, absolute minimum */
+        EXTREME(0.1, 75, "Extreme optimizations - playability over everything");
 
         /** Quality multiplier (0.0 = minimum, 1.0 = normal) */
         public final double qualityMultiplier;
@@ -137,9 +137,9 @@ public final class PotatoModeEngine {
                         false, // clouds off
                         false // shadows off
                     );
-                case SURVIVAL -> new PotatoConfig(
+                case EXTREME -> new PotatoConfig(
                         level,
-                        3, // minimum viable render distance
+                        2, // minimum viable render distance (Extreme culling)
                         2, // minimum entity distance
                         0.0, // no particles
                         false, // animations off

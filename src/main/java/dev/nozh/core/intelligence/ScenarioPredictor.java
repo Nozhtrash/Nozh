@@ -170,16 +170,30 @@ public final class ScenarioPredictor {
         return new ScenarioPrediction(predicted, confidence, PREDICTION_HORIZON_MS, reasoning);
     }
 
-    /**
-     * Pre-warm settings for predicted scenario (stub).
-     */
-    public void preWarmForScenario(Scenario scenario) {
-        // TODO: Integration with governor to pre-adjust settings
-        // This would prepare settings before scenario actually changes
+    private Scenario lastPreWarmScenario = null;
+    private long lastPreWarmTime = 0;
 
-        // Use scenario parameter to build pre-warm key for future integration
-        String preWarmKey = "prewarm:" + scenario.name();
-        // Future: use preWarmKey to interact with governor or cache
+    /**
+     * Checks if we should pre-warm settings for a predicted scenario.
+     * Statefully prevents spamming pre-warm triggers.
+     * 
+     * @param scenario The predicted upcoming scenario
+     * @return true if the governor should execute pre-warm actions
+     */
+    public boolean preWarmForScenario(Scenario scenario) {
+        if (scenario == null || scenario == Scenario.UNKNOWN || scenario == currentScenario) {
+            return false;
+        }
+
+        long now = System.currentTimeMillis();
+        // Don't pre-warm same scenario twice within 10 seconds
+        if (scenario == lastPreWarmScenario && now - lastPreWarmTime < 10_000) {
+            return false;
+        }
+
+        lastPreWarmScenario = scenario;
+        lastPreWarmTime = now;
+        return true;
     }
 
     /**

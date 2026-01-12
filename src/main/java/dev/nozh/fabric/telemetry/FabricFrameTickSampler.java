@@ -25,6 +25,9 @@ public final class FabricFrameTickSampler {
 
     private final AtomicLong lastTickMsRaw = new AtomicLong(Double.doubleToRawLongBits(-1.0));
     private final AtomicLong lastRenderMsRaw = new AtomicLong(Double.doubleToRawLongBits(-1.0));
+    
+    // Benchmark state
+    private long lastFrameEndNs = 0;
 
     public FabricFrameTickSampler(MinecraftClient client) {
         if (client == null) {
@@ -97,6 +100,17 @@ public final class FabricFrameTickSampler {
         if (Double.isFinite(ms) && ms >= 0.0 && ms <= 10000.0) {
             lastRenderMsRaw.set(Double.doubleToRawLongBits(ms));
         }
+        
+        // Calculate instantaneous FPS for benchmarking
+        long end = System.nanoTime();
+        if (lastFrameEndNs > 0) {
+            long frameDelta = end - lastFrameEndNs;
+            if (frameDelta > 0) {
+                double fps = 1_000_000_000.0 / frameDelta;
+                dev.nozh.core.profiler.BenchmarkSuite.getInstance().onFrame(fps);
+            }
+        }
+        lastFrameEndNs = end;
     }
 
     public double getLastTickMs() {

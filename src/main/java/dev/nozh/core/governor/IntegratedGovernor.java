@@ -47,7 +47,7 @@ public final class IntegratedGovernor {
     private final MinecraftClient client;
     private final IntegratedRingTelemetryBuffer telemetryBuffer;
     private final EnhancedFabricScenarioDetector scenarioDetector;
-    private final TransactionalExecutor executor;
+    // Removed unused executor to clean up code
 
     // Director Mode inputs
     private final FabricFrameTickSampler frameTickSampler;
@@ -56,12 +56,12 @@ public final class IntegratedGovernor {
     private final double gpuBias;
 
     // Context tracking
-    private final EnvironmentContext environmentContext;
     private final CameraActivityTracker cameraTracker;
-    private final ScenarioConfidenceCalculator confidenceCalculator;
+    // Removed unused environmentContext, confidenceCalculator
 
     // Intelligence
-    private final PerformancePredictor predictor;
+    private final PerformancePredictor perfPredictor;
+    private final dev.nozh.core.intelligence.ScenarioPredictor scenarioPredictor;
 
     // Learning & Adaptation
     private final ActionEffectivenessTracker effectivenessTracker;
@@ -116,12 +116,11 @@ public final class IntegratedGovernor {
         // Initialize core systems
         this.telemetryBuffer = new IntegratedRingTelemetryBuffer(512);
         this.scenarioDetector = new EnhancedFabricScenarioDetector(client);
-        this.executor = new TransactionalExecutor(this.telemetryBuffer);
+        // Removed executor init
 
         // Initialize context
-        this.environmentContext = new EnvironmentContext(client);
         this.cameraTracker = new CameraActivityTracker(client);
-        this.confidenceCalculator = new ScenarioConfidenceCalculator();
+        // Removed environmentContext, confidenceCalculator init
 
         // Initialize configuration FIRST
         this.configManager = new AdaptiveConfigManager();
@@ -133,7 +132,8 @@ public final class IntegratedGovernor {
         } catch (Exception e) {
             NozhConstants.LOGGER.warn("Failed to get target_fps from config, using default: " + e.getMessage());
         }
-        this.predictor = new PerformancePredictor((int) targetFps);
+        this.perfPredictor = new PerformancePredictor((int) targetFps);
+        this.scenarioPredictor = new dev.nozh.core.intelligence.ScenarioPredictor();
 
         // Initialize learning
         this.effectivenessTracker = new ActionEffectivenessTracker();
@@ -190,13 +190,20 @@ public final class IntegratedGovernor {
             if (cameraTracker != null) {
                 cameraTracker.tick();
             }
+            
+            // Intelligence: Feed Scenario Predictor
+            if (scenarioPredictor != null && client.player != null) {
+                double velocity = client.player.getVelocity().length();
+                // Estimate recent actions via interaction manager if possible, or 0
+                scenarioPredictor.recordScenario(currentScenario, velocity, 0);
+            }
 
             TelemetrySample sample = collectTelemetry();
             if (sample != null && telemetryBuffer != null) {
                 telemetryBuffer.add(sample);
 
-                if (sample.hasFrametimeData() && predictor != null) {
-                    predictor.addSample(sample.frametimeMs());
+                if (sample.hasFrametimeData() && perfPredictor != null) {
+                    perfPredictor.addSample(sample.frametimeMs());
                 }
             }
 
@@ -263,6 +270,22 @@ public final class IntegratedGovernor {
         if (snapshot == null) {
             NozhConstants.LOGGER.warn("Cannot make decision with null snapshot");
             return;
+        }
+        
+        // Intelligence: Check Scenario Prediction
+        if (scenarioPredictor != null) {
+            try {
+                dev.nozh.core.intelligence.ScenarioPredictor.ScenarioPrediction prediction = 
+                    scenarioPredictor.predictNextScenario();
+                
+                if (prediction.confidence() > 0.8 && scenarioPredictor.preWarmForScenario(prediction.predictedScenario())) {
+                    NozhConstants.LOGGER.info("Intelligence: Predicting transition to {} (confidence: {}). Pre-warming engines.", 
+                        prediction.predictedScenario(), String.format("%.2f", prediction.confidence()));
+                    // Potential extension: loosen/tighten thresholds based on prediction
+                }
+            } catch (Exception e) {
+                NozhConstants.LOGGER.warn("Prediction failed", e);
+            }
         }
 
         try {
@@ -422,27 +445,49 @@ public final class IntegratedGovernor {
         }
     }
 
+    private String determineHardwareProfile(double fps) {
+        // 1. Check actual hardware limitations first
+        // If the system has <= 4GB RAM or <= 2 cores, it is low-end regardless of current FPS
+        // (e.g. looking at the floor might give 60fps but logic will choke)
+        long maxMemory = Runtime.getRuntime().maxMemory();
+        int processors = Runtime.getRuntime().availableProcessors();
+        
+        if (maxMemory < 3L * 1024 * 1024 * 1024 || processors <= 2) { // < 3GB heap or dual-core
+            return "low";
+        }
+
+        if (fps <= 0 || !Double.isFinite(fps)) {
+            return "medium";
+        }
+
+        double highThreshold = configManager != null ? configManager.getValue("hw_profile_high_fps", 120.0) : 120.0;
+        double mediumThreshold = configManager != null ? configManager.getValue("hw_profile_medium_fps", 60.0) : 60.0;
+
+        if (fps >= highThreshold)
+            return "high";
+        if (fps >= mediumThreshold)
+            return "medium";
+        return "low";
+    }
+
+    // Pre-computed action bias types to avoid string switching in hot paths
+    private static final java.util.Set<String> GPU_ACTIONS = java.util.Set.of(
+        "disable_clouds", "reduce_shadows", "lower_particles", "reduce_render_distance", "graphics_mode"
+    );
+    private static final java.util.Set<String> CPU_ACTIONS = java.util.Set.of(
+        "lower_entity_distance"
+    );
+
     private double getActionBiasMultiplier(String actionId) {
         if (actionId == null) {
             return 1.0;
         }
 
-        boolean gpuAction = switch (actionId) {
-            case "disable_clouds", "reduce_shadows", "lower_particles" -> true;
-            case "reduce_render_distance" -> true;
-            default -> false;
-        };
-
-        boolean cpuAction = switch (actionId) {
-            case "lower_entity_distance" -> true;
-            default -> false;
-        };
-
         double mult = 1.0;
-        if (gpuAction) {
+        if (GPU_ACTIONS.contains(actionId)) {
             mult *= gpuBias;
         }
-        if (cpuAction) {
+        if (CPU_ACTIONS.contains(actionId)) {
             mult *= cpuBias;
         }
         return mult;

@@ -61,7 +61,8 @@ public final class NozhHudRenderer {
             }
 
             Text text = Text.literal(line);
-            context.drawTextWithShadow(font, text, HUD_X, y, getColorForLine(line));
+            // Use white as base color; embedded standard color codes will override it
+            context.drawTextWithShadow(font, text, HUD_X, y, 0xFFFFFF);
             y += LINE_HEIGHT;
         }
     }
@@ -70,10 +71,12 @@ public final class NozhHudRenderer {
         List<String> lines = new ArrayList<>();
 
         // Line 1: Mode
-        String modeText = translate(
-            state.autoTuning() ? "nozh.hud.mode_auto" : "nozh.hud.mode_manual",
-            state.autoTuning() ? "NOZH: AUTO" : "NOZH: MANUAL"
-        );
+        boolean isAuto = state.autoTuning();
+        String modeKey = isAuto ? "nozh.hud.mode_auto" : "nozh.hud.mode_manual";
+        String modeDefault = isAuto ? "NOZH: AUTO" : "NOZH: MANUAL";
+        Formatting modeColor = isAuto ? Formatting.GREEN : Formatting.YELLOW;
+        
+        String modeText = modeColor + translate(modeKey, modeDefault);
         lines.add(modeText);
 
         if (compact) {
@@ -85,14 +88,14 @@ public final class NozhHudRenderer {
         // Line 2: Scenario
         Scenario scenario = state.currentScenario();
         if (scenario != null) {
-            String scenarioText = translate(
+            String scenarioText = Formatting.GOLD + translate(
                 "nozh.hud.scenario." + scenario.name().toLowerCase(),
                 "Scenario: " + scenario.name()
             );
             lines.add(scenarioText);
         }
 
-        // Line 3: Metrics
+        // Line 3: Metrics (White default)
         lines.add(buildMetricsLine(state));
 
         // Line 4: Last action (if recent)
@@ -101,14 +104,14 @@ public final class NozhHudRenderer {
             String improvement = lastActionImprovement > 0 
                 ? String.format("+%.1f%%", lastActionImprovement)
                 : "applied";
-            String actionLine = "✓ " + lastActionText + " (" + improvement + ")";
+            String actionLine = Formatting.AQUA + "✓ " + lastActionText + " (" + improvement + ")";
             lines.add(actionLine);
         }
 
         // Line 5: Manual mode suggestion
         if (!state.autoTuning() && state.suggestedActions() != null && !state.suggestedActions().isEmpty()) {
             PendingAction suggestion = state.suggestedActions().get(0);
-            String suggestionText = translate(
+            String suggestionText = Formatting.GOLD + translate(
                 "nozh.hud.suggestion",
                 "⚡ Suggestion: " + suggestion.capability().name() + " (Press K)"
             );
@@ -129,32 +132,8 @@ public final class NozhHudRenderer {
 
         return String.format("FPS: %d | P95: %.1fms", fps, p95);
     }
-
-    private int calculateFps(double avgFrametimeMs) {
-        if (avgFrametimeMs <= 0) {
-            return 0;
-        }
-        return (int) Math.round(1000.0 / avgFrametimeMs);
-    }
-
-    private int getColorForLine(String line) {
-        if (line.contains("AUTO")) {
-            return 0x00FF00; // Green
-        }
-        if (line.contains("MANUAL")) {
-            return 0xFFFF00; // Yellow
-        }
-        if (line.contains("Scenario:") || line.contains("Escenario:")) {
-            return 0xFFAA00; // Orange
-        }
-        if (line.startsWith("✓")) {
-            return 0x00FFFF; // Cyan
-        }
-        if (line.startsWith("⚡")) {
-            return 0xFF8800; // Orange
-        }
-        return 0xFFFFFF; // White (default)
-    }
+    
+    // Removed outdated brittle color logic
 
     private String translate(String key, String fallback) {
         try {

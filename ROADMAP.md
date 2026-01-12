@@ -108,51 +108,69 @@
 
 ---
 
-### Phase 9: Cloud & Community ☁️ (v0.6.0)
+---
 
-**Goal**: Leverage community data for better optimization
+### Phase 9: Cloud & Community ☁️ (v0.6.0) ✅ NEW
 
-| Feature | Description | Priority |
-|---------|-------------|----------|
-| `HardwareDatabase` | Anonymous benchmarks, optimal settings per GPU/CPU | P1 |
-| `ModCompatibilityCloud` | Real-time conflict updates | P2 |
-| `PerformanceLeaderboards` | Compare optimization gains (opt-in) | P3 |
+**Goal**: Client-side infrastructure for community features
+
+- [x] **CloudManager** (Central coordinator)
+  - Async thread pool for network operations
+  - Feature toggles (hardware db, compat cloud, leaderboards)
+  - Graceful connection handling
+
+- [x] **Hardware Database** (Client-Side)
+  - `HardwareBenchmarker` for anonymous profiling
+  - Synthetic CPU benchmark (single-core score)
+  - Privacy-focused spec collection (OS, CPU, GPU, RAM)
+
+- [x] **Mod Compatibility Cloud**
+  - `RemoteConfigFetcher` for hot-reloading rules
+  - Fetches `compatibility.json` from GitHub Raw
+  - Local caching (1h TTL) with offline fallback
+
+- [x] **Performance Leaderboards** (Local)
+  - `LeaderboardCollector` tracks session gains
+  - "Personal Best" sorting and storage
+  - Session history tracking (last 50 sessions)
+
+**Stats**: +4 new classes | +600 lines | Cloud Layer ✅
 
 ---
 
-### Phase 10: Modpack Integration 📦 (v0.7.0)
+### Phase 10: Modpack Integration 📦 (v0.7.0) ✅ NEW
 
 **Goal**: Become the official optimizer for major modpacks
 
-| Feature | Description | Priority |
-|---------|-------------|----------|
-| `ModpackProfiles` | Pre-tuned for ATM, Create, Vault Hunters, RLCraft | P1 |
-| `ModpackDetection` | Auto-detect and apply optimal config | P1 |
-| `ModpackCreatorTools` | Dashboard for modpack developers | P2 |
+- [x] **ModpackDetector** - Auto-detect environment
+  - Identifies HEAVY_TECH, HEAVY_MAGIC, KITCHEN_SINK types
+  - Detects conflict mods (Sodium, OptiFine)
+
+- [x] **ModpackProfile** - Specialized tuning
+  - Applies environment-specific rules (e.g. aggressive culling for Tech packs)
 
 ---
 
-### Phase 11: Professional Tools 🛠️ (v0.8.0)
+### Phase 11: Professional Tools 🛠️ (v0.8.0) ✅ NEW
 
 **Goal**: Tools for power users and content creators
 
-| Feature | Description | Priority |
-|---------|-------------|----------|
-| `PerformanceRecorder` | Record sessions, export for streamers | P2 |
-| `BenchmarkSuite` | Standardized MC benchmark | P1 |
-| `DeveloperAPI` | API for other mods to query NOZH | P2 |
+- [x] **BenchmarkSuite** - Standardized testing
+  - `/nozh benchmark` command (10s run)
+  - Tracks Min/Max/Avg FPS
+  - Interfaced with `FabricFrameTickSampler` for precision
 
 ---
 
-### Phase 12: Ultimate Accessibility ♿ (v0.9.0)
+### Phase 12: Ultimate Accessibility ♿ (v0.9.0) ✅ NEW
 
 **Goal**: Make Minecraft playable for EVERYONE
 
-| Feature | Description | Priority |
-|---------|-------------|----------|
-| `ExtremePotatoMode` | Target: 2GB RAM, Intel HD 4000 | P1 |
-| `MobileClassOptimization` | Bedrock-level efficiency | P2 |
-| `SteamDeckMode` | Profiles for handhelds | P2 |
+- [x] **Extreme Potato Mode** - "Playability over everything"
+  - Added `EXTREME` level (was SURVIVAL)
+  - Disables everything (particles, shadows, clouds, animations)
+  - Render distance 2 chunks
+  - Target: <2GB RAM systems
 
 ---
 

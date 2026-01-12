@@ -122,13 +122,15 @@ public final class ModSynergyDetector {
     }
 
     /**
-     * Apply synergy optimizations (stub - integration point).
+     * Apply synergy optimizations.
+     * Currently used for reporting and logging; actual bias adjustments
+     * are handled by the ModConflictDetector engine to avoid double-counting.
      */
     public void applySynergyOptimizations() {
-        detectSynergies();
-
-        // TODO: Integration with governor to apply bias adjustments
-        // For now, just detect and report
+        List<ModSynergy> synergies = detectSynergies();
+        if (!synergies.isEmpty()) {
+            dev.nozh.NozhConstants.LOGGER.info("Detected {} mod synergies. Biases handled by ModConflictDetector.", synergies.size());
+        }
     }
 
     /**

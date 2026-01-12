@@ -126,6 +126,12 @@ public final class AdaptiveVisualQualityController {
 
         // === UPSHIFT: Cautious recovery with sustained stability ===
         if (upshiftStreak >= REQUIRED_UPSHIFT_STREAK && currentStep > minStep) {
+            // CONFLICT RESOLUTION: If Potato Mode is active, do not upshift.
+            // The user requested maximum performance; restoring quality contradicts that.
+            if (dev.nozh.core.potato.PotatoModeEngine.isActive()) {
+                return Optional.empty();
+            }
+
             // Check minimum interval since last upshift
             if (nowMillis - lastUpshiftMillis < MIN_UPSHIFT_INTERVAL_MS) {
                 return Optional.empty();

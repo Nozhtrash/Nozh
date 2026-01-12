@@ -34,6 +34,9 @@ public class NozhMod implements ClientModInitializer {
         // Initialize governor
         governor = new IntegratedGovernor(client, logPath);
         
+        // Initialize cloud services
+        dev.nozh.core.cloud.CloudManager.getInstance().start();
+        
         // Register commands
         NozhCommand.setGovernor(governor);
         ClientCommandRegistrationCallback.EVENT.register((dispatcher, registryAccess) -> {
@@ -58,5 +61,6 @@ public class NozhMod implements ClientModInitializer {
         if (governor != null) {
             governor.shutdown();
         }
+        dev.nozh.core.cloud.CloudManager.getInstance().shutdown();
     }
 }

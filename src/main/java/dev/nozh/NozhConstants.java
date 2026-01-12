@@ -12,8 +12,8 @@ import java.nio.file.Path;
 public final class NozhConstants {
 
     public static final String MOD_ID = "nozh";
-    public static final String MOD_NAME = "NOZH";
-
+    public static final String MOD_NAME = "Nozh FPS Optimizer";
+    public static final String MOD_VERSION = "1.0.0-RC1";
     // Dynamic version from mod metadata (not hardcoded)
     private static String cachedVersion = null;
 
@@ -45,7 +45,8 @@ public final class NozhConstants {
         Path configDir;
         try {
             configDir = FabricLoader.getInstance().getConfigDir().resolve(MOD_ID);
-        } catch (Exception e) {\r\n            // Fallback if FabricLoader not available (e.g., in tests)
+        } catch (Exception e) {
+            // Fallback if FabricLoader not available (e.g., in tests)
             configDir = Path.of("config").resolve(MOD_ID);
         }
         CONFIG_DIR = configDir;
