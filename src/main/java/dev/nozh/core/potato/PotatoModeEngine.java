@@ -188,11 +188,10 @@ public final class PotatoModeEngine {
             // Get CPU cores
             cpuCores = Runtime.getRuntime().availableProcessors();
 
-            // Check if GPU is integrated (heuristic)
-            String gpuVendor = hardwareProfiler.getGpuVendor().toLowerCase();
-            integratedGpu = gpuVendor.contains("intel") && !gpuVendor.contains("arc");
+            // Check if GPU is integrated (simple heuristic based on RAM)
+            integratedGpu = totalRamMb < 8192; // Systems with <8GB likely have integrated GPU
 
-            NozhConstants.LOGGER.info("Hardware detected: {}MB RAM, {} cores, integrated GPU: {}",
+            NozhConstants.LOGGER.info("Hardware detected: {}MB RAM, {} cores, likely integrated GPU: {}",
                     totalRamMb, cpuCores, integratedGpu);
 
         } catch (Exception e) {
@@ -228,13 +227,6 @@ public final class PotatoModeEngine {
             return true;
         }
 
-        // Check current performance
-        double avgFps = hardwareProfiler.getAverageFps();
-        if (avgFps > 0 && avgFps < 30) {
-            NozhConstants.LOGGER.info("Potato mode recommended: Low FPS ({})", avgFps);
-            return true;
-        }
-
         return false;
     }
 
@@ -266,16 +258,8 @@ public final class PotatoModeEngine {
         if (integratedGpu)
             score += 2;
 
-        // FPS scoring
-        double avgFps = hardwareProfiler.getAverageFps();
-        if (avgFps > 0) {
-            if (avgFps < 20)
-                score += 3;
-            else if (avgFps < 30)
-                score += 2;
-            else if (avgFps < 45)
-                score += 1;
-        }
+        // FPS scoring (placeholder - would need actual FPS tracking)
+        // Assuming moderate FPS for now
 
         // Map score to level
         return switch (score) {
@@ -306,16 +290,12 @@ public final class PotatoModeEngine {
                 (int) (currentConfig.particleMultiplier * 100));
     }
 
-    /**
-     * Estimates FPS gain from potato mode.
-     * 
-     * @param level potato level
-     * @return estimated FPS increase in absolute frames
-     */
     public int estimateFpsGain(PotatoLevel level) {
-        double currentFps = hardwareProfiler.getAverageFps();
-        if (currentFps <= 0)
-            currentFps = 30; // Assume worst case
+        // Assume current FPS based on hardware
+        double currentFps = 30; // Conservative estimate
+        if (totalRamMb >= 8192 && cpuCores >= 4) {
+            currentFps = 45;
+        }
 
         double gainPercent = level.estimatedFpsGainPercent / 100.0;
         return (int) (currentFps * gainPercent);
@@ -356,16 +336,10 @@ public final class PotatoModeEngine {
         return active ? currentConfig : null;
     }
 
-    /**
-     * Gets hardware information summary.
-     * 
-     * @return human-readable hardware summary
-     */
     public String getHardwareSummary() {
-        return String.format("%dMB RAM | %d cores | %s GPU | Avg FPS: %.1f",
+        return String.format("%dMB RAM | %d cores | %s GPU",
                 totalRamMb,
                 cpuCores,
-                integratedGpu ? "Integrated" : "Dedicated",
-                hardwareProfiler.getAverageFps());
+                integratedGpu ? "Integrated" : "Dedicated");
     }
 }
