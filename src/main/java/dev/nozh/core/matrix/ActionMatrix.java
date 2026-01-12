@@ -439,7 +439,7 @@ public final class ActionMatrix {
         boolean combat = scenario == Scenario.COMBAT;
         boolean building = scenario == Scenario.BUILDING;
         boolean menu = scenario == Scenario.MENU;
-        boolean loading = scenario == Scenario.LOADING;
+        boolean loading = scenario == Scenario.WORLD_LOADING;
 
         CapabilityValue scenarioTarget = scenarioRules.resolveTarget(id, scenario, profile);
         CapabilityValue targetValue = scenarioTarget;
