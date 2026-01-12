@@ -2,7 +2,7 @@ package dev.nozh.core.matrix;
 
 import dev.nozh.core.bus.CapabilityId;
 import dev.nozh.core.capability.ProviderStatus;
-import dev.nozh.core.context.Scenario;
+import dev.nozh.api.Scenario;
 
 /**
  * Enhanced confidence calculator with Bayesian updates (Contract 5).
