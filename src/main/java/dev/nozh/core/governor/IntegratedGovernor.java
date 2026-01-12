@@ -126,6 +126,9 @@ public final class IntegratedGovernor {
         this.cameraTracker = new CameraActivityTracker(client);
         this.confidenceCalculator = new ScenarioConfidenceCalculator();
 
+        // Initialize configuration FIRST
+        this.configManager = new AdaptiveConfigManager();
+
         // Initialize intelligence
         // FIX: Get target FPS from config instead of hardcoding
         double targetFps = 60.0; // Default fallback
@@ -147,9 +150,6 @@ public final class IntegratedGovernor {
         this.healthMonitor = new SystemHealthMonitor();
         this.eventLogger = new PerformanceEventLogger(logPath);
         this.metricsCollector = new MetricsCollector();
-
-        // Initialize configuration
-        this.configManager = new AdaptiveConfigManager();
 
         // Initialize safety
         this.blacklist = new ProviderBlacklist();
