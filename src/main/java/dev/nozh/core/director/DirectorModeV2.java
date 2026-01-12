@@ -5,12 +5,6 @@ import net.fabricmc.loader.api.FabricLoader;
 import java.util.Locale;
 import java.util.Set;
 
-/**
- * v0.2: DirectorMode V2 - Known mod detection and dynamic hints.
- *
- * <p>Goal: identify major optimization stacks (Sodium/Lithium/Iris) and adjust heuristics.
- * This class is deliberately lightweight and deterministic.</p>
- */
 public final class DirectorModeV2 {
 
     private static final Set<String> SODIUM_STACK = Set.of(
@@ -55,12 +49,9 @@ public final class DirectorModeV2 {
             eco = ModEcosystem.VANILLA;
         }
 
-        // Bias rules:
-        // - Sodium stack typically shifts load toward GPU; slightly positive.
-        // - Lithium tends to reduce CPU pressure; slightly GPU-biased too.
         double bias = 0.0;
         switch (eco) {
-            case IRIS_STACK -> bias = 0.25; // shaders often GPU
+            case IRIS_STACK -> bias = 0.25;
             case SODIUM_STACK -> bias = 0.15;
             case LITHIUM_STACK -> bias = 0.10;
             default -> bias = 0.0;

@@ -6,12 +6,6 @@ import net.minecraft.client.MinecraftClient;
 import net.minecraft.entity.mob.HostileEntity;
 import net.minecraft.util.Identifier;
 
-/**
- * v0.2: deep scenario tracker.
- *
- * <p>Tracks a 30-second sliding window for block place/break rates and samples
- * hostile mob proximity. Uses Fabric events and low-frequency scans to keep overhead low.</p>
- */
 public final class DeepScenarioTracker {
 
     public static final long DEFAULT_WINDOW_MS = 30_000L;
@@ -24,7 +18,6 @@ public final class DeepScenarioTracker {
 
     private volatile DeepScenarioSnapshot last = new DeepScenarioSnapshot("unknown", 0.0, 0.0, 0);
 
-    // Sampling control: hostile scan every N ticks.
     private int tickCounter;
     private final int hostileScanEveryTicks;
     private final double hostileRadius;
@@ -42,7 +35,6 @@ public final class DeepScenarioTracker {
         this.hostileScanEveryTicks = Math.max(1, hostileScanEveryTicks);
         this.hostileRadius = Math.max(4.0, hostileRadius);
 
-        // Block breaks: server side event exists; on client integrated it still fires.
         PlayerBlockBreakEvents.AFTER.register((world, player, pos, state, be) -> {
             if (player == null) return;
             if (this.client.player == null) return;
@@ -50,14 +42,9 @@ public final class DeepScenarioTracker {
             broken.add(nowMs(), 1);
         });
 
-        // Deep signals refresh.
         ClientTickEvents.END_CLIENT_TICK.register(this::onTick);
     }
 
-    /**
-     * Call from an existing placement hook if present. This class does not assume a specific event
-     * for placement to keep compatibility across Fabric versions.
-     */
     public void recordBlockPlaced() {
         placed.add(nowMs(), 1);
     }

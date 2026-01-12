@@ -3,9 +3,6 @@ package dev.nozh.core.manual;
 import java.util.ArrayDeque;
 import java.util.Deque;
 
-/**
- * v0.2: Pending suggestion queue with expiry.
- */
 public final class PendingSuggestionQueue {
 
     public static final int DEFAULT_MAX_SIZE = 3;
@@ -47,7 +44,6 @@ public final class PendingSuggestionQueue {
         long now = nowMs();
         cleanup(now);
 
-        // Drop oldest if full.
         while (q.size() >= maxSize) {
             q.removeFirst();
         }
@@ -55,19 +51,9 @@ public final class PendingSuggestionQueue {
         q.addLast(new PendingSuggestion(id, reason, now, now + ttlMs));
     }
 
-    public synchronized PendingSuggestion peek() {
-        cleanup(nowMs());
-        return q.peekFirst();
-    }
-
     public synchronized PendingSuggestion poll() {
         cleanup(nowMs());
         return q.pollFirst();
-    }
-
-    public synchronized int size() {
-        cleanup(nowMs());
-        return q.size();
     }
 
     private void cleanup(long now) {

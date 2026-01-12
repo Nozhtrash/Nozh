@@ -3,11 +3,6 @@ package dev.nozh.core.scenario;
 import java.util.ArrayDeque;
 import java.util.Deque;
 
-/**
- * Sliding-window counters for player activity.
- *
- * <p>Stores (timestampMs, delta) pairs and allows querying rate-per-minute over a window.</p>
- */
 final class SlidingWindowCounter {
 
     private static final class Entry {
@@ -33,11 +28,6 @@ final class SlidingWindowCounter {
         q.addLast(new Entry(nowMs, delta));
         sum += delta;
         trim(nowMs);
-    }
-
-    int total(long nowMs) {
-        trim(nowMs);
-        return sum;
     }
 
     double perMinute(long nowMs) {

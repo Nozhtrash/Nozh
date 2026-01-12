@@ -5,9 +5,6 @@ import java.util.OptionalDouble;
 
 /**
  * Lightweight, defensive sampler for OS-level CPU load.
- *
- * <p>Uses {@code com.sun.management.OperatingSystemMXBean} when available, but avoids
- * hard dependency by using reflection-safe casts only when the class exists at runtime.</p>
  */
 public final class SystemLoadSampler {
 
@@ -17,23 +14,14 @@ public final class SystemLoadSampler {
         this.osBean = ManagementFactory.getOperatingSystemMXBean();
     }
 
-    /**
-     * @return process CPU load in range [0..1] when available.
-     */
     public OptionalDouble getProcessCpuLoad() {
         return invokeDouble("getProcessCpuLoad");
     }
 
-    /**
-     * @return system CPU load in range [0..1] when available.
-     */
     public OptionalDouble getSystemCpuLoad() {
         return invokeDouble("getSystemCpuLoad");
     }
 
-    /**
-     * @return system load average when available.
-     */
     public OptionalDouble getSystemLoadAverage() {
         return invokeDouble("getSystemLoadAverage");
     }

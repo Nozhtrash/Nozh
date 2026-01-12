@@ -6,11 +6,6 @@ import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.option.KeyBinding;
 import org.lwjgl.glfw.GLFW;
 
-/**
- * v0.2: Manual apply keybind (default: K) for pending suggestions.
- *
- * <p>This module is intentionally framework-agnostic: it only emits a callback when the key is pressed.</p>
- */
 public final class ManualConfirmKeybind {
 
     public interface OnConfirm {

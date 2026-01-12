@@ -1,32 +1,33 @@
 {
-	"schemaVersion": 1,
-	"id": "nozh",
-	"version": "${version}",
-	"name": "NOZH",
-	"description": "Frametime-first stability orchestrator. Measures, decides conservatively, executes safely, and rolls back automatically.",
-	"authors": [
-		"Nozh"
-	],
-	"contact": {},
-	"license": "MIT",
-	"environment": "*",
-	"entrypoints": {
-		"main": [
-			"dev.nozh.NozhMod"
-		],
-		"client": [
-			"dev.nozh.client.NozhModClient"
-		],
-		"modmenu": [
-			"dev.nozh.client.NozhModMenuIntegration"
-		]
-	},
-	"mixins": [
-		"nozh.mixins.json"
-	],
-	"depends": {
-		"fabricloader": ">=0.15.11",
-		"fabric-api": "*",
-		"minecraft": "1.20.1"
-	}
+  "schemaVersion": 1,
+  "id": "nozh",
+  "version": "${version}",
+  "name": "NOZH",
+  "description": "Frametime-first stability orchestrator. Measures, decides conservatively, executes safely, and rolls back automatically.",
+  "authors": [
+    "Nozh"
+  ],
+  "contact": {},
+  "license": "MIT",
+  "environment": "*",
+  "entrypoints": {
+    "main": [
+      "dev.nozh.NozhMod"
+    ],
+    "client": [
+      "dev.nozh.client.NozhModClient",
+      "dev.nozh.fabric.priority2.NozhPriority2Client"
+    ],
+    "modmenu": [
+      "dev.nozh.client.NozhModMenuIntegration"
+    ]
+  },
+  "mixins": [
+    "nozh.mixins.json"
+  ],
+  "depends": {
+    "fabricloader": ">=0.15.11",
+    "fabric-api": "*",
+    "minecraft": "1.20.1"
+  }
 }
