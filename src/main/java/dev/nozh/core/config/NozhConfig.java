@@ -335,4 +335,99 @@ public class NozhConfig {
         criticalCorrections.clear();
         return snapshot;
     }
+
+    /**
+     * Get configuration value by key name.
+     * 
+     * This method supports the command system for dynamic config access.
+     * Returns the value as a double for numeric configs, or throws if not found.
+     * 
+     * @param key          Configuration key name
+     * @param defaultValue Default value if key not found or invalid
+     * @return Configuration value as double
+     */
+    public double getValue(String key, double defaultValue) {
+        if (key == null || key.isBlank()) {
+            return defaultValue;
+        }
+
+        // Map common config keys to their values
+        switch (key.toLowerCase()) {
+            case "target_fps":
+            case "targetfps":
+                return (double) targetFps;
+            case "reverse_epsilon_ms":
+            case "reverseepsilonms":
+                return reverseEpsilonMs;
+            case "hud_scale":
+            case "hudscale":
+                return hudScale;
+            case "adaptive_visual_quality_sensitivity_ms":
+            case "adaptivevisualqualitysensitivityms":
+                return adaptiveVisualQualitySensitivityMs;
+            case "improvement_epsilon_avg_ms":
+            case "improvementepsilonavgms":
+                return improvementEpsilonAvgMs;
+            case "improvement_epsilon_p95_ms":
+            case "improvementepsilonp95ms":
+                return improvementEpsilonP95Ms;
+            case "hybrid_model_block_confidence":
+            case "hybridmodelblockconfidence":
+                return hybridModelBlockConfidence;
+            default:
+                NozhConstants.LOGGER.warn("Unknown config key '{}', using default: {}", key, defaultValue);
+                return defaultValue;
+        }
+    }
+
+    /**
+     * Get boolean configuration value by key name.
+     * 
+     * @param key          Configuration key name
+     * @param defaultValue Default value if key not found
+     * @return Configuration value as boolean
+     */
+    public boolean getBooleanValue(String key, boolean defaultValue) {
+        if (key == null || key.isBlank()) {
+            return defaultValue;
+        }
+
+        switch (key.toLowerCase()) {
+            case "enabled":
+                return enabled;
+            case "debug_logs":
+            case "debuglogs":
+                return debugLogs;
+            case "show_hud":
+            case "showhud":
+                return showHud;
+            case "show_hud_suggestions":
+            case "showhudsuggestio ns":
+                return showHudSuggestions;
+            case "allow_auto_tuning":
+            case "allowautotuning":
+                return allowAutoTuning;
+            case "allow_gameplay_impact_actions":
+            case "allowgameplayimpactactions":
+                return allowGameplayImpactActions;
+            case "safe_mode_force":
+            case "safemodeforce":
+                return safeModeForce;
+            case "rollback_enabled":
+            case "rollbackenabled":
+                return rollbackEnabled;
+            case "hybrid_model_enabled":
+            case "hybridmodelenabled":
+                return hybridModelEnabled;
+            case "benchmark_mode_enabled":
+            case "benchmarkmodeenabled":
+                return benchmarkModeEnabled;
+            case "adaptive_visual_quality_enabled":
+            case "adaptivevisualqualityenabled":
+                return adaptiveVisualQualityEnabled;
+            default:
+                NozhConstants.LOGGER.warn("Unknown boolean config key '{}', using default: {}", key, defaultValue);
+                return defaultValue;
+        }
+    }
 }

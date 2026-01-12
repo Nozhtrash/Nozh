@@ -19,10 +19,13 @@ import static net.fabricmc.fabric.api.client.command.v2.ClientCommandManager.lit
  * For now, this is a placeholder that shows the structure.
  */
 public class ExplainCommand {
-    
-    // TODO: Replace with actual governor instance from your mod
+
+    // NOTE: Governor reference should be set from NozhModClient during mod
+    // initialization
+    // This is currently using the old IntegratedGovernor which may not be the
+    // active governor
     private static IntegratedGovernor governor = null;
-    
+
     /**
      * Set the governor instance (call this from your mod initialization).
      */
@@ -34,9 +37,7 @@ public class ExplainCommand {
         dispatcher.register(
                 literal("nozh")
                         .then(literal("explain")
-                                .executes(ExplainCommand::explain)
-                        )
-        );
+                                .executes(ExplainCommand::explain)));
     }
 
     private static int explain(CommandContext<FabricClientCommandSource> ctx) {
@@ -44,7 +45,7 @@ public class ExplainCommand {
             ctx.getSource().sendFeedback(Text.literal("§cGovernor not initialized. Please start the game first."));
             return Command.SINGLE_SUCCESS;
         }
-        
+
         DecisionReasoning reasoning = governor.getLastDecisionReasoning();
 
         if (reasoning == null) {
@@ -56,31 +57,26 @@ public class ExplainCommand {
         ctx.getSource().sendFeedback(Text.literal("§6=== Last Decision Explanation ==="));
         ctx.getSource().sendFeedback(Text.literal("§7Scenario: §f" + reasoning.scenario()));
         ctx.getSource().sendFeedback(Text.literal(
-            String.format("§7Performance: §f%.1f FPS / %.0f target",
-                reasoning.currentFps(),
-                reasoning.targetFps()
-            )
-        ));
+                String.format("§7Performance: §f%.1f FPS / %.0f target",
+                        reasoning.currentFps(),
+                        reasoning.targetFps())));
         ctx.getSource().sendFeedback(Text.literal(
-            String.format("§7Utility Score: §f%.3f", reasoning.utilityScore())
-        ));
+                String.format("§7Utility Score: §f%.3f", reasoning.utilityScore())));
         ctx.getSource().sendFeedback(Text.literal(
-            String.format("§7Q-Value: §f%.3f", reasoning.qValue())
-        ));
-        
+                String.format("§7Q-Value: §f%.3f", reasoning.qValue())));
+
         if (reasoning.predictedDrop()) {
             ctx.getSource().sendFeedback(Text.literal("§e⚠ Frame drop predicted"));
         }
-        
+
         if (reasoning.spikeCount() > 0) {
             ctx.getSource().sendFeedback(Text.literal(
-                String.format("§e⚠ %d frame spikes detected", reasoning.spikeCount())
-            ));
+                    String.format("§e⚠ %d frame spikes detected", reasoning.spikeCount())));
         }
-        
+
         // Show full rationale
         ctx.getSource().sendFeedback(Text.literal("§7Rationale: §f" + reasoning.rationale()));
-        
+
         return Command.SINGLE_SUCCESS;
     }
 }
