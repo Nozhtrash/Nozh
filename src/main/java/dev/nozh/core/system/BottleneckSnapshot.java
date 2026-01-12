@@ -2,9 +2,6 @@ package dev.nozh.core.system;
 
 import java.util.Objects;
 
-/**
- * Snapshot used for CPU/GPU bottleneck inference.
- */
 public final class BottleneckSnapshot {
 
     public final double tickMs;

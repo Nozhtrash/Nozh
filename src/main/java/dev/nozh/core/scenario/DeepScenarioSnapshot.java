@@ -1,8 +1,5 @@
 package dev.nozh.core.scenario;
 
-/**
- * Snapshot of deep scenario signals for the last window.
- */
 public final class DeepScenarioSnapshot {
 
     public final String dimensionKey;
