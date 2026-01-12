@@ -1,14 +1,16 @@
-[02:44:12] [Test worker/INFO]: SystemHealthMonitor reset - all metrics clear[02:[02:44:13] [Test worker/INFO]: StateStore initialized with defaults (version 10)
-[02:44:13] [Test worker/WARN]: StateStore reset to defaults
-[02:44:13] [Test worker/WARN]: StateStore reset to defaults
-[02:44:13] [Test worker/WARN]: StateStore reset to defaults
-[02:44:13] [Test worker/WARN]: StateStore reset to defaults
-[02:44:13] [Test worker/WARN]: StateStore reset to defaults
-[02:44:13] [Test worker/WARN]: StateStore reset to defaults
-orker/INFO]: No session stats file found, starting fresh
-[02:44:12] [Test worker/INFO]: Session learning reset for new session (new-session)
-[02:44:12] [Test worker/INFO]: No session stats file found, starting fresh
-[02:44:12] [Test worker/INFO]: PerfManager initialized. Capacity=300 (5s @ 60fps)
+[03:13:04] [Test worker/INFO]: No session stats file found, starting fresh
+[03:[03:13:05] [Test worker/INFO]: StateStore initialized with defaults (version 10)
+[03:13:05] [Test worker/WARN]: StateStore reset to defaults
+[03:13:05] [Test worker/WARN]: StateStore reset to defaults
+[03:13:05] [Test worker/WARN]: StateStore reset to defaults
+[03:13:05] [Test worker/WARN]: StateStore reset to defaults
+[03:13:05] [Test worker/WARN]: StateStore reset to defaults
+[03:13:05] [Test worker/WARN]: StateStore reset to defaults
+sh
+[03:13:05] [Test worker/INFO]: No session stats file found, starting fresh
+r/INFO]: Session learning reset for new session (new-session)
+[03:13:04] [Test worker/INFO]: No session stats file found, starting fresh
+[03:13:04] [Test worker/INFO]: PerfManager initialized. Capacity=300 (5s @ 60fps)
 form-commons-1.10.1.jar:1.10.1]
 	at org.junit.jupiter.engine.execution.MethodInvocation.proceed(MethodInvocation.java:60) ~[junit-jupiter-engine-5.10.1.jar:5.10.1]
 	at org.junit.jupiter.engine.execution.InvocationInterceptorChain$ValidatingInvocation.proceed(InvocationInterceptorChain.java:131) ~[junit-jupiter-engine-5.10.1.jar:5.10.1]
