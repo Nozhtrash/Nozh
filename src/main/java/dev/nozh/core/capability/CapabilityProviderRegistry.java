@@ -98,11 +98,11 @@ public class CapabilityProviderRegistry {
      * @return ActionResult indicating success or failure
      */
     public static ActionResult execute(String actionId, MinecraftClient client, Object... params) {
-        NozhConstants.LOGGER.warn("CapabilityProviderRegistry.execute() is deprecated and disabled");
-        NozhConstants.LOGGER.warn("Please migrate to new CapabilityProvider.apply() API");
+        // NozhConstants.LOGGER.warn("CapabilityProviderRegistry.execute() is deprecated
+        // and disabled");
+        // NozhConstants.LOGGER.warn("Please migrate to new CapabilityProvider.apply()
+        // API");
         return ActionResult.error("Method deprecated - needs migration");
-
-        return ActionResult.error("Method completely disabled. Use ProviderRegistry.");
     }
 
     /**
@@ -116,44 +116,7 @@ public class CapabilityProviderRegistry {
      * @return true if restored successfully
      */
     public static boolean restore(String actionId, StateSnapshot snapshot) {
-        NozhConstants.LOGGER.warn("CapabilityProviderRegistry.restore() is deprecated and disabled");
-        NozhConstants.LOGGER.warn("Please migrate to new rollback mechanism");
-        if (snapshot != null) {
-            // Mark snapshot as intentionally unused while implementation is disabled
-            snapshot.hashCode();
-        }
         return false;
-
-        /*
-         * TEMPORARILY DISABLED - NEEDS MIGRATION TO NEW API
-         * if (actionId == null || snapshot == null) {
-         * NozhConstants.LOGGER.error("Cannot restore with null parameters");
-         * return false;
-         * }
-         * 
-         * CapabilityProvider provider = providers.get(actionId);
-         * if (provider == null) {
-         * NozhConstants.LOGGER.warn("Cannot restore unknown action: {}", actionId);
-         * return false;
-         * }
-         * 
-         * // TODO: Check if provider supports rollback in new API
-         * // if (!provider.supportsRollback()) {
-         * // NozhConstants.LOGGER.warn("Provider {} does not support rollback",
-         * actionId);
-         * // return false;
-         * // }
-         * 
-         * try {
-         * // TODO: Implement rollback with new API
-         * // provider.rollback(snapshot);
-         * NozhConstants.LOGGER.info("Rolled back action: {}", actionId);
-         * return true;
-         * } catch (Exception e) {
-         * NozhConstants.LOGGER.error("Failed to rollback action: {}", actionId, e);
-         * return false;
-         * }
-         */
     }
 
     /**
