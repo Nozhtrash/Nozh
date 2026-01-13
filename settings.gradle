@@ -1,3 +1,4 @@
+// NOZH v2.0 Professional Release
 pluginManagement {
 	repositories {
 		maven {
