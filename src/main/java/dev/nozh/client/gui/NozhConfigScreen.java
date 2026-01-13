@@ -129,13 +129,7 @@ public class NozhConfigScreen extends Screen {
         }).dimensions(x, y, 310, 20).build());
     }
 
-    private void initGeneral(int x, int y) {
-        // Example Toggle
-        addDrawableChild(ButtonWidget.builder(Text.translatable("nozh.option.enabled", config.enabled), btn -> {
-            config.enabled = !config.enabled;
-            btn.setMessage(Text.translatable("nozh.option.enabled", config.enabled));
-        }).dimensions(x, y, 200, 20).build());
-    }
+
 
     @Override
     public void render(DrawContext context, int mouseX, int mouseY, float delta) {
