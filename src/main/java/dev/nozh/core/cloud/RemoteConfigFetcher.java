@@ -15,7 +15,8 @@ import java.util.concurrent.CompletableFuture;
 /**
  * Remote Config Fetcher - Fetches dynamic configuration from the cloud.
  * 
- * Primary use case: Updating mod compatibility rules without requiring a mod update.
+ * Primary use case: Updating mod compatibility rules without requiring a mod
+ * update.
  * Uses GitHub Raw as a simple CDN.
  * 
  * Features:
@@ -26,17 +27,18 @@ import java.util.concurrent.CompletableFuture;
 public final class RemoteConfigFetcher {
 
     private static final RemoteConfigFetcher INSTANCE = new RemoteConfigFetcher();
-    
+
     // Default URL (placeholder - would point to main repo in production)
     private static final String DEFAULT_CONFIG_URL = "https://raw.githubusercontent.com/Nozhtrash/Nozh-Testing/main/resources/compatibility.json";
-    
+
     private static final Gson GSON = new Gson();
-    
+
     private JsonObject cachedConfig = null;
     private long lastFetchTime = 0;
     private static final long CACHE_TTL_MS = 3600_000; // 1 hour
 
-    private RemoteConfigFetcher() {}
+    private RemoteConfigFetcher() {
+    }
 
     public static RemoteConfigFetcher getInstance() {
         return INSTANCE;
@@ -60,23 +62,24 @@ public final class RemoteConfigFetcher {
         return CloudManager.getInstance().submitTask(() -> {
             try {
                 NozhConstants.LOGGER.info("[NOZH] Fetching remote config from: {}", DEFAULT_CONFIG_URL);
-                
+
                 URL url = new URL(DEFAULT_CONFIG_URL);
                 HttpURLConnection conn = (HttpURLConnection) url.openConnection();
                 conn.setConnectTimeout(5000); // 5s timeout
                 conn.setReadTimeout(5000);
                 conn.setRequestMethod("GET");
-                
+
                 if (conn.getResponseCode() == 200) {
                     try (InputStreamReader reader = new InputStreamReader(conn.getInputStream())) {
                         JsonObject config = JsonParser.parseReader(reader).getAsJsonObject();
-                        
+
                         // Validate basic structure
                         if (config.has("version") && config.has("compatibility")) {
                             cachedConfig = config;
                             lastFetchTime = System.currentTimeMillis();
                             saveToDisk(config); // Update local cache file
-                            NozhConstants.LOGGER.info("[NOZH] Remote config updated (v{})", config.get("version").getAsString());
+                            String version = config.get("version").getAsString().replace('\n', '_').replace('\r', '_');
+                            NozhConstants.LOGGER.info("[NOZH] Remote config updated (v{})", version);
                         } else {
                             NozhConstants.LOGGER.warn("[NOZH] Invalid remote config format");
                         }
@@ -84,7 +87,7 @@ public final class RemoteConfigFetcher {
                 } else {
                     NozhConstants.LOGGER.warn("[NOZH] Failed to fetch remote config: HTTP {}", conn.getResponseCode());
                 }
-                
+
             } catch (Exception e) {
                 NozhConstants.LOGGER.warn("[NOZH] Remote config fetch failed: {}", e.getMessage());
             }
@@ -113,7 +116,7 @@ public final class RemoteConfigFetcher {
         } catch (Exception e) {
             // Ignore
         }
-        
+
         // Return minimal default
         JsonObject defaultConf = new JsonObject();
         defaultConf.addProperty("version", "0.0.0");

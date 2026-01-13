@@ -21,6 +21,7 @@ public abstract class MixinClientPlayNetworkHandler {
      * Intercept world time update packets to track server tick timing.
      */
     @Inject(method = "onWorldTimeUpdate", at = @At("HEAD"))
+    @SuppressWarnings("unused")
     private void nozh$onWorldTimeUpdate(WorldTimeUpdateS2CPacket packet, CallbackInfo ci) {
         try {
             // Notify the server performance detector

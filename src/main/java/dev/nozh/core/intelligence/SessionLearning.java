@@ -38,7 +38,7 @@ public final class SessionLearning {
     private static final String STATS_TMP_FILE = "nozh_session.json.tmp";
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
     private static final long SAVE_INTERVAL_MILLIS = 60000;
-    
+
     // Memory management constants
     private static final int MAX_HISTORY_ENTRIES = 500; // Maximum action-scenario pairs
     private static final long STALE_ENTRY_AGE_MS = 24 * 60 * 60 * 1000L; // 24 hours
@@ -51,7 +51,7 @@ public final class SessionLearning {
     private final Map<String, ActionStats> history = new java.util.concurrent.ConcurrentHashMap<>();
     private final PredictionStats predictionStats = new PredictionStats();
     private final Map<SpikeCauseType, CausalityStats> causalityHistory = new EnumMap<>(SpikeCauseType.class);
-    
+
     // Key Cache for Zero-Allocation lookups
     private static final Map<CapabilityId, Map<dev.nozh.core.context.Scenario, String>> KEY_CACHE;
 
@@ -59,7 +59,8 @@ public final class SessionLearning {
         // Pre-compute all possible keys to avoid allocation at runtime
         KEY_CACHE = new EnumMap<>(CapabilityId.class);
         for (CapabilityId id : CapabilityId.values()) {
-            EnumMap<dev.nozh.core.context.Scenario, String> scenarioMap = new EnumMap<>(dev.nozh.core.context.Scenario.class);
+            EnumMap<dev.nozh.core.context.Scenario, String> scenarioMap = new EnumMap<>(
+                    dev.nozh.core.context.Scenario.class);
             for (dev.nozh.core.context.Scenario s : dev.nozh.core.context.Scenario.values()) {
                 scenarioMap.put(s, id.name() + "|" + s.name());
             }
@@ -90,10 +91,10 @@ public final class SessionLearning {
         }
         sessionKey = normalizedKey;
         history.clear();
-        synchronized(predictionStats) {
+        synchronized (predictionStats) {
             predictionStats.reset();
         }
-        synchronized(causalityHistory) {
+        synchronized (causalityHistory) {
             causalityHistory.clear();
         }
         lastSavedHash = 0;
@@ -133,11 +134,11 @@ public final class SessionLearning {
     public void recordOutcome(CapabilityId id, dev.nozh.core.context.Scenario scenario, ActionOutcome outcome,
             double fpsGainMs, double p95DeltaMs, int spikeDelta) {
         String key = getCachedKey(id, scenario);
-        
+
         // Atomic update for thread safety
         history.compute(key, (k, existing) -> {
             ActionStats stats = existing != null ? existing : new ActionStats();
-            
+
             stats.totalAttempts++;
             if (outcome == ActionOutcome.POSITIVE) {
                 stats.successCount++;
@@ -156,13 +157,13 @@ public final class SessionLearning {
             stats.avgSpikeDelta = (double) stats.totalSpikeDelta / stats.totalAttempts;
             return stats;
         });
-        
+
         dirty = true;
-        
+
         // Automatic memory management: compact if over limit
         enforceMemoryLimits();
     }
-    
+
     /**
      * Enforces memory limits by compacting history when needed.
      * Removes stale and low-value entries to stay under MAX_HISTORY_ENTRIES.
@@ -171,50 +172,49 @@ public final class SessionLearning {
         if (history.size() <= MAX_HISTORY_ENTRIES) {
             return;
         }
-        
+
         long now = System.currentTimeMillis();
-        
+
         // Don't compact too frequently (at most once per minute)
         if (now - lastCompactionMillis < 60_000) {
             return;
         }
         lastCompactionMillis = now;
-        
+
         // Use a snapshot or iterator safe for concurrent map
         // Note: ConcurrentHashMap iterators are weakly consistent and safe
         int initialSize = history.size();
-        
+
         // Phase 1: Remove stale entries with few attempts
         history.entrySet().removeIf(entry -> {
             ActionStats stats = entry.getValue();
             long lastActivity = Math.max(stats.lastSuccessTime, stats.lastFailureTime);
             return stats.totalAttempts < MIN_ATTEMPTS_TO_KEEP && now - lastActivity > STALE_ENTRY_AGE_MS;
         });
-        
+
         // Phase 2: If still over limit, remove lowest-value entries
         if (history.size() > MAX_HISTORY_ENTRIES) {
             // This is expensive (sort), but happens rarely (once a week per cycle ideally)
-            java.util.List<Map.Entry<String, ActionStats>> sorted = 
-                new java.util.ArrayList<>(history.entrySet());
+            java.util.List<Map.Entry<String, ActionStats>> sorted = new java.util.ArrayList<>(history.entrySet());
             sorted.sort((a, b) -> {
                 double valueA = calculateEntryValue(a.getValue());
                 double valueB = calculateEntryValue(b.getValue());
                 return Double.compare(valueA, valueB);
             });
-            
-            int toRemove = history.size() - (int)(MAX_HISTORY_ENTRIES * 0.8);
+
+            int toRemove = history.size() - (int) (MAX_HISTORY_ENTRIES * 0.8);
             for (int i = 0; i < toRemove && i < sorted.size(); i++) {
                 history.remove(sorted.get(i).getKey());
             }
         }
-        
+
         int removed = initialSize - history.size();
         if (removed > 0) {
-            safeLog("Memory compaction: removed {} entries ({} -> {})", 
-                removed, initialSize, history.size());
+            safeLog("Memory compaction: removed {} entries ({} -> {})",
+                    removed, initialSize, history.size());
         }
     }
-    
+
     /**
      * Calculates the value of a history entry for compaction decisions.
      * Higher value = more worth keeping.
@@ -235,7 +235,7 @@ public final class SessionLearning {
     }
 
     public void recordPredictionOutcome(boolean predictedSpike, boolean actualSpike, double confidence) {
-        synchronized(predictionStats) {
+        synchronized (predictionStats) {
             predictionStats.totalPredictions++;
             if (predictedSpike == actualSpike) {
                 predictionStats.correctPredictions++;
@@ -253,7 +253,7 @@ public final class SessionLearning {
     }
 
     public double getPredictionAccuracy() {
-        synchronized(predictionStats) {
+        synchronized (predictionStats) {
             if (predictionStats.totalPredictions <= 0) {
                 return 0.0;
             }
@@ -262,13 +262,13 @@ public final class SessionLearning {
     }
 
     public double getPredictionAvgConfidence() {
-        synchronized(predictionStats) {
+        synchronized (predictionStats) {
             return predictionStats.avgConfidence;
         }
     }
 
     public int getPredictionCount() {
-        synchronized(predictionStats) {
+        synchronized (predictionStats) {
             return predictionStats.totalPredictions;
         }
     }
@@ -277,7 +277,7 @@ public final class SessionLearning {
         if (cause == null || cause == SpikeCauseType.UNKNOWN) {
             return;
         }
-        synchronized(causalityHistory) {
+        synchronized (causalityHistory) {
             CausalityStats stats = causalityHistory.computeIfAbsent(cause, key -> new CausalityStats());
             stats.totalCount++;
             stats.totalConfidence += Math.max(0.0, confidence);
@@ -288,7 +288,7 @@ public final class SessionLearning {
     }
 
     public double getCausalityConfidence(SpikeCauseType cause) {
-        synchronized(causalityHistory) {
+        synchronized (causalityHistory) {
             CausalityStats stats = causalityHistory.get(cause);
             return stats != null ? stats.avgConfidence : 0.0;
         }
@@ -376,22 +376,22 @@ public final class SessionLearning {
      */
     public void applyDecay(long maxAgeMillis) {
         long limitTime = System.currentTimeMillis() - maxAgeMillis;
-        
+
         history.entrySet().removeIf(entry -> {
             ActionStats stats = entry.getValue();
             long lastActivity = Math.max(stats.lastSuccessTime, stats.lastFailureTime);
-            
+
             if (lastActivity < limitTime) {
                 // Apply decay in-place
                 // Note: This is a bit racy but benign for stats
-                stats.totalAttempts = (int)(stats.totalAttempts * 0.5);
-                stats.successCount = (int)(stats.successCount * 0.5);
-                stats.failureCount = (int)(stats.failureCount * 0.5);
-                stats.neutralCount = (int)(stats.neutralCount * 0.5);
+                stats.totalAttempts = (int) (stats.totalAttempts * 0.5);
+                stats.successCount = (int) (stats.successCount * 0.5);
+                stats.failureCount = (int) (stats.failureCount * 0.5);
+                stats.neutralCount = (int) (stats.neutralCount * 0.5);
                 stats.totalFpsGain *= 0.5;
                 stats.totalP95DeltaMs *= 0.5;
-                stats.totalSpikeDelta = (int)(stats.totalSpikeDelta * 0.5);
-                
+                stats.totalSpikeDelta = (int) (stats.totalSpikeDelta * 0.5);
+
                 // Recalculate averages
                 if (stats.successCount > 0) {
                     stats.avgFpsGain = stats.totalFpsGain / stats.successCount;
@@ -400,9 +400,9 @@ public final class SessionLearning {
                     stats.avgP95DeltaMs = stats.totalP95DeltaMs / stats.totalAttempts;
                     stats.avgSpikeDelta = (double) stats.totalSpikeDelta / stats.totalAttempts;
                 }
-                
+
                 dirty = true;
-                
+
                 // Remove if decayed too much
                 return stats.totalAttempts < 2;
             }
@@ -467,18 +467,11 @@ public final class SessionLearning {
 
     private String getCachedKey(CapabilityId id, dev.nozh.core.context.Scenario scenario) {
         if (scenario == null) {
-            // Use UNKNOWN/DEFAULT or handle null scenario key logic
-            // Assuming there is a cached key for "ID|null" equivalent?
-            // Actually, buildKey used "GLOBAL" for null scenario.
-            // Let's assume we map null -> GLOBAL in the cache logic, 
-            // but we need to match the previous buildKey logic.
-            // Since Scenario enum doesn't have GLOBAL, we need a special handling.
-            // Let's modify the cache to perform the lookup properly.
-            return id.name() + "|GLOBAL"; // Fallback to allocation for GLOBAL if not in cache (optimized below)
+            return GLOBAL_KEYS.get(id);
         }
         return KEY_CACHE.get(id).get(scenario);
     }
-    
+
     // Optimized fallback for GLOBAL keys
     private static final Map<CapabilityId, String> GLOBAL_KEYS = new EnumMap<>(CapabilityId.class);
     static {
@@ -486,8 +479,6 @@ public final class SessionLearning {
             GLOBAL_KEYS.put(id, id.name() + "|GLOBAL");
         }
     }
-    
-
 
     /**
      * Save stats to disk (JSON).
