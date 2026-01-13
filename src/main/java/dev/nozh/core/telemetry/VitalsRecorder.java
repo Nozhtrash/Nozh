@@ -88,3 +88,4 @@ public class VitalsRecorder {
         for (int i=0; i<count; i++) sum += frameTimes[i];
         return sum / count;
     }
+}

@@ -341,3 +341,4 @@ public class NozhConfigScreen extends Screen {
         @Override
         protected void appendClickableNarrations(net.minecraft.client.gui.screen.narration.NarrationMessageBuilder builder) {}
     }
+}
