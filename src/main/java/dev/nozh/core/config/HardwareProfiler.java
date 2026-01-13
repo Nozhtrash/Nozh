@@ -17,7 +17,7 @@ import java.util.Optional;
 
 public final class HardwareProfiler {
 
-    private HardwareProfiler() {
+    public HardwareProfiler() {
     }
 
     public static String buildProfile() {

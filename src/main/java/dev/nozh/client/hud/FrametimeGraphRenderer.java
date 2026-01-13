@@ -39,11 +39,16 @@ public final class FrametimeGraphRenderer {
             boolean isSpike) {
     }
 
-    private final Deque<GraphPoint> dataPoints;
+    // Optimized circular buffer
+    private final double[] frametimeHistory;
+    private final boolean[] spikeFlags;
+    private int historyIndex = 0;
+    private int historySize = 0;
+
     private GraphStyle style;
     private int width;
     private int height;
-    private int maxDataPoints;
+    private final int maxDataPoints;
 
     // Display settings
     private int backgroundColor;
@@ -61,17 +66,19 @@ public final class FrametimeGraphRenderer {
      * Constructs a new FrametimeGraphRenderer.
      */
     public FrametimeGraphRenderer() {
-        this.dataPoints = new ArrayDeque<>();
+        this.maxDataPoints = 240; // 4 seconds at 60fps
+        this.frametimeHistory = new double[maxDataPoints];
+        this.spikeFlags = new boolean[maxDataPoints];
+
         this.style = GraphStyle.LINE;
         this.width = 200;
         this.height = 60;
-        this.maxDataPoints = 120; // 2 seconds at 60fps
 
         // Colors
         this.backgroundColor = 0x80000000; // Semi-transparent black
-        this.lineColor = 0x00FF00; // Green
-        this.spikeColor = 0xFF0000; // Red
-        this.targetLineColor = 0xFFFF00; // Yellow
+        this.lineColor = 0xFF00FF00; // Green
+        this.spikeColor = 0xFFFF0000; // Red
+        this.targetLineColor = 0xFFFFFF00; // Yellow
 
         // Scale
         this.minFrametime = 0;
@@ -88,20 +95,16 @@ public final class FrametimeGraphRenderer {
     public void addSample(double frametimeMs) {
         boolean isSpike = frametimeMs > targetFrametime * 1.5;
 
-        GraphPoint point = new GraphPoint(
-                System.currentTimeMillis(),
-                frametimeMs,
-                isSpike);
+        frametimeHistory[historyIndex] = frametimeMs;
+        spikeFlags[historyIndex] = isSpike;
 
-        dataPoints.addLast(point);
-
-        // Trim old data
-        while (dataPoints.size() > maxDataPoints) {
-            dataPoints.removeFirst();
+        historyIndex = (historyIndex + 1) % maxDataPoints;
+        if (historySize < maxDataPoints) {
+            historySize++;
         }
 
-        // Auto-scale if enabled
-        if (autoScale) {
+        // Auto-scale if enabled (every 60 frames to be cheap)
+        if (autoScale && historyIndex % 60 == 0) {
             updateAutoScale();
         }
     }
@@ -110,13 +113,13 @@ public final class FrametimeGraphRenderer {
      * Updates auto-scale based on recent data.
      */
     private void updateAutoScale() {
-        if (dataPoints.isEmpty())
+        if (historySize == 0)
             return;
 
         double max = 0;
-        for (GraphPoint point : dataPoints) {
-            if (point.frametime() > max) {
-                max = point.frametime();
+        for (int i = 0; i < historySize; i++) {
+            if (frametimeHistory[i] > max) {
+                max = frametimeHistory[i];
             }
         }
 
@@ -125,99 +128,88 @@ public final class FrametimeGraphRenderer {
     }
 
     /**
-     * Gets normalized Y position for a frametime value.
-     * 
-     * @param frametime frametime in ms
-     * @return normalized Y (0.0 to 1.0)
+     * Renders the graph directly to the context.
+     * Zero-allocation in hot path.
      */
-    public double getNormalizedY(double frametime) {
-        if (maxFrametime <= minFrametime)
-            return 0.5;
-        return 1.0 - (frametime - minFrametime) / (maxFrametime - minFrametime);
-    }
+    public void render(net.minecraft.client.gui.DrawContext context, int x, int y) {
+        if (historySize < 2)
+            return;
 
-    /**
-     * Calculates graph positions for rendering.
-     * 
-     * @return list of X,Y pairs (relative to graph origin)
-     */
-    public List<double[]> getGraphPoints() {
-        List<double[]> points = new ArrayList<>();
+        // Background
+        context.fill(x, y, x + width, y + height, backgroundColor);
 
-        int i = 0;
-        int total = dataPoints.size();
-
-        for (GraphPoint point : dataPoints) {
-            double x = (double) i / Math.max(1, total - 1) * width;
-            double y = getNormalizedY(point.frametime()) * height;
-            points.add(new double[] { x, y });
-            i++;
+        // Target Line
+        int targetY = y + height - (int) ((targetFrametime / maxFrametime) * height);
+        if (targetY >= y && targetY <= y + height) {
+            context.fill(x, targetY, x + width, targetY + 1, targetLineColor);
         }
 
-        return points;
-    }
+        // Draw graph
+        // We iterate backwards from current index to draw newest at right
 
-    /**
-     * Gets spike positions for rendering warnings.
-     * 
-     * @return list of spike X positions
-     */
-    public List<Double> getSpikePositions() {
-        List<Double> spikes = new ArrayList<>();
+        int spacing = 1; // 1 pixel per point? or stretch?
+        // Let's stretch to width
+        double stepX = (double) width / (maxDataPoints - 1);
 
-        int i = 0;
-        int total = dataPoints.size();
+        // Draw points
+        for (int i = 0; i < historySize - 1; i++) {
+            // Calculate circular indices
+            // Visual index 0 is oldest, historySize-1 is newest
+            // Actual newest is at historyIndex - 1
 
-        for (GraphPoint point : dataPoints) {
-            if (point.isSpike()) {
-                double x = (double) i / Math.max(1, total - 1) * width;
-                spikes.add(x);
+            int actualIdx = (historyIndex - 1 - i);
+            if (actualIdx < 0)
+                actualIdx += maxDataPoints;
+
+            int nextActualIdx = (actualIdx - 1);
+            if (nextActualIdx < 0)
+                nextActualIdx += maxDataPoints;
+
+            // X goes from right to left
+            double currentX = x + width - (i * stepX);
+            double nextX = x + width - ((i + 1) * stepX);
+
+            if (nextX < x)
+                break; // Out of bounds
+
+            double val = frametimeHistory[actualIdx];
+            double nextVal = frametimeHistory[nextActualIdx];
+
+            int currentY = y + height - (int) ((val / maxFrametime) * height);
+            int nextY = y + height - (int) ((nextVal / maxFrametime) * height);
+
+            // Clamp
+            currentY = Math.max(y, Math.min(y + height, currentY));
+            nextY = Math.max(y, Math.min(y + height, nextY));
+
+            int color = spikeFlags[actualIdx] ? spikeColor : lineColor;
+
+            if (style == GraphStyle.BAR) {
+                context.fill((int) nextX, nextY, (int) currentX, y + height, color);
+            } else {
+                // Simple line drawing (Bresenham or just fillRect for segments)
+                // DrawContext doesn't have drawLine, so we iterate or use fill
+                drawLine(context, (int) currentX, currentY, (int) nextX, nextY, color);
             }
-            i++;
         }
-
-        return spikes;
     }
 
-    /**
-     * Gets target frametime Y position.
-     * 
-     * @return Y position for target line
-     */
-    public double getTargetLineY() {
-        return getNormalizedY(targetFrametime) * height;
-    }
+    private void drawLine(net.minecraft.client.gui.DrawContext context, int x1, int y1, int x2, int y2, int color) {
+        // Very basic line implementation using vertical strips if needed,
+        // but for now let's just draw points or small rects to save perf
+        // Real line drawing in MC requires BufferBuilder which is complex here without
+        // direct access
+        // We will approximate with a 1px wide fill
 
-    /**
-     * Gets current average frametime.
-     * 
-     * @return average frametime in ms
-     */
-    public double getAverageFrametime() {
-        if (dataPoints.isEmpty())
-            return 0;
-        return dataPoints.stream()
-                .mapToDouble(GraphPoint::frametime)
-                .average()
-                .orElse(0);
-    }
+        int w = x2 - x1;
+        int h = y2 - y1;
 
-    /**
-     * Gets current P95 frametime.
-     * 
-     * @return P95 frametime in ms
-     */
-    public double getP95Frametime() {
-        if (dataPoints.isEmpty())
-            return 0;
-
-        List<Double> sorted = dataPoints.stream()
-                .map(GraphPoint::frametime)
-                .sorted(Comparator.reverseOrder())
-                .toList();
-
-        int p95Index = (int) (sorted.size() * 0.05);
-        return sorted.get(Math.min(p95Index, sorted.size() - 1));
+        // If mostly horizontal
+        if (Math.abs(w) > Math.abs(h)) {
+            context.fill(x2, y2, x2 + 1, y2 + 1, color);
+        } else {
+            context.fill(x2, Math.min(y1, y2), x2 + 1, Math.max(y1, y2), color);
+        }
     }
 
     /**
@@ -253,7 +245,8 @@ public final class FrametimeGraphRenderer {
      * Clears all data.
      */
     public void clear() {
-        dataPoints.clear();
+        historyIndex = 0;
+        historySize = 0;
     }
 
     /**
@@ -262,7 +255,7 @@ public final class FrametimeGraphRenderer {
      * @return number of data points
      */
     public int getDataPointCount() {
-        return dataPoints.size();
+        return historySize;
     }
 
     /**

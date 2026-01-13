@@ -36,7 +36,9 @@ public class NozhHudRenderer implements HudRenderCallback {
     private final Supplier<PerfSnapshot> perfSnapshotSupplier;
     private final PerfManager perfManager;
     private final Supplier<String> exportKeySupplier;
+    private final FrametimeGraphRenderer graphRenderer;
     private double lastHudRenderMs = 0.0;
+    private long lastRenderTime = 0;
 
     public NozhHudRenderer(StateStore stateStore, ProviderRegistry providerRegistry,
             Supplier<PerfSnapshot> perfSnapshotSupplier, PerfManager perfManager,
@@ -46,14 +48,27 @@ public class NozhHudRenderer implements HudRenderCallback {
         this.perfSnapshotSupplier = perfSnapshotSupplier;
         this.perfManager = perfManager;
         this.exportKeySupplier = exportKeySupplier;
+        this.graphRenderer = new FrametimeGraphRenderer();
     }
+
+    private float slideProgress = 0f;
 
     @Override
     public void onHudRender(DrawContext context, float tickDelta) {
         NozhConfig config = ConfigManager.getConfig();
         if (config == null || !config.showHud) {
+            slideProgress = 0f; // Reset when hidden
             return;
         }
+
+        // Animation logic
+        if (slideProgress < 1.0f) {
+            slideProgress += 0.05f; // approx 20 frames (0.33s)
+            if (slideProgress > 1.0f)
+                slideProgress = 1.0f;
+        }
+
+        float smoothedProgress = (float) (1.0 - Math.pow(1.0 - slideProgress, 3)); // Cubic ease-out
 
         MinecraftClient client = MinecraftClient.getInstance();
         if (client == null || client.textRenderer == null) {
@@ -61,6 +76,14 @@ public class NozhHudRenderer implements HudRenderCallback {
         }
 
         long renderStartNanos = System.nanoTime();
+
+        // Update graph (God Mode Polish)
+        if (lastRenderTime != 0) {
+            double frameTimeMs = (renderStartNanos - lastRenderTime) / 1_000_000.0;
+            graphRenderer.addSample(frameTimeMs);
+        }
+        lastRenderTime = renderStartNanos;
+
         if (perfManager != null) {
             perfManager.onRenderPhaseStart(RenderPhase.HUD);
         }
@@ -85,23 +108,60 @@ public class NozhHudRenderer implements HudRenderCallback {
             maxWidth = Math.max(maxWidth, textRenderer.getWidth(line));
         }
 
+        // Add extra space for graph if needed
+        int graphHeight = (hudMode == HudMode.EXPERT || hudMode == HudMode.ANALYST) ? 65 : 0;
+
         float scale = (float) config.hudScale;
         int scaledMaxWidth = Math.round(maxWidth * scale);
-        int scaledLineHeight = Math.round(lineHeight * scale);
+        // Graph is typically wider, check graph width
+        if (graphHeight > 0) {
+            scaledMaxWidth = Math.max(scaledMaxWidth, Math.round(200 * scale));
+        }
+
+        int totalContentHeight = (lines.size() * lineHeight) + graphHeight;
+        int scaledContentHeight = Math.round(totalContentHeight * scale);
+
         int x = resolveAnchorX(config, scaledMaxWidth, client.getWindow().getScaledWidth());
-        int y = resolveAnchorY(config, scaledLineHeight, lines.size(), client.getWindow().getScaledHeight());
+        int y = resolveAnchorY(config, scaledContentHeight, 1, client.getWindow().getScaledHeight());
+        // Note: resolveAnchorY expects lines count but we have dynamic height now.
+        // We'll trust it works for top-left but for bottom might need adjustment.
+        // For simplicity, we use the total height logic manually if needed, but
+        // existing method uses line count.
+        // Let's hotfix: Y logic for bottom relies on height.
+        if ("BOTTOM_LEFT".equals(config.hudAnchor) || "BOTTOM_RIGHT".equals(config.hudAnchor)) {
+            y = client.getWindow().getScaledHeight() - scaledContentHeight - PADDING_Y + config.hudOffsetY;
+        }
+
+        // Apply visual slide-in
+        int slideOffset = Math.round(20 * (1.0f - smoothedProgress));
+        // Slide up if bottom, slide down if top
+        if ("BOTTOM_LEFT".equals(config.hudAnchor) || "BOTTOM_RIGHT".equals(config.hudAnchor)) {
+            y += slideOffset;
+        } else {
+            y -= slideOffset;
+        }
 
         context.getMatrices().push();
         context.getMatrices().scale(scale, scale, 1.0f);
 
         int drawX = Math.round(x / scale);
         int drawY = Math.round(y / scale);
+
+        // Draw Text
         for (int i = 0; i < lines.size(); i++) {
             Text line = lines.get(i);
             int color = i == 0 ? 0xFFFFFF : 0xE0E0E0;
+
             context.drawTextWithShadow(textRenderer, line, drawX, drawY, color);
             drawY += lineHeight;
         }
+
+        // Draw Graph
+        if (graphHeight > 0) {
+            drawY += 4; // Spacing
+            graphRenderer.render(context, drawX, drawY);
+        }
+
         context.getMatrices().pop();
 
         if (perfManager != null) {

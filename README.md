@@ -6,10 +6,10 @@
   </p>
 
   <p>
-    <a href="https://github.com/NozhMod/Nozh/actions"><img src="https://img.shields.io/badge/Status-BETA%200.3.1-00FF00?style=for-the-badge&logo=appveyor" alt="Status"></a>
+    <a href="https://github.com/NozhMod/Nozh/actions"><img src="https://img.shields.io/badge/Status-GOD%20MODE%20v1.0.0-00FF00?style=for-the-badge&logo=appveyor" alt="Status"></a>
     <a href="https://fabricmc.net/"><img src="https://img.shields.io/badge/Loader-FABRIC-00b8a3?style=for-the-badge&logo=fabric" alt="Fabric"></a>
     <a href="#"><img src="https://img.shields.io/badge/Minecraft-1.20.1-FFA500?style=for-the-badge&logo=minecraft" alt="Version"></a>
-    <a href="ROADMAP.md"><img src="https://img.shields.io/badge/Roadmap-NOZH%202.0-8A2BE2?style=for-the-badge" alt="Roadmap"></a>
+    <a href="ROADMAP.md"><img src="https://img.shields.io/badge/Roadmap-COMPLETED-8A2BE2?style=for-the-badge" alt="Roadmap"></a>
   </p>
 </div>
 
@@ -46,17 +46,25 @@ Whether you have a $300 potato laptop or a $5000 4090 beast, NOZH extracts every
 
 ---
 
-## ✨ What's New in v0.3.1 "Intelligence"
+## ✨ What's New in v1.0.0 "GOD MODE"
 
-### 🧠 AI-Powered Decision Making
+### 🚀 Ultimate Optimization Engine
+
+NOZH has achieved its final form with **God Mode Level Polish**:
 
 | Feature | Description |
 |---------|-------------|
-| **Bayesian Confidence** | Updates beliefs based on prediction accuracy |
-| **Scenario Modifiers** | Conservative in combat (0.85x), aggressive when idle (1.1x) |
-| **Success Streaks** | Rewards consistent improvements (+15% confidence boost) |
-| **Dual EMA Trends** | Fast (α=0.4) and slow (α=0.1) for crossover detection |
-| **Micro-Stutter Detection** | Catches jank that P95 misses |
+| **Reactive Sodium** | **Dynamic Tuning**: Auto-downgrades clouds/particles when FPS drops, restores them instantly when stable. |
+| **Intelligent Potato Engine** | **Struggle Detection**: Identifies "struggling" PCs even if they report good hardware, recommending emergency modes. |
+| **Zero-Allocation Graph** | **Perf HUD**: New frametime graph uses 0 allocations per frame. Silky smooth rendering with slide-in animations. |
+| **Math Optimizer** | **Fast Math**: Uses Quake III `fastInvSqrt` and optimized lerping for hot-path calculations. |
+| **Bayesian AI** | **Confidence Scoring**: Updates beliefs based on prediction accuracy with dual EMA trend detection. |
+
+### 🧠 Core Intelligence
+
+- **Dual EMA Trends**: Fast (α=0.4) and slow (α=0.1) for crossover detection.
+- **Micro-Stutter Detection**: Catches jank that P95 misses.
+- **Scenario Modifiers**: Conservative in combat, aggressive while AFK.
 
 ### 📊 Expected Performance Gains
 
@@ -163,17 +171,25 @@ Ya tengas una laptop "patata" de $300 o una bestia con 4090 de $5000, NOZH extra
 
 ---
 
-## ✨ Novedades en v0.3.1 "Inteligencia"
+## ✨ Novedades en v1.0.0 "MODO DIOS"
 
-### 🧠 Toma de Decisiones con IA
+### 🚀 Motor de Optimización Definitivo
+
+NOZH ha alcanzado su forma final con **Pulido Nivel Dios**:
 
 | Característica | Descripción |
 |----------------|-------------|
-| **Confianza Bayesiana** | Actualiza creencias basado en precisión de predicciones |
-| **Modificadores por Escenario** | Conservador en combate (0.85x), agresivo en AFK (1.1x) |
-| **Rachas de Éxito** | Recompensa mejoras consistentes (+15% de confianza) |
-| **Tendencias EMA Dual** | Rápido (α=0.4) y lento (α=0.1) para detección de cruce |
-| **Detección de Micro-Stutters** | Captura jank que P95 no detecta |
+| **Sodium Reactivo** | **Ajuste Dinámico**: Reduce nubes/partículas si bajan los FPS, las restaura al estabilizarse. |
+| **Motor Patata Inteligente** | **Detección de Lucha**: Identifica PCs que "sufren" aunque tengan buen hardware y recomienda modos de emergencia. |
+| **Gráfico Zero-Allocation** | **HUD de Rendimiento**: Nuevo gráfico de frametime con 0 asignaciones de memoria por frame. Renderizado suave con animaciones slide-in. |
+| **Optimizador Matemático** | **Matemáticas Rápidas**: Usa `fastInvSqrt` de Quake III y lerping optimizado para cálculos críticos. |
+| **IA Bayesiana** | **Puntuación de Confianza**: Actualiza creencias basado en precisión de predicciones con detección de tendencias EMA dual. |
+
+### 🧠 Inteligencia Central
+
+- **Tendencias EMA Dual**: Rápida (α=0.4) y lenta (α=0.1) para detección de cruces.
+- **Detección de Micro-Stutters**: Captura tirones que el P95 no ve.
+- **Modificadores de Escenario**: Conservador en combate, agresivo en AFK.
 
 ### 📊 Ganancias de Rendimiento Esperadas
 

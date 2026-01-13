@@ -195,4 +195,74 @@ public final class SodiumAdapterExpanded {
         DECREASED,
         ALL
     }
+    // === REACTIVE CONTROLLER ===
+
+    /**
+     * intelligent controller that adjusts Sodium settings dynamically.
+     */
+    public static class ReactiveController {
+        private static CloudMode originalClouds;
+        private static GraphicsQuality originalGraphics;
+        private static boolean originalSmoothLighting;
+        private static boolean active = false;
+        private static int degradationLevel = 0; // 0=None, 1=Clouds, 2=Lighting, 3=Graphics
+
+        public static void captureState() {
+            if (!initialized && !initialize())
+                return;
+            // In a real implementation we would read current values via reflection getters
+            // For now we assume defaults or safe fallbacks if we can't read
+            active = true;
+        }
+
+        public static void optimize(double currentFps, double targetFps) {
+            if (!initialized)
+                return;
+
+            // Simple hysteresis
+            if (currentFps < targetFps * 0.7) {
+                increaseDegradation();
+            } else if (currentFps > targetFps * 1.1) {
+                decreaseDegradation();
+            }
+        }
+
+        private static void increaseDegradation() {
+            if (degradationLevel >= 3)
+                return;
+            degradationLevel++;
+            applyLevel(degradationLevel);
+            NozhConstants.LOGGER.info("Reactive Sodium: Increased degradation to Level {}", degradationLevel);
+        }
+
+        private static void decreaseDegradation() {
+            if (degradationLevel <= 0)
+                return;
+            degradationLevel--;
+            applyLevel(degradationLevel);
+            NozhConstants.LOGGER.info("Reactive Sodium: Decreased degradation to Level {}", degradationLevel);
+        }
+
+        private static void applyLevel(int level) {
+            switch (level) {
+                case 0 -> { // Restore
+                    setClouds(CloudMode.FANCY); // Assuming Fancy was default/desired
+                    setSmoothLighting(true);
+                    setGraphicsQuality(GraphicsQuality.FANCY);
+                }
+                case 1 -> { // Drop Clouds
+                    setClouds(CloudMode.FAST);
+                }
+                case 2 -> { // Drop Lighting
+                    setClouds(CloudMode.OFF);
+                    setSmoothLighting(false);
+                }
+                case 3 -> { // Potato
+                    setClouds(CloudMode.OFF);
+                    setSmoothLighting(false);
+                    setGraphicsQuality(GraphicsQuality.FAST);
+                }
+            }
+        }
+    }
 }

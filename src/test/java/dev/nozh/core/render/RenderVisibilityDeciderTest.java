@@ -7,6 +7,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class RenderVisibilityDeciderTest {
 
+    static {
+        System.setProperty("java.awt.headless", "true");
+    }
+
     @Test
     void resolveVisibilityUsesSupplierValue() {
         assertTrue(RenderVisibilityDecider.resolveVisibility(() -> true, "test-true"));

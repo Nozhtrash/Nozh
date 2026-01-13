@@ -58,6 +58,10 @@ public class NozhModClient implements ClientModInitializer {
     private static StateStore stateStore;
     private static ConfigSyncService configSyncService;
     private static dev.nozh.core.intelligence.SessionLearning sessionLearning;
+    private static dev.nozh.core.potato.StartupOptimizer startupOptimizer;
+    private static dev.nozh.core.potato.MemoryOptimizer memoryOptimizer;
+    private static dev.nozh.core.potato.PotatoModeEngine potatoModeEngine;
+    private static dev.nozh.core.optimization.ResourceBudgetAllocator resourceAllocator;
     private static ProviderRegistry providerRegistry;
     private static dev.nozh.fabric.context.FabricScenarioDetector scenarioDetector;
     private static InitialBenchmarkRunner initialBenchmarkRunner;
@@ -154,6 +158,18 @@ public class NozhModClient implements ClientModInitializer {
                     }
                 });
 
+        // Initialize Module 3 Components
+        dev.nozh.core.potato.StartupOptimizer startupOptimizer = new dev.nozh.core.potato.StartupOptimizer();
+        startupOptimizer.beginStartup();
+        startupOptimizer.beginPhase(dev.nozh.core.potato.StartupOptimizer.StartupPhase.INIT);
+
+        resourceAllocator = new dev.nozh.core.optimization.ResourceBudgetAllocator();
+        memoryOptimizer = new dev.nozh.core.potato.MemoryOptimizer();
+        potatoModeEngine = new dev.nozh.core.potato.PotatoModeEngine(new dev.nozh.core.config.HardwareProfiler());
+
+        // Initial Potato Check
+        potatoModeEngine.autoConfigure(ConfigManager.getConfig());
+
         // 8. Create ActionProcessor bridge
         StandardActionProcessor actionProcessor = new StandardActionProcessor(
                 capabilityExecutor,
@@ -162,7 +178,8 @@ public class NozhModClient implements ClientModInitializer {
                 () -> perfManager != null ? perfManager.getSnapshot() : dev.nozh.api.PerfSnapshot.empty(),
                 successTracker);
 
-        // Create ScenarioDetector (Fabric implementation) - FIXED: Added MinecraftClient parameter
+        // Create ScenarioDetector (Fabric implementation) - FIXED: Added
+        // MinecraftClient parameter
         MinecraftClient client = MinecraftClient.getInstance();
         scenarioDetector = new dev.nozh.fabric.context.FabricScenarioDetector(client);
 
@@ -249,6 +266,11 @@ public class NozhModClient implements ClientModInitializer {
 
             tickCounter++;
 
+            // Complete startup tracking on first tick
+            if (tickCounter == 1 && startupOptimizer != null) {
+                startupOptimizer.completeStartup();
+            }
+
             // Update crash loop guard (stability marking)
             CrashLoopGuard.onClientTick();
 
@@ -294,11 +316,36 @@ public class NozhModClient implements ClientModInitializer {
                 if (scenarioDetector != null) {
                     scenarioDetector.logTelemetry();
                 }
+
+                // GOD MODE: Reactive Sodium Control
+                // Checks FPS every second and downscales if needed
+                if (perfManager != null) {
+                    dev.nozh.api.PerfSnapshot snapshot = perfManager.getSnapshot();
+                    if (snapshot.sufficientData()) {
+                        dev.nozh.fabric.compat.SodiumAdapterExpanded.ReactiveController.captureState();
+                        dev.nozh.fabric.compat.SodiumAdapterExpanded.ReactiveController.optimize(
+                                snapshot.avgFrametimeMs() > 0 ? 1000.0 / snapshot.avgFrametimeMs() : 60.0,
+                                ConfigManager.getConfig().targetFps);
+                    }
+                }
             }
 
             // Run governor decision loop every 5 seconds
             if (tickCounter % GOVERNOR_POLL_INTERVAL == 0) {
                 governorRunner.onTick();
+                // Also update Potato Mode checks occasionally
+                if (potatoModeEngine != null) {
+                    potatoModeEngine.update();
+                }
+            }
+
+            // High frequency updates
+            if (memoryOptimizer != null) {
+                memoryOptimizer.tick();
+                // Feed memory pressure to resource allocator
+                if (resourceAllocator != null) {
+                    resourceAllocator.setMemoryPressure(memoryOptimizer.getMemoryPressure());
+                }
             }
 
             if (tickCounter % SESSION_SAVE_INTERVAL == 0) {

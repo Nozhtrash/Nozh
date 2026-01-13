@@ -1,17 +1,14 @@
-[03:13:04] [Test worker/INFO]: No session stats file found, starting fresh
-[03:[03:13:05] [Test worker/INFO]: StateStore initialized with defaults (version 10)
-[03:13:05] [Test worker/WARN]: StateStore reset to defaults
-[03:13:05] [Test worker/WARN]: StateStore reset to defaults
-[03:13:05] [Test worker/WARN]: StateStore reset to defaults
-[03:13:05] [Test worker/WARN]: StateStore reset to defaults
-[03:13:05] [Test worker/WARN]: StateStore reset to defaults
-[03:13:05] [Test worker/WARN]: StateStore reset to defaults
-sh
-[03:13:05] [Test worker/INFO]: No session stats file found, starting fresh
-r/INFO]: Session learning reset for new session (new-session)
-[03:13:04] [Test worker/INFO]: No session stats file found, starting fresh
-[03:13:04] [Test worker/INFO]: PerfManager initialized. Capacity=300 (5s @ 60fps)
-form-commons-1.10.1.jar:1.10.1]
+[01:19:25] [Test worker/INFO]: No session stats file found, starting fresh
+[01:[01:19:25] [Test worker/WARN]: Render visibility check failed for test-excep[01:19:25] [Test worker/INFO]: No session stats file found, starting fresh
+[01:19:25] [Test worker/INFO]: Session learning stats saved (0 entries)
+[01:19:25] [Test worker/INFO]: Session learning loaded (0 entries)
+[01:19:25] [Test worker/INFO]: No session stats file found, starting fresh
+[01:19:25] [Test worker/INFO]: Session learning stats saved (1 entries)
+[01:19:25] [Test worker/INFO]: Session learning loaded (1 entries)
+[01:19:25] [Test worker/INFO]: No session stats file found, starting fresh
+[01:19:25] [Test worker/INFO]: Session learning reset for new session (new-session)
+[01:19:25] [Test worker/INFO]: No session stats file found, starting fresh
+rm.commons.util.ReflectionUtils.invokeMethod(ReflectionUtils.java:728) ~[junit-platform-commons-1.10.1.jar:1.10.1]
 	at org.junit.jupiter.engine.execution.MethodInvocation.proceed(MethodInvocation.java:60) ~[junit-jupiter-engine-5.10.1.jar:5.10.1]
 	at org.junit.jupiter.engine.execution.InvocationInterceptorChain$ValidatingInvocation.proceed(InvocationInterceptorChain.java:131) ~[junit-jupiter-engine-5.10.1.jar:5.10.1]
 	at org.junit.jupiter.engine.extension.TimeoutExtension.intercept(TimeoutExtension.java:156) ~[junit-jupiter-engine-5.10.1.jar:5.10.1]
@@ -89,3 +86,12 @@ form-commons-1.10.1.jar:1.10.1]
 	at org.gradle.process.internal.worker.child.SystemApplicationClassLoaderWorker.call(SystemApplicationClassLoaderWorker.java:65) ~[?:?]
 	at worker.org.gradle.process.internal.worker.GradleWorkerMain.run(GradleWorkerMain.java:69) ~[gradle-worker.jar:?]
 	at worker.org.gradle.process.internal.worker.GradleWorkerMain.main(GradleWorkerMain.java:74) ~[gradle-worker.jar:?]
+[01:19:25] [Test worker/WARN]: Rejecting extreme frametime: Infinityms (max: 10000.0ms)
+[01:19:25] [Test worker/WARN]: Rejecting extreme frametime: 15000.0ms (max: 10000.0ms)
+[01:19:25] [Test worker/INFO]: StateStore initialized with defaults (version 10)
+[01:19:25] [Test worker/WARN]: StateStore reset to defaults
+[01:19:25] [Test worker/WARN]: StateStore reset to defaults
+[01:19:25] [Test worker/WARN]: StateStore reset to defaults
+[01:19:25] [Test worker/WARN]: StateStore reset to defaults
+[01:19:25] [Test worker/WARN]: StateStore reset to defaults
+[01:19:25] [Test worker/WARN]: StateStore reset to defaults

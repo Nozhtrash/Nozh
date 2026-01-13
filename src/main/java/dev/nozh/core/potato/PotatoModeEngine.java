@@ -180,6 +180,13 @@ public final class PotatoModeEngine {
     private boolean integratedGpu;
 
     /**
+     * Constructs a new PotatoModeEngine with default profiler.
+     */
+    public PotatoModeEngine() {
+        this(new HardwareProfiler());
+    }
+
+    /**
      * Constructs a new PotatoModeEngine.
      * 
      * @param hardwareProfiler hardware profiler for detection
@@ -191,6 +198,65 @@ public final class PotatoModeEngine {
         this.currentConfig = PotatoConfig.fromLevel(currentLevel);
 
         detectHardware();
+    }
+
+    /**
+     * Automatically configures potato mode based on hardware and config settings.
+     * 
+     * @param config the main NOZH configuration
+     */
+    public void autoConfigure(dev.nozh.core.config.NozhConfig config) {
+        if (config == null || !config.enabled)
+            return;
+
+        // If config explicitly demands potato mode or hardware suggests it
+        if (shouldActivate()) {
+            PotatoLevel recommended = getRecommendedLevel();
+            NozhConstants.LOGGER.info("Auto-configuring Potato Mode: Recommended level {}", recommended);
+            applyPotatoMode(recommended);
+        }
+    }
+
+    // Dynamic State
+    private int struggleCounter = 0;
+    private static final int STRUGGLE_THRESHOLD = 100; // 5 seconds of low FPS
+    private boolean emergencyModeRecommended = false;
+
+    /**
+     * Update loop for periodic checks.
+     * 
+     * @param currentFps current average FPS
+     */
+    public void update(double currentFps) {
+        if (active && globalActive != active) {
+            globalActive = active;
+        }
+
+        // Intelligence: Detect if PC is still dying even with current settings
+        if (currentFps < 20.0 && currentFps > 0) {
+            struggleCounter++;
+        } else if (currentFps > 30.0) {
+            struggleCounter = Math.max(0, struggleCounter - 1);
+        }
+
+        if (struggleCounter > STRUGGLE_THRESHOLD && !emergencyModeRecommended) {
+            emergencyModeRecommended = true;
+            NozhConstants.LOGGER.warn("Potato Engine: System struggling ({} FPS). Emergency mode recommended.",
+                    (int) currentFps);
+            // In a full implementation, we would trigger a toast or auto-apply if
+            // permission granted
+        }
+    }
+
+    public boolean isEmergencyModeRecommended() {
+        return emergencyModeRecommended;
+    }
+
+    /**
+     * Update loop for periodic checks (legacy).
+     */
+    public void update() {
+        update(60.0); // Assume good FPS if not provided
     }
 
     /**

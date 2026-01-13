@@ -94,14 +94,47 @@ public final class ConfigPresetManager {
      * 
      * @param preset preset to apply
      */
-    public void applyPreset(Preset preset) {
+    /**
+     * Applies a preset to the given configuration.
+     * 
+     * @param preset       the preset to apply
+     * @param targetConfig the configuration object to modify
+     */
+    public void applyPreset(Preset preset, NozhConfig targetConfig) {
+        if (targetConfig == null)
+            return;
+
         this.currentPreset = preset;
         PresetConfig config = getPresetConfig(preset);
 
+        targetConfig.targetFps = (int) config.targetFps();
+        targetConfig.optimizationProfile = config.scalingMode();
+        // Potato mode fields logic
+        if (config.potatoModeEnabled()) {
+            // In a real scenario we might trigger potato engine,
+            // but here we just set config flags compatible with it if they existed in
+            // NozhConfig
+            // For now we assume NozhConfig might interpret optimizationProfile="POTATO" as
+            // enabling it
+            if ("POTATO".equals(config.scalingMode())) {
+                targetConfig.adaptiveVisualQualityEnabled = true;
+            }
+        }
+
+        targetConfig.showHudSuggestions = config.enableSuggestions();
+        targetConfig.hudMode = config.hudPreset();
+
+        // Handle render distance override if applicable
+        // Note: Render distance is usually handled by Minecraft settings, not
+        // NozhConfig directly
+        // unless Nozh controls it dynamically. We will log it as a suggestion.
+        if (config.renderDistanceOverride() > 0) {
+            NozhConstants.LOGGER.info("Preset '{}' suggests Render Distance: {}",
+                    preset.displayName, config.renderDistanceOverride());
+        }
+
         NozhConstants.LOGGER.info("Applied preset: {} ({})",
                 preset.displayName, preset.description);
-        NozhConstants.LOGGER.info("  Target FPS: {}, Mode: {}, Potato: {}",
-                config.targetFps(), config.scalingMode(), config.potatoModeEnabled());
     }
 
     /**
