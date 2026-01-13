@@ -12,6 +12,11 @@ import dev.nozh.NozhConstants;
  * 
  * This helps distinguish server lag from client lag, preventing
  * unnecessary client optimizations during server-side issues.
+ * 
+ * THREAD SAFETY NOTE:
+ * Written from Netty thread (onServerTick).
+ * Read from Render thread (getEstimatedTps, etc).
+ * All shared state access must be synchronized.
  */
 public final class ServerPerformanceDetector {
 
@@ -65,7 +70,7 @@ public final class ServerPerformanceDetector {
      * In Minecraft, the server sends time updates every tick, which we can
      * use to estimate server TPS.
      */
-    public void onServerTick() {
+    public synchronized void onServerTick() {
         long now = System.currentTimeMillis();
         
         if (lastTickTimestamp > 0) {
@@ -106,7 +111,7 @@ public final class ServerPerformanceDetector {
      * 
      * @return TPS estimate (0-20), or 20 if not enough data
      */
-    public double getEstimatedTps() {
+    public synchronized double getEstimatedTps() {
         if (!initialized || tickCount < 10) {
             return IDEAL_TPS; // Assume good until proven otherwise
         }
@@ -119,7 +124,7 @@ public final class ServerPerformanceDetector {
      * 
      * @return Calculated TPS based on recent samples
      */
-    public double getCalculatedTps() {
+    public synchronized double getCalculatedTps() {
         if (tickCount < 5) {
             return IDEAL_TPS;
         }
@@ -143,7 +148,7 @@ public final class ServerPerformanceDetector {
     /**
      * Get server health classification.
      */
-    public ServerHealth getServerHealth() {
+    public synchronized ServerHealth getServerHealth() {
         double tps = getEstimatedTps();
         
         if (tps >= EXCELLENT_TPS) return ServerHealth.EXCELLENT;
@@ -158,7 +163,7 @@ public final class ServerPerformanceDetector {
      * 
      * @return true if multiple consecutive lag ticks detected
      */
-    public boolean isServerLagging() {
+    public synchronized boolean isServerLagging() {
         return consecutiveLagTicks >= LAG_SPIKE_COUNT_THRESHOLD;
     }
 
@@ -170,7 +175,7 @@ public final class ServerPerformanceDetector {
      * 
      * @return true if server is healthy enough for optimization
      */
-    public boolean isServerHealthyForOptimization() {
+    public synchronized boolean isServerHealthyForOptimization() {
         ServerHealth health = getServerHealth();
         return health == ServerHealth.EXCELLENT || health == ServerHealth.GOOD;
     }
@@ -179,14 +184,14 @@ public final class ServerPerformanceDetector {
      * Record when a player action is sent to server.
      * Used for response latency tracking.
      */
-    public void onActionSent() {
+    public synchronized void onActionSent() {
         lastActionTimestamp = System.currentTimeMillis();
     }
 
     /**
      * Record when server acknowledges/responds to an action.
      */
-    public void onServerResponse() {
+    public synchronized void onServerResponse() {
         if (lastActionTimestamp > 0) {
             long now = System.currentTimeMillis();
             long latency = now - lastActionTimestamp;
@@ -203,7 +208,7 @@ public final class ServerPerformanceDetector {
     /**
      * Get average response latency in milliseconds.
      */
-    public double getAvgResponseLatencyMs() {
+    public synchronized double getAvgResponseLatencyMs() {
         return avgResponseLatencyMs;
     }
 
@@ -212,7 +217,7 @@ public final class ServerPerformanceDetector {
      * 
      * @return milliseconds since last tick, or -1 if no tick received
      */
-    public long getTimeSinceLastTick() {
+    public synchronized long getTimeSinceLastTick() {
         if (lastTickTimestamp <= 0) {
             return -1;
         }
@@ -224,7 +229,7 @@ public final class ServerPerformanceDetector {
      * 
      * @return variance of tick intervals, or 0 if not enough data
      */
-    public double getTickIntervalVariance() {
+    public synchronized double getTickIntervalVariance() {
         if (tickCount < 10) {
             return 0.0;
         }
@@ -251,7 +256,7 @@ public final class ServerPerformanceDetector {
      * 
      * @return true if variance is low (consistent tick rate)
      */
-    public boolean isTickTimingStable() {
+    public synchronized boolean isTickTimingStable() {
         double variance = getTickIntervalVariance();
         // Variance > 500 means high instability (std dev > ~22ms)
         return variance < 500;
@@ -261,7 +266,7 @@ public final class ServerPerformanceDetector {
      * Reset all tracking data.
      * Call when changing servers or on disconnect.
      */
-    public void reset() {
+    public synchronized void reset() {
         tickIndex = 0;
         tickCount = 0;
         lastTickTimestamp = 0;
@@ -277,7 +282,7 @@ public final class ServerPerformanceDetector {
     /**
      * Get comprehensive server status.
      */
-    public ServerStatus getStatus() {
+    public synchronized ServerStatus getStatus() {
         return new ServerStatus(
             getEstimatedTps(),
             getCalculatedTps(),

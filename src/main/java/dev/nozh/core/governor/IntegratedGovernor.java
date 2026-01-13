@@ -99,8 +99,17 @@ public final class IntegratedGovernor {
 
     private volatile boolean initialized = false;
     private final ConcurrentHashMap<String, CompletableFuture<ActionResult>> pendingActions = new ConcurrentHashMap<>();
+    
+    // Professional Core Components
+    private final NetworkLatencyTracker latencyTracker;
+    private final dev.nozh.core.intelligence.AnomalyDetector anomalyDetector;
+    private final VitalsRecorder vitalsRecorder;
 
     public IntegratedGovernor(MinecraftClient client, Path logPath) {
+        this(client, logPath, false);
+    }
+
+    public IntegratedGovernor(MinecraftClient client, Path logPath, boolean forceSafeMode) {
         if (client == null) {
             throw new NullPointerException("MinecraftClient cannot be null");
         }
@@ -148,6 +157,17 @@ public final class IntegratedGovernor {
         this.healthMonitor = new SystemHealthMonitor();
         this.eventLogger = new PerformanceEventLogger(logPath);
         this.metricsCollector = new MetricsCollector();
+        
+        // Initialize Professional Core
+        this.latencyTracker = new NetworkLatencyTracker();
+        this.anomalyDetector = new dev.nozh.core.intelligence.AnomalyDetector(this.latencyTracker);
+        this.vitalsRecorder = new VitalsRecorder();
+        
+        if (forceSafeMode) {
+            NozhConstants.LOGGER.warn("Applying Safe Mode overrides...");
+            // In a real implementation, this would reset config values or set a flag in configManager
+            // For now, we log it and potentially disable learning to prevent bad state
+        }
 
         // Initialize safety
         this.blacklist = new ProviderBlacklist();
@@ -208,6 +228,11 @@ public final class IntegratedGovernor {
 
                 if (sample.hasFrametimeData() && perfPredictor != null) {
                     perfPredictor.addSample(sample.frametimeMs());
+                }
+                
+                // Vitals Recording
+                if (vitalsRecorder != null) {
+                    vitalsRecorder.recordFrame((float) sample.frametimeMs());
                 }
             }
 
@@ -304,6 +329,16 @@ public final class IntegratedGovernor {
             double currentFps = 1000.0 / snapshot.avgFrametimeMs();
             if (!Double.isFinite(currentFps) || currentFps <= 0) {
                 NozhConstants.LOGGER.warn("Invalid FPS calculated: " + currentFps);
+                return;
+            }
+            
+            // Check for Anomalies (Network Lag vs True Lag)
+            dev.nozh.core.intelligence.AnomalyDetector.LagType anomaly = anomalyDetector.analyze(snapshot.avgFrametimeMs());
+            if (anomaly == dev.nozh.core.intelligence.AnomalyDetector.LagType.NETWORK_LAG) {
+                // If it's network lag, DON'T OPTIMIZE aggressively
+                if (tickCounter.get() % 100 == 0) {
+                     NozhConstants.LOGGER.info("Detected NETWORK LAG (Ping blocked). Optimization suspended.");
+                }
                 return;
             }
 

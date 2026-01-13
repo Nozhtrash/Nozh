@@ -14,6 +14,11 @@ import dev.nozh.core.math.RollingVariance;
  * 
  * Used to determine if network issues are causing performance problems
  * vs actual client or server performance issues.
+ * 
+ * THREAD SAFETY NOTE:
+ * Written from Netty thread (Ping/Packet events).
+ * Read from Render thread (HUD/Debug).
+ * All shared state access is synchronized.
  */
 public final class NetworkLatencyTracker {
 
@@ -72,7 +77,7 @@ public final class NetworkLatencyTracker {
      * Start a ping measurement.
      * Call when sending a packet that expects a response.
      */
-    public void startPingMeasurement() {
+    public synchronized void startPingMeasurement() {
         currentPingStartTime = System.nanoTime();
         packetsSent++;
         lastPacketSentTime = System.currentTimeMillis();
@@ -84,7 +89,7 @@ public final class NetworkLatencyTracker {
      * 
      * @return measured ping in milliseconds
      */
-    public double completePingMeasurement() {
+    public synchronized double completePingMeasurement() {
         if (currentPingStartTime <= 0) {
             return -1;
         }
@@ -106,7 +111,7 @@ public final class NetworkLatencyTracker {
      * 
      * @param pingMs ping in milliseconds
      */
-    public void recordPing(double pingMs) {
+    public synchronized void recordPing(double pingMs) {
         if (pingMs < 0 || Double.isNaN(pingMs) || Double.isInfinite(pingMs)) {
             return;
         }
@@ -131,7 +136,7 @@ public final class NetworkLatencyTracker {
     /**
      * Record a packet received (for packet loss estimation).
      */
-    public void onPacketReceived() {
+    public synchronized void onPacketReceived() {
         packetsReceived++;
         lastPacketReceivedTime = System.currentTimeMillis();
     }
@@ -139,7 +144,7 @@ public final class NetworkLatencyTracker {
     /**
      * Record a packet sent (for packet loss estimation).
      */
-    public void onPacketSent() {
+    public synchronized void onPacketSent() {
         packetsSent++;
         lastPacketSentTime = System.currentTimeMillis();
     }
@@ -149,7 +154,7 @@ public final class NetworkLatencyTracker {
      * 
      * @return EMA-smoothed ping in ms, or -1 if no data
      */
-    public double getSmoothedPingMs() {
+    public synchronized double getSmoothedPingMs() {
         if (!emaLatency.isInitialized()) {
             return -1;
         }
@@ -161,7 +166,7 @@ public final class NetworkLatencyTracker {
      * 
      * @return average ping in ms, or -1 if no data
      */
-    public double getAveragePingMs() {
+    public synchronized double getAveragePingMs() {
         if (pingCount == 0) {
             return -1;
         }
@@ -176,7 +181,7 @@ public final class NetworkLatencyTracker {
     /**
      * Get minimum ping from recent history.
      */
-    public double getMinPingMs() {
+    public synchronized double getMinPingMs() {
         if (pingCount == 0) {
             return -1;
         }
@@ -191,7 +196,7 @@ public final class NetworkLatencyTracker {
     /**
      * Get maximum ping from recent history.
      */
-    public double getMaxPingMs() {
+    public synchronized double getMaxPingMs() {
         if (pingCount == 0) {
             return -1;
         }
@@ -209,7 +214,7 @@ public final class NetworkLatencyTracker {
      * 
      * @return jitter in ms, or 0 if not enough data
      */
-    public double getJitterMs() {
+    public synchronized double getJitterMs() {
         if (!jitterTracker.isFull()) {
             return 0;
         }
@@ -219,7 +224,7 @@ public final class NetworkLatencyTracker {
     /**
      * Get connection quality classification.
      */
-    public ConnectionQuality getConnectionQuality() {
+    public synchronized ConnectionQuality getConnectionQuality() {
         double ping = getSmoothedPingMs();
         double jitter = getJitterMs();
         
@@ -251,7 +256,7 @@ public final class NetworkLatencyTracker {
      * 
      * @return estimated packet loss 0-100, or 0 if not enough data
      */
-    public double getEstimatedPacketLossPercent() {
+    public synchronized double getEstimatedPacketLossPercent() {
         if (packetsSent < 10) {
             return 0; // Not enough data
         }
@@ -269,7 +274,7 @@ public final class NetworkLatencyTracker {
     /**
      * Check if connection has high latency.
      */
-    public boolean isHighLatency() {
+    public synchronized boolean isHighLatency() {
         double ping = getSmoothedPingMs();
         return ping >= FAIR_PING_MS;
     }
@@ -277,14 +282,14 @@ public final class NetworkLatencyTracker {
     /**
      * Check if connection is unstable (high jitter).
      */
-    public boolean isUnstable() {
+    public synchronized boolean isUnstable() {
         return getJitterMs() > HIGH_JITTER_MS;
     }
 
     /**
      * Check if connection quality is good enough for real-time gameplay.
      */
-    public boolean isGoodForGameplay() {
+    public synchronized boolean isGoodForGameplay() {
         ConnectionQuality quality = getConnectionQuality();
         return quality == ConnectionQuality.EXCELLENT || 
                quality == ConnectionQuality.GOOD;
@@ -295,7 +300,7 @@ public final class NetworkLatencyTracker {
      * 
      * @return ms since last packet, or -1 if never received
      */
-    public long getTimeSinceLastPacket() {
+    public synchronized long getTimeSinceLastPacket() {
         if (lastPacketReceivedTime <= 0) {
             return -1;
         }
@@ -307,7 +312,7 @@ public final class NetworkLatencyTracker {
      * 
      * @return true if no packets received in 5+ seconds
      */
-    public boolean isConnectionLost() {
+    public synchronized boolean isConnectionLost() {
         long timeSince = getTimeSinceLastPacket();
         return timeSince > 5000;
     }
@@ -316,7 +321,7 @@ public final class NetworkLatencyTracker {
      * Reset all tracking data.
      * Call when changing servers or on disconnect.
      */
-    public void reset() {
+    public synchronized void reset() {
         pingIndex = 0;
         pingCount = 0;
         emaLatency.reset();
@@ -332,7 +337,7 @@ public final class NetworkLatencyTracker {
     /**
      * Get comprehensive network status.
      */
-    public NetworkStatus getStatus() {
+    public synchronized NetworkStatus getStatus() {
         return new NetworkStatus(
             getSmoothedPingMs(),
             getAveragePingMs(),

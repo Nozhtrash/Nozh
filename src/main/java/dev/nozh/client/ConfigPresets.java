@@ -55,4 +55,25 @@ public final class ConfigPresets {
         config.maxChangesPerSession = 1; // Minimal changes
         ConfigManager.saveAndNotify();
     }
+    /**
+     * Extreme Potato Mode - for the absolute lowest end hardware.
+     */
+    public static void applyExtreme() {
+        NozhConfig config = ConfigManager.getConfig();
+        config.enabled = true;
+        config.allowAutoTuning = true;
+        config.optimizationProfile = "EXTREME"; // Explicitly set profile
+        config.targetFps = 20; // Lower target to keep expectations real
+        config.allowGameplayImpactActions = true;
+        config.safeModeForce = true; // Force safe mode features
+        config.rollbackEnabled = false; // Disable rollback to force settings to stick
+        config.cooldownActionMillis = 30000;
+        config.maxChangesPerSession = 10;
+        
+        // Also apply visual settings directly
+        config.adaptiveVisualQualityEnabled = true;
+        config.adaptiveVisualQualityMinStep = 0; // Floor it
+        
+        ConfigManager.saveAndNotify();
+    }
 }

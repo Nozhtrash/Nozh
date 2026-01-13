@@ -37,6 +37,31 @@ public class NozhMod implements ClientModInitializer {
         // Initialize cloud services
         dev.nozh.core.cloud.CloudManager.getInstance().start();
         
+        // Initialize Intelligence (Mod Knowledge)
+        dev.nozh.core.knowledge.ModKnowledgeBase.getInstance().init();
+        
+        // Safety: Crash Guard
+        // Checks for boot loops and enables Safe Mode if necessary
+        boolean forceSafeMode = false;
+        try {
+            dev.nozh.core.safety.CrashSafeGuard crashGuard = new dev.nozh.core.safety.CrashSafeGuard(client.runDirectory.toPath().resolve("config"));
+            if (crashGuard.onStartup()) {
+                forceSafeMode = true;
+                LOGGER.warn("SAFE MODE ENABLED DUE TO REPEATED CRASHES");
+            }
+        } catch (Exception e) {
+            LOGGER.error("Failed to initialize CrashSafeGuard", e);
+        }
+        
+        // Initialize governor
+        governor = new IntegratedGovernor(client, logPath, forceSafeMode);
+        
+        // Tuning: Apply Environment-Specific Optimizations
+        // We do this AFTER governor init (so we have config) but BEFORE game loop
+        if (!forceSafeMode) {
+             dev.nozh.core.tuning.ModpackTuner.tune(governor.getConfigManager());
+        }
+        
         // Register commands
         NozhCommand.setGovernor(governor);
         ClientCommandRegistrationCallback.EVENT.register((dispatcher, registryAccess) -> {

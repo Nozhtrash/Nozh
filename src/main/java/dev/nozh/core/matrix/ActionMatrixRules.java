@@ -7,6 +7,7 @@ import dev.nozh.core.governor.OptimizationProfile;
 
 import java.util.Collections;
 import java.util.EnumMap;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -267,6 +268,30 @@ public final class ActionMatrixRules {
         Map<OptimizationProfile, ScenarioRuleSet> perProfile = new EnumMap<>(OptimizationProfile.class);
         perProfile.put(OptimizationProfile.AGGRESSIVE, new ScenarioRuleSet(aggressive));
         perProfile.put(OptimizationProfile.BALANCED, new ScenarioRuleSet(balanced));
+        
+        // Extreme Profile (Derived from Aggressive)
+        Map<CapabilityId, CapabilityValue> extreme = new HashMap<>(aggressive);
+        extreme.put(CapabilityId.RENDER_DISTANCE, new CapabilityValue.IntValue(2));
+        extreme.put(CapabilityId.SIMULATION_DISTANCE, new CapabilityValue.IntValue(2));
+        extreme.put(CapabilityId.ENTITY_DISTANCE, new CapabilityValue.IntValue(24)); // Minimum useful
+        extreme.put(CapabilityId.PARTICLES, new CapabilityValue.EnumValue("MINIMAL"));
+        extreme.put(CapabilityId.CLOUDS, new CapabilityValue.EnumValue("OFF"));
+        extreme.put(CapabilityId.ENTITY_SHADOWS, new CapabilityValue.BoolValue(false)); 
+        extreme.put(CapabilityId.ANIMATIONS, new CapabilityValue.BoolValue(false));
+        extreme.put(CapabilityId.BIOME_BLEND, new CapabilityValue.IntValue(0));
+        extreme.put(CapabilityId.MIPMAP_LEVEL, new CapabilityValue.IntValue(0));
+        extreme.put(CapabilityId.SMOOTH_LIGHTING, new CapabilityValue.EnumValue("OFF"));
+        extreme.put(CapabilityId.GRAPHICS_MODE, new CapabilityValue.EnumValue("FAST"));
+        extreme.put(CapabilityId.FOG, new CapabilityValue.IntValue(2));
+        extreme.put(CapabilityId.VSYNC, new CapabilityValue.BoolValue(false));
+        extreme.put(CapabilityId.ARMOR_STANDS, new CapabilityValue.BoolValue(false));
+        extreme.put(CapabilityId.ITEM_FRAMES, new CapabilityValue.BoolValue(false));
+        extreme.put(CapabilityId.BLOCK_ENTITIES, new CapabilityValue.BoolValue(false));
+        extreme.put(CapabilityId.DYNAMIC_LIGHTING, new CapabilityValue.BoolValue(false));
+         
+        perProfile.put(OptimizationProfile.EXTREME, new ScenarioRuleSet(extreme));
+        perProfile.put(OptimizationProfile.CONSERVATIVE, new ScenarioRuleSet(balanced));
+        
         return perProfile;
     }
 
@@ -276,6 +301,15 @@ public final class ActionMatrixRules {
         Map<OptimizationProfile, ScenarioLimitSet> perProfile = new EnumMap<>(OptimizationProfile.class);
         perProfile.put(OptimizationProfile.AGGRESSIVE, new ScenarioLimitSet(aggressive));
         perProfile.put(OptimizationProfile.BALANCED, new ScenarioLimitSet(balanced));
+        
+        Map<CapabilityId, CapabilityLimit> extreme = new HashMap<>(aggressive);
+        extreme.put(CapabilityId.RENDER_DISTANCE, CapabilityLimit.maxInt(2));
+        extreme.put(CapabilityId.SIMULATION_DISTANCE, CapabilityLimit.maxInt(2));
+        extreme.put(CapabilityId.PARTICLES, CapabilityLimit.minEnum("MINIMAL"));
+        
+        perProfile.put(OptimizationProfile.EXTREME, new ScenarioLimitSet(extreme));
+        perProfile.put(OptimizationProfile.CONSERVATIVE, new ScenarioLimitSet(balanced));
+        
         return perProfile;
     }
 

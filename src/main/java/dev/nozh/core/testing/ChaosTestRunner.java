@@ -821,7 +821,6 @@ public final class ChaosTestRunner {
         for (int i = 0; i + 1 < extras.length; i += 2) {
             builder.append(" ").append(extras[i]).append("=").append(extras[i + 1]);
         }
-        // Use logger for structured output (was: System.out.println)
         dev.nozh.NozhConstants.LOGGER.debug(builder.toString());
     }
 

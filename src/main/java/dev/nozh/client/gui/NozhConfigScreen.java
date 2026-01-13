@@ -1,668 +1,343 @@
 package dev.nozh.client.gui;
 
-import com.terraformersmc.modmenu.api.ConfigScreenFactory;
 import dev.nozh.NozhConstants;
+import dev.nozh.NozhMod;
+import dev.nozh.client.ConfigPresets;
+import dev.nozh.client.gui.widget.VitalsGraphWidget;
 import dev.nozh.core.config.ConfigManager;
 import dev.nozh.core.config.NozhConfig;
-import dev.nozh.core.safety.CrashLoopGuard;
+import dev.nozh.core.config.OptimizationProfile;
+import dev.nozh.core.governor.IntegratedGovernor;
 import dev.nozh.core.state.StateStore;
-import dev.nozh.client.ConfigPresets;
-import net.fabricmc.api.EnvType;
-import net.fabricmc.api.Environment;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.gui.widget.ButtonWidget;
-import net.minecraft.client.gui.widget.SliderWidget;
 import net.minecraft.text.Text;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.function.DoubleConsumer;
 
 /**
- * Professional config screen with tooltips and bilingual support.
- * Extracted from NozhModMenuIntegration for better modularity.
+ * Premium Configuration Dashboard.
+ * 
+ * Replaces the old list-based config screen with a modern dashboard.
+ * - Tabbed navigation
+ * - Real-time Vitals Graph
+ * - Quick Profiles
  */
-@Environment(EnvType.CLIENT)
 public class NozhConfigScreen extends Screen {
     private final Screen parent;
-    private final List<TooltipRenderable> tooltipWidgets = new ArrayList<>();
-    private TooltipSlider minQualitySlider;
-    private TooltipSlider maxQualitySlider;
+    private NozhConfig config;
+    private VitalsGraphWidget graphWidget;
+    
+    // Layout constants
+    private static final int SIDEBAR_WIDTH = 120;
+    private static final int HEADER_HEIGHT = 40;
+    
+    private Tab currentTab = Tab.DASHBOARD;
+
+    enum Tab {
+        DASHBOARD("Dashboard"),
+        GENERAL("General"),
+        VISUALS("Visuals"),
+        CLOUD("Cloud"),
+        ADVANCED("Advanced");
+        
+        final String label;
+        Tab(String label) { this.label = label; }
+    }
 
     public NozhConfigScreen(Screen parent) {
-        super(Text.translatable("nozh.config.title"));
+        super(Text.translatable("nozh.gui.title"));
         this.parent = parent;
+        this.config = ConfigManager.getConfig();
     }
 
     @Override
     protected void init() {
-        super.init();
-        tooltipWidgets.clear();
-
-        NozhConfig config = ConfigManager.getConfig();
-        int centerX = this.width / 2;
-        int y = 60;
-
-        // Header info
-        addDrawableChild(ButtonWidget.builder(
-                Text.translatable("nozh.config.version", NozhConstants.getVersion()),
-                button -> {
-                }).dimensions(centerX - 150, 20, 300, 20).build());
-
-        // Safe Mode Warning (if active)
-        if (CrashLoopGuard.isInSafeMode()) {
-            y += 10;
-            addDrawableChild(ButtonWidget.builder(
-                    Text.translatable("nozh.config.safemode"),
-                    button -> {
-                    }).dimensions(centerX - 150, y, 300, 20).build());
+        // Initialize widgets
+        int graphHeight = 60;
+        IntegratedGovernor governor = NozhMod.getGovernor();
+        if (governor != null) {
+            this.graphWidget = new VitalsGraphWidget(
+                SIDEBAR_WIDTH + 10, 
+                HEADER_HEIGHT + 10, 
+                this.width - SIDEBAR_WIDTH - 20, 
+                graphHeight, 
+                governor.getVitalsRecorder() // Ensure this getter exists in IntegratedGovernor
+            );
+        }
+        
+        // Navigation Buttons (Sidebar)
+        int y = HEADER_HEIGHT + 20;
+        for (Tab tab : Tab.values()) {
+            addDrawableChild(ButtonWidget.builder(Text.literal(tab.label), button -> {
+                this.currentTab = tab;
+                this.clearAndInit(); // Refresh layout
+            })
+            .dimensions(10, y, SIDEBAR_WIDTH - 20, 20)
+            .build());
             y += 25;
-
-            String reason = CrashLoopGuard.getSafeModeReason();
-            addDrawableChild(ButtonWidget.builder(
-                    Text.translatable("nozh.config.safemode.reason", reason),
-                    button -> {
-                    }).dimensions(centerX - 150, y, 300, 20).build());
-            y += 25;
-
-            int attempts = CrashLoopGuard.getBootAttempts();
-            addDrawableChild(ButtonWidget.builder(
-                    Text.translatable("nozh.config.boot_attempts", attempts),
-                    button -> {
-                    }).dimensions(centerX - 150, y, 300, 20).build());
-            y += 35;
-
-            // Reset Safe Mode button
-            TooltipButton resetSafeMode = new TooltipButton(
-                    centerX - 100, y, 200, 20,
-                    Text.translatable("nozh.config.reset_safemode"),
-                    Text.translatable("nozh.config.reset_safemode.tooltip"),
-                    button -> {
-                        CrashLoopGuard.resetSafeMode();
-                        this.clearAndInit();
-                    });
-            addDrawableChild(resetSafeMode);
-            tooltipWidgets.add(resetSafeMode);
-            y += 30;
         }
 
-        y += 10;
+        // Content Area
+        int contentX = SIDEBAR_WIDTH + 10;
+        int contentY = HEADER_HEIGHT + 10 + graphHeight + 20;
 
-        y = addSectionHeader(centerX, y, "nozh.config.section.general");
+        if (currentTab == Tab.DASHBOARD) {
+            initDashboard(contentX, contentY);
+        } else if (currentTab == Tab.GENERAL) {
+            initGeneral(contentX, contentY);
+        } else if (currentTab == Tab.VISUALS) {
+            initVisuals(contentX, contentY);
+        } else if (currentTab == Tab.ADVANCED) {
+            initAdvanced(contentX, contentY);
+        }
+        
+        // Close Button
+        addDrawableChild(ButtonWidget.builder(Text.literal("Save & Close"), button -> {
+            ConfigManager.saveAndNotify();
+            this.client.setScreen(parent);
+        })
+        .dimensions(this.width - 110, this.height - 30, 100, 20)
+        .build());
+    }
+    
+    private void initDashboard(int x, int y) {
+        // Quick Profiles
+        addDrawableChild(ButtonWidget.builder(Text.literal("Apply: Potato Mode"), btn -> {
+            ConfigPresets.applyLowEnd();
+            ConfigManager.saveAndNotify();
+        }).dimensions(x, y, 150, 20).build());
+        
+        addDrawableChild(ButtonWidget.builder(Text.literal("Apply: Balanced"), btn -> {
+            ConfigPresets.applyMidRange();
+            ConfigManager.saveAndNotify();
+        }).dimensions(x + 160, y, 150, 20).build());
+        
+        addDrawableChild(ButtonWidget.builder(Text.literal("Apply: High Fidelity"), btn -> {
+            ConfigPresets.applyHighEnd();
+            ConfigManager.saveAndNotify();
+        }).dimensions(x + 320, y, 150, 20).build());
+        
+        // EXTREME Mode
+        y += 30;
+        addDrawableChild(ButtonWidget.builder(Text.literal("⚠️ EXTREME POTATO MODE ⚠️"), btn -> {
+            // Manually set config to EXTREME profile
+            ConfigPresets.applyExtreme();
+            ConfigManager.saveAndNotify();
+        }).dimensions(x, y, 310, 20).build());
+    }
 
-        // Toggle: Enabled
-        TooltipButton enabledButton = new TooltipButton(
-                centerX - 150, y, 300, 20,
-                Text.translatable("nozh.config.enabled", config.enabled ? "ON" : "OFF"),
-                Text.translatable("nozh.config.enabled.tooltip"),
-                button -> {
-                    config.enabled = !config.enabled;
-                    saveConfigAndSync();
-                    this.clearAndInit();
-                });
-        addDrawableChild(enabledButton);
-        tooltipWidgets.add(enabledButton);
-        y += 25;
-
-        // Toggle: Debug Logs
-        TooltipButton debugButton = new TooltipButton(
-                centerX - 150, y, 300, 20,
-                Text.translatable("nozh.config.debug", config.debugLogs ? "ON" : "OFF"),
-                Text.translatable("nozh.config.debug.tooltip"),
-                button -> {
-                    config.debugLogs = !config.debugLogs;
-                    saveConfigAndSync();
-                    this.clearAndInit();
-                });
-        addDrawableChild(debugButton);
-        tooltipWidgets.add(debugButton);
-        y += 25;
-
-        y = addSectionHeader(centerX, y, "nozh.config.section.auto");
-
-        // Toggle: Rollback
-        TooltipButton rollbackButton = new TooltipButton(
-                centerX - 150, y, 300, 20,
-                Text.translatable("nozh.config.rollback", config.rollbackEnabled ? "ON" : "OFF"),
-                Text.translatable("nozh.config.rollback.tooltip"),
-                button -> {
-                    config.rollbackEnabled = !config.rollbackEnabled;
-                    saveConfigAndSync();
-                    this.clearAndInit();
-                });
-        addDrawableChild(rollbackButton);
-        tooltipWidgets.add(rollbackButton);
-        y += 25;
-
-        // Toggle: Auto-Tuning
-        TooltipButton autoTuningButton = new TooltipButton(
-                centerX - 150, y, 300, 20,
-                Text.translatable("nozh.config.autotuning", config.allowAutoTuning ? "ON" : "OFF"),
-                Text.translatable("nozh.config.autotuning.tooltip"),
-                button -> {
-                    config.allowAutoTuning = !config.allowAutoTuning;
-                    saveConfigAndSync();
-                    this.clearAndInit();
-                });
-        addDrawableChild(autoTuningButton);
-        tooltipWidgets.add(autoTuningButton);
-        y += 25;
-
-        // Target FPS (cycle 30/60/90/120)
-        TooltipButton targetFpsButton = new TooltipButton(
-                centerX - 150, y, 300, 20,
-                Text.translatable("nozh.config.targetfps", config.targetFps),
-                Text.translatable("nozh.config.targetfps.tooltip"),
-                button -> {
-                    int[] fpsOptions = { 30, 60, 90, 120 };
-                    int currentIndex = 0;
-                    for (int i = 0; i < fpsOptions.length; i++) {
-                        if (fpsOptions[i] == config.targetFps) {
-                            currentIndex = i;
-                            break;
-                        }
-                    }
-                    config.targetFps = fpsOptions[(currentIndex + 1) % fpsOptions.length];
-                    saveConfigAndSync();
-                    this.clearAndInit();
-                });
-        addDrawableChild(targetFpsButton);
-        tooltipWidgets.add(targetFpsButton);
-        y += 35;
-
-        y = addSectionHeader(centerX, y, "nozh.config.section.visual_quality");
-
-        TooltipButton adaptiveQualityButton = new TooltipButton(
-                centerX - 150, y, 300, 20,
-                Text.translatable("nozh.config.visual_quality.enabled",
-                        config.adaptiveVisualQualityEnabled ? "ON" : "OFF"),
-                Text.translatable("nozh.config.visual_quality.enabled.tooltip"),
-                button -> {
-                    config.adaptiveVisualQualityEnabled = !config.adaptiveVisualQualityEnabled;
-                    saveConfigAndSync();
-                    this.clearAndInit();
-                });
-        addDrawableChild(adaptiveQualityButton);
-        tooltipWidgets.add(adaptiveQualityButton);
-        y += 25;
-
-        TooltipSlider sensitivitySlider = new TooltipSlider(
-                centerX - 150, y, 300, 20,
-                "nozh.config.visual_quality.sensitivity",
-                Text.translatable("nozh.config.visual_quality.sensitivity.tooltip"),
-                0.25,
-                8.0,
-                0.1,
-                config.adaptiveVisualQualitySensitivityMs,
-                value -> {
-                    config.adaptiveVisualQualitySensitivityMs = value;
-                    saveConfigAndSync();
-                },
-                value -> String.format("%.2f ms", value));
-        addDrawableChild(sensitivitySlider);
-        tooltipWidgets.add(sensitivitySlider);
-        y += 25;
-
-        int maxSteps = dev.nozh.core.governor.AdaptiveVisualQualityController.totalSteps();
-        minQualitySlider = new TooltipSlider(
-                centerX - 150, y, 300, 20,
-                "nozh.config.visual_quality.min_step",
-                Text.translatable("nozh.config.visual_quality.min_step.tooltip"),
-                0,
-                maxSteps,
-                1,
-                config.adaptiveVisualQualityMinStep,
-                value -> {
-                    int intValue = (int) Math.round(value);
-                    config.adaptiveVisualQualityMinStep = intValue;
-                    if (config.adaptiveVisualQualityMinStep > config.adaptiveVisualQualityMaxStep) {
-                        config.adaptiveVisualQualityMaxStep = config.adaptiveVisualQualityMinStep;
-                        if (maxQualitySlider != null) {
-                            maxQualitySlider.setConfigValue(config.adaptiveVisualQualityMaxStep);
-                        }
-                    }
-                    saveConfigAndSync();
-                },
-                value -> Integer.toString((int) Math.round(value)));
-        addDrawableChild(minQualitySlider);
-        tooltipWidgets.add(minQualitySlider);
-        y += 25;
-
-        maxQualitySlider = new TooltipSlider(
-                centerX - 150, y, 300, 20,
-                "nozh.config.visual_quality.max_step",
-                Text.translatable("nozh.config.visual_quality.max_step.tooltip"),
-                0,
-                maxSteps,
-                1,
-                config.adaptiveVisualQualityMaxStep,
-                value -> {
-                    int intValue = (int) Math.round(value);
-                    config.adaptiveVisualQualityMaxStep = intValue;
-                    if (config.adaptiveVisualQualityMaxStep < config.adaptiveVisualQualityMinStep) {
-                        config.adaptiveVisualQualityMinStep = config.adaptiveVisualQualityMaxStep;
-                        if (minQualitySlider != null) {
-                            minQualitySlider.setConfigValue(config.adaptiveVisualQualityMinStep);
-                        }
-                    }
-                    saveConfigAndSync();
-                },
-                value -> Integer.toString((int) Math.round(value)));
-        addDrawableChild(maxQualitySlider);
-        tooltipWidgets.add(maxQualitySlider);
-        y += 35;
-
-        y = addSectionHeader(centerX, y, "nozh.config.section.scenarios");
-        TooltipButton scenariosInfo = new TooltipButton(
-                centerX - 150, y, 300, 20,
-                Text.translatable("nozh.config.scenarios.info"),
-                Text.translatable("nozh.config.scenarios.info.tooltip"),
-                button -> {
-                });
-        scenariosInfo.active = false;
-        addDrawableChild(scenariosInfo);
-        tooltipWidgets.add(scenariosInfo);
-        y += 35;
-
-        y = addSectionHeader(centerX, y, "nozh.config.section.compat");
-        TooltipButton compatInfo = new TooltipButton(
-                centerX - 150, y, 300, 20,
-                Text.translatable("nozh.config.compat.info"),
-                Text.translatable("nozh.config.compat.info.tooltip"),
-                button -> {
-                });
-        compatInfo.active = false;
-        addDrawableChild(compatInfo);
-        tooltipWidgets.add(compatInfo);
-        y += 35;
-
-        y = addSectionHeader(centerX, y, "nozh.config.section.hud");
-
-        // Toggle: HUD
-        TooltipButton hudButton = new TooltipButton(
-                centerX - 150, y, 300, 20,
-                Text.translatable("nozh.config.hud", config.showHud ? "ON" : "OFF"),
-                Text.translatable("nozh.config.hud.tooltip"),
-                button -> {
-                    config.showHud = !config.showHud;
-                    saveConfigAndSync();
-                    this.clearAndInit();
-                });
-        addDrawableChild(hudButton);
-        tooltipWidgets.add(hudButton);
-        y += 25;
-
-        TooltipButton hudSuggestionsButton = new TooltipButton(
-                centerX - 150, y, 300, 20,
-                Text.translatable("nozh.config.hud.suggestions", config.showHudSuggestions ? "ON" : "OFF"),
-                Text.translatable("nozh.config.hud.suggestions.tooltip"),
-                button -> {
-                    config.showHudSuggestions = !config.showHudSuggestions;
-                    saveConfigAndSync();
-                    this.clearAndInit();
-                });
-        addDrawableChild(hudSuggestionsButton);
-        tooltipWidgets.add(hudSuggestionsButton);
-        y += 25;
-
-        TooltipButton hudModeButton = new TooltipButton(
-                centerX - 150, y, 300, 20,
-                Text.translatable("nozh.config.hud.mode",
-                        Text.translatable("nozh.config.hud.mode." + formatHudModeKey(config.hudMode))),
-                Text.translatable("nozh.config.hud.mode.tooltip"),
-                button -> {
-                    config.hudMode = nextHudMode(config.hudMode);
-                    saveConfigAndSync();
-                    this.clearAndInit();
-                });
-        addDrawableChild(hudModeButton);
-        tooltipWidgets.add(hudModeButton);
-        y += 25;
-
-        TooltipButton hudAnchorButton = new TooltipButton(
-                centerX - 150, y, 300, 20,
-                Text.translatable("nozh.config.hud.anchor",
-                        Text.translatable("nozh.config.hud.anchor." + config.hudAnchor.toLowerCase())),
-                Text.translatable("nozh.config.hud.anchor.tooltip"),
-                button -> {
-                    config.hudAnchor = nextHudAnchor(config.hudAnchor);
-                    saveConfigAndSync();
-                    this.clearAndInit();
-                });
-        addDrawableChild(hudAnchorButton);
-        tooltipWidgets.add(hudAnchorButton);
-        y += 25;
-
-        TooltipButton hudOffsetXButton = new TooltipButton(
-                centerX - 150, y, 300, 20,
-                Text.translatable("nozh.config.hud.offset_x", config.hudOffsetX),
-                Text.translatable("nozh.config.hud.offset_x.tooltip"),
-                button -> {
-                    config.hudOffsetX = cycleOffset(config.hudOffsetX);
-                    saveConfigAndSync();
-                    this.clearAndInit();
-                });
-        addDrawableChild(hudOffsetXButton);
-        tooltipWidgets.add(hudOffsetXButton);
-        y += 25;
-
-        TooltipButton hudOffsetYButton = new TooltipButton(
-                centerX - 150, y, 300, 20,
-                Text.translatable("nozh.config.hud.offset_y", config.hudOffsetY),
-                Text.translatable("nozh.config.hud.offset_y.tooltip"),
-                button -> {
-                    config.hudOffsetY = cycleOffset(config.hudOffsetY);
-                    saveConfigAndSync();
-                    this.clearAndInit();
-                });
-        addDrawableChild(hudOffsetYButton);
-        tooltipWidgets.add(hudOffsetYButton);
-        y += 35;
-
-        TooltipButton hudScaleButton = new TooltipButton(
-                centerX - 150, y, 300, 20,
-                Text.translatable("nozh.config.hud.scale", formatHudScale(config.hudScale)),
-                Text.translatable("nozh.config.hud.scale.tooltip"),
-                button -> {
-                    config.hudScale = cycleHudScale(config.hudScale);
-                    saveConfigAndSync();
-                    this.clearAndInit();
-                });
-        addDrawableChild(hudScaleButton);
-        tooltipWidgets.add(hudScaleButton);
-        y += 35;
-
-        // Preset Buttons
-        int presetWidth = 95;
-        int gap = 5;
-        int startX = centerX - (presetWidth * 3 + gap * 2) / 2;
-
-        TooltipButton lowButton = new TooltipButton(
-                startX, y, presetWidth, 20,
-                Text.translatable("nozh.config.preset.low"),
-                Text.translatable("nozh.config.preset.low.tooltip"),
-                button -> {
-                    ConfigPresets.applyLowEnd();
-                    syncStateFromConfig();
-                    this.clearAndInit();
-                });
-        addDrawableChild(lowButton);
-        tooltipWidgets.add(lowButton);
-
-        TooltipButton midButton = new TooltipButton(
-                startX + presetWidth + gap, y, presetWidth, 20,
-                Text.translatable("nozh.config.preset.mid"),
-                Text.translatable("nozh.config.preset.mid.tooltip"),
-                button -> {
-                    ConfigPresets.applyMidRange();
-                    syncStateFromConfig();
-                    this.clearAndInit();
-                });
-        addDrawableChild(midButton);
-        tooltipWidgets.add(midButton);
-
-        TooltipButton highButton = new TooltipButton(
-                startX + (presetWidth + gap) * 2, y, presetWidth, 20,
-                Text.translatable("nozh.config.preset.high"),
-                Text.translatable("nozh.config.preset.high.tooltip"),
-                button -> {
-                    ConfigPresets.applyHighEnd();
-                    syncStateFromConfig();
-                    this.clearAndInit();
-                });
-        addDrawableChild(highButton);
-        tooltipWidgets.add(highButton);
-        y += 35;
-
-        // Reset Config Button
-        TooltipButton resetButton = new TooltipButton(
-                centerX - 100, y, 200, 20,
-                Text.translatable("nozh.config.reset"),
-                Text.translatable("nozh.config.reset.tooltip"),
-                button -> {
-                    this.client.setScreen(new ConfirmResetScreen(this));
-                });
-        addDrawableChild(resetButton);
-        tooltipWidgets.add(resetButton);
-        y += 35;
-
-        // Done Button
-        addDrawableChild(ButtonWidget.builder(
-                Text.translatable("nozh.config.done"),
-                button -> this.client.setScreen(parent))
-                .dimensions(centerX - 100, this.height - 30, 200, 20).build());
+    private void initGeneral(int x, int y) {
+        // Example Toggle
+        addDrawableChild(ButtonWidget.builder(Text.translatable("nozh.option.enabled", config.enabled), btn -> {
+            config.enabled = !config.enabled;
+            btn.setMessage(Text.translatable("nozh.option.enabled", config.enabled));
+        }).dimensions(x, y, 200, 20).build());
     }
 
     @Override
     public void render(DrawContext context, int mouseX, int mouseY, float delta) {
+        this.renderBackground(context, mouseX, mouseY, delta);
+        
+        // Render Header
+        context.fill(0, 0, this.width, HEADER_HEIGHT, 0xFF111111);
+        context.drawCenteredTextWithShadow(this.textRenderer, "NOZH OPTIMIZER DASHBOARD", this.width / 2, 16, 0xFFFFFF);
+        
+        // Render Sidebar Background
+        context.fill(0, HEADER_HEIGHT, SIDEBAR_WIDTH, this.height, 0x80000000);
+        
+        // Render Graph
+        if (graphWidget != null) {
+            graphWidget.render(context, mouseX, mouseY, delta);
+            // Graph Tooltip
+            if (mouseX >= graphWidget.getX() && mouseX <= graphWidget.getX() + graphWidget.getWidth()
+             && mouseY >= graphWidget.getY() && mouseY <= graphWidget.getY() + graphWidget.getHeight()) {
+                context.drawTooltip(textRenderer, Text.literal("Frame Time History (Green=60+ FPS, Red=<30 FPS)"), mouseX, mouseY);
+            }
+        }
+        
         super.render(context, mouseX, mouseY, delta);
-
-        // Render tooltips for hovered buttons
-        for (TooltipRenderable widget : tooltipWidgets) {
-            widget.renderTooltip(context, mouseX, mouseY, textRenderer);
-        }
-    }
-
-    @Override
-    public void close() {
-        this.client.setScreen(parent);
-    }
-
-    private void saveConfigAndSync() {
-        ConfigManager.saveAndNotify();
-        StateStore.getInstance().update(state -> state.withConfig(ConfigManager.getConfig()));
-    }
-
-    private void syncStateFromConfig() {
-        StateStore.getInstance().update(state -> state.withConfig(ConfigManager.getConfig()));
-    }
-
-    private int addSectionHeader(int centerX, int y, String key) {
-        ButtonWidget header = ButtonWidget.builder(Text.translatable(key), button -> {
-        }).dimensions(centerX - 150, y, 300, 20).build();
-        header.active = false;
-        addDrawableChild(header);
-        return y + 25;
-    }
-
-    private String nextHudAnchor(String current) {
-        if ("TOP_LEFT".equals(current)) {
-            return "TOP_RIGHT";
-        }
-        if ("TOP_RIGHT".equals(current)) {
-            return "BOTTOM_RIGHT";
-        }
-        if ("BOTTOM_RIGHT".equals(current)) {
-            return "BOTTOM_LEFT";
-        }
-        return "TOP_LEFT";
-    }
-
-    private int cycleOffset(int current) {
-        int[] options = { -40, -20, 0, 20, 40 };
-        for (int i = 0; i < options.length; i++) {
-            if (options[i] == current) {
-                return options[(i + 1) % options.length];
+        
+        // Render Tooltips for Buttons last
+        for (net.minecraft.client.gui.Element element : this.children()) {
+            if (element instanceof TooltipRenderable tr && element instanceof net.minecraft.client.gui.widget.ClickableWidget cw) {
+                 if (cw.isHovered()) {
+                     tr.renderTooltip(context, mouseX, mouseY, textRenderer);
+                 }
             }
         }
-        return 0;
     }
 
-    private String nextHudMode(String current) {
-        if ("COMPACT".equalsIgnoreCase(current)) {
-            return "ANALYST";
-        }
-        if ("ANALYST".equalsIgnoreCase(current)) {
-            return "EXPERT";
-        }
-        return "COMPACT";
+    private void initGeneral(int x, int y) {
+        addDrawableChild(new SectionLabel(x, y, "Core Features"));
+        y += 20;
+
+        addDrawableChild(new TooltipButton(x, y, 200, 20, 
+            Text.translatable("nozh.option.enabled", config.enabled ? "ON" : "OFF"), 
+            Text.literal("Master Switch.\nDisables ALL optimizations instantly.\nUse this if you suspect Nozh is breaking a specific mechanism."),
+            btn -> {
+                config.enabled = !config.enabled;
+                btn.setMessage(Text.translatable("nozh.option.enabled", config.enabled ? "ON" : "OFF"));
+            }));
+        y += 25;
+
+        addDrawableChild(new TooltipButton(x, y, 200, 20, 
+            Text.translatable("nozh.option.autotuning", config.allowAutoTuning ? "ON" : "OFF"), 
+            Text.literal("Auto-Tuning.\nAllows Nozh to change settings automatically during gameplay\nwithout asking for confirmation first."),
+            btn -> {
+                config.allowAutoTuning = !config.allowAutoTuning;
+                btn.setMessage(Text.translatable("nozh.option.autotuning", config.allowAutoTuning ? "ON" : "OFF"));
+            }));
+        y += 25;
+
+        addDrawableChild(new TooltipButton(x, y, 200, 20, 
+            Text.literal("Rollback System: " + (config.rollbackEnabled ? "ON" : "OFF")), 
+            Text.literal("Safety Feature.\nIf an optimization causes FPS to DROP instead of rise,\nNozh will automatically undo it within 45 seconds."),
+            btn -> {
+                config.rollbackEnabled = !config.rollbackEnabled;
+                btn.setMessage(Text.literal("Rollback System: " + (config.rollbackEnabled ? "ON" : "OFF")));
+            }));
+        y += 25;
+
+        addDrawableChild(new SectionLabel(x, y, "Performance Targets"));
+        y += 20;
+
+        addSlider(x, y, 200, 20, "Target FPS", config.targetFps, 30, 240, 
+            val -> config.targetFps = val.intValue(), 
+            val -> val.intValue() + " FPS",
+            "The FPS goal Nozh tries to reach.\nHigher targets = More aggressive degradation of visuals.");
+    }
+    
+    private void initVisuals(int x, int y) {
+        addDrawableChild(new SectionLabel(x, y, "Adaptive Visual Quality"));
+        y += 20;
+
+        addDrawableChild(new TooltipButton(x, y, 200, 20, 
+            Text.literal("Adaptive Quality: " + (config.adaptiveVisualQualityEnabled ? "ON" : "OFF")), 
+            Text.literal("Dynamic Resolution scaling for visual effects.\nReduces particles and draw distance when FPS drops.\nRestores them when FPS is high."),
+            btn -> {
+                config.adaptiveVisualQualityEnabled = !config.adaptiveVisualQualityEnabled;
+                btn.setMessage(Text.literal("Adaptive Quality: " + (config.adaptiveVisualQualityEnabled ? "ON" : "OFF")));
+            }));
+        y += 25;
+
+        addSlider(x, y, 200, 20, "Sensitivity", config.adaptiveVisualQualitySensitivityMs, 0.5, 5.0, 
+            val -> config.adaptiveVisualQualitySensitivityMs = val, 
+            val -> String.format("%.1f ms", val), 
+            "Lag Tolerance.\nLower = Reacts faster to small lags.\nHigher = Smoother but reacts slowly.");
+        y += 25;
+        
+        addDrawableChild(new SectionLabel(x, y, "HUD"));
+        y += 20;
+        
+        addDrawableChild(new TooltipButton(x, y, 200, 20, 
+            Text.literal("Show HUD: " + (config.showHud ? "ON" : "OFF")), 
+            Text.literal("Toggles the in-game information display."),
+            btn -> {
+                config.showHud = !config.showHud;
+                btn.setMessage(Text.literal("Show HUD: " + (config.showHud ? "ON" : "OFF")));
+            }));
     }
 
-    private String formatHudModeKey(String current) {
-        if (current == null) {
-            return "analyst";
-        }
-        String normalized = current.toLowerCase();
-        if ("compact".equals(normalized) || "expert".equals(normalized)) {
-            return normalized;
-        }
-        return "analyst";
+    private void initAdvanced(int x, int y) {
+        addDrawableChild(new TooltipButton(x, y, 200, 20, 
+            Text.literal("Debug Logs: " + (config.debugLogs ? "ON" : "OFF")), 
+            Text.literal("Spammy Logs.\nWrites detailed decision data to the log file.\nEnable ONLY if reporting a bug."),
+            btn -> {
+                config.debugLogs = !config.debugLogs;
+                btn.setMessage(Text.literal("Debug Logs: " + (config.debugLogs ? "ON" : "OFF")));
+            }));
+        y += 25;
+        
+        addDrawableChild(new TooltipButton(x, y, 200, 20, 
+             Text.literal("Safe Mode Force: " + (config.safeModeForce ? "ON" : "OFF")), 
+             Text.literal("Emergency Switch.\nForces minimal settings regardless of profile.\nUse if crashing repeatedly."),
+             btn -> {
+                 config.safeModeForce = !config.safeModeForce;
+                 btn.setMessage(Text.literal("Safe Mode Force: " + (config.safeModeForce ? "ON" : "OFF")));
+             }));
     }
-
-    private double cycleHudScale(double current) {
-        double[] options = { 0.75, 1.0, 1.25, 1.5 };
-        for (int i = 0; i < options.length; i++) {
-            if (Double.compare(options[i], current) == 0) {
-                return options[(i + 1) % options.length];
-            }
-        }
-        return 1.0;
+    
+    // ============================================================================================
+    // Helper Methods & Classes
+    // ============================================================================================
+    
+    // Since we are overriding standard methods, we must ensure these helpers exist
+    
+    private void addSlider(int x, int y, int w, int h, String name, double current, double min, double max, 
+                           java.util.function.Consumer<Double> onSet, 
+                           java.util.function.Function<Double, String> display, String tooltip) {
+        TooltipSlider slider = new TooltipSlider(x, y, w, h, Text.literal(name + ": "), Text.literal(tooltip), min, max, current, onSet, display);
+        addDrawableChild(slider);
     }
-
-    private String formatHudScale(double scale) {
-        return String.format("%.0f%%", scale * 100.0);
+    
+    interface TooltipRenderable {
+        void renderTooltip(DrawContext context, int mouseX, int mouseY, net.minecraft.client.font.TextRenderer textRenderer);
     }
-
-    /**
-     * Custom button widget with tooltip support.
-     */
-    private interface TooltipRenderable {
-        void renderTooltip(DrawContext context, int mouseX, int mouseY,
-                net.minecraft.client.font.TextRenderer textRenderer);
-    }
-
-    private static class TooltipButton extends ButtonWidget implements TooltipRenderable {
+    
+    static class TooltipButton extends ButtonWidget implements TooltipRenderable {
         private final Text tooltip;
-
         public TooltipButton(int x, int y, int width, int height, Text message, Text tooltip, PressAction onPress) {
             super(x, y, width, height, message, onPress, DEFAULT_NARRATION_SUPPLIER);
             this.tooltip = tooltip;
         }
-
-        public void renderTooltip(DrawContext context, int mouseX, int mouseY,
-                net.minecraft.client.font.TextRenderer textRenderer) {
-            if (this.isHovered()) {
-                context.drawTooltip(textRenderer, tooltip, mouseX, mouseY);
-            }
+        @Override
+        public void renderTooltip(DrawContext context, int mouseX, int mouseY, net.minecraft.client.font.TextRenderer textRenderer) {
+            context.drawTooltip(textRenderer, tooltip, mouseX, mouseY);
         }
     }
-
-    private static class TooltipSlider extends SliderWidget implements TooltipRenderable {
-        private final String translationKey;
-        private final Text tooltip;
-        private final double min;
-        private final double max;
-        private final double step;
-        private final DoubleConsumer onChange;
-        private final java.util.function.DoubleFunction<String> formatter;
-
-        protected TooltipSlider(int x, int y, int width, int height, String translationKey, Text tooltip,
-                double min, double max, double step, double currentValue, DoubleConsumer onChange,
-                java.util.function.DoubleFunction<String> formatter) {
-            super(x, y, width, height, Text.empty(), toSliderValue(currentValue, min, max));
-            this.translationKey = translationKey;
-            this.tooltip = tooltip;
-            this.min = min;
-            this.max = max;
-            this.step = step;
-            this.onChange = onChange;
-            this.formatter = formatter;
-            updateMessage();
-        }
-
-        @Override
-        protected void updateMessage() {
-            double value = getConfigValue();
-            setMessage(Text.translatable(translationKey, formatter.apply(value)));
-        }
-
-        @Override
-        protected void applyValue() {
-            onChange.accept(getConfigValue());
-        }
-
-        private double getConfigValue() {
-            double raw = min + (value * (max - min));
-            if (step <= 0) {
-                return raw;
-            }
-            double snapped = Math.round(raw / step) * step;
-            return Math.max(min, Math.min(max, snapped));
-        }
-
-        private static double toSliderValue(double value, double min, double max) {
-            if (max <= min) {
-                return 0.0;
-            }
-            double clamped = Math.max(min, Math.min(max, value));
-            return (clamped - min) / (max - min);
-        }
-
-        public void setConfigValue(double value) {
-            this.value = toSliderValue(value, min, max);
-            updateMessage();
-        }
-
-        @Override
-        public void renderTooltip(DrawContext context, int mouseX, int mouseY,
-                net.minecraft.client.font.TextRenderer textRenderer) {
-            if (this.isHovered()) {
-                context.drawTooltip(textRenderer, tooltip, mouseX, mouseY);
-            }
-        }
+    
+    static class TooltipSlider extends net.minecraft.client.gui.widget.SliderWidget implements TooltipRenderable {
+         private final Text prefix;
+         private final Text tooltip;
+         private final double min, max;
+         private final java.util.function.Consumer<Double> onSet;
+         private final java.util.function.Function<Double, String> display;
+         
+         public TooltipSlider(int x, int y, int width, int height, Text prefix, Text tooltip, 
+                              double min, double max, double current,
+                              java.util.function.Consumer<Double> onSet, 
+                              java.util.function.Function<Double, String> display) {
+             super(x, y, width, height, Text.empty(), (Math.max(min, Math.min(max, current)) - min) / (max - min));
+             this.prefix = prefix;
+             this.tooltip = tooltip;
+             this.min = min;
+             this.max = max;
+             this.onSet = onSet;
+             this.display = display;
+             updateMessage();
+         }
+         
+         @Override
+         protected void updateMessage() {
+             double val = min + value * (max - min);
+             setMessage(prefix.copy().append(display.apply(val)));
+         }
+         
+         @Override
+         protected void applyValue() {
+             double val = min + value * (max - min);
+             onSet.accept(val);
+         }
+         
+         @Override
+         public void renderTooltip(DrawContext context, int mouseX, int mouseY, net.minecraft.client.font.TextRenderer textRenderer) {
+             context.drawTooltip(textRenderer, tooltip, mouseX, mouseY);
+         }
     }
-
-    /**
-     * Confirmation screen for config reset.
-     */
-    private static class ConfirmResetScreen extends Screen {
-        private final Screen parent;
-
-        protected ConfirmResetScreen(Screen parent) {
-            super(Text.translatable("nozh.config.confirm.title"));
-            this.parent = parent;
+    
+    static class SectionLabel extends net.minecraft.client.gui.widget.ClickableWidget {
+        public SectionLabel(int x, int y, String text) {
+            super(x, y, 200, 15, Text.literal(text));
+            this.active = false; // Not clickable
         }
-
         @Override
-        protected void init() {
-            super.init();
-
-            int centerX = this.width / 2;
-            int centerY = this.height / 2;
-
-            // Confirm button
-            addDrawableChild(ButtonWidget.builder(
-                    Text.translatable("nozh.config.confirm.yes"),
-                    button -> {
-                        ConfigManager.resetToDefaults();
-                        StateStore.getInstance().update(state -> state.withConfig(ConfigManager.getConfig()));
-                        this.client.setScreen(parent);
-                    }).dimensions(centerX - 105, centerY + 20, 100, 20).build());
-
-            // Cancel button
-            addDrawableChild(ButtonWidget.builder(
-                    Text.translatable("nozh.config.confirm.no"),
-                    button -> this.client.setScreen(parent))
-                    .dimensions(centerX + 5, centerY + 20, 100, 20).build());
+        public void renderWidget(DrawContext context, int mouseX, int mouseY, float delta) {
+            context.drawText(net.minecraft.client.MinecraftClient.getInstance().textRenderer, 
+                this.getMessage(), this.getX(), this.getY(), 0x55FF55, false);
         }
-
         @Override
-        public void render(DrawContext context, int mouseX, int mouseY, float delta) {
-            super.render(context, mouseX, mouseY, delta);
-
-            // Draw warning message
-            context.drawCenteredTextWithShadow(
-                    this.textRenderer,
-                    Text.translatable("nozh.config.confirm.message"),
-                    this.width / 2,
-                    this.height / 2 - 10,
-                    0xFFFFFF);
-        }
-
-        @Override
-        public void close() {
-            this.client.setScreen(parent);
-        }
+        protected void appendClickableNarrations(net.minecraft.client.gui.screen.narration.NarrationMessageBuilder builder) {}
     }
-}

@@ -13,6 +13,10 @@ import java.lang.management.OperatingSystemMXBean;
  * - Bottleneck identification (CPU vs GPU)
  *
  * Intelligence: 90% accuracy in determining performance bound.
+ * 
+ * THREAD SAFETY NOTE:
+ * Safe for concurrent access from Tick thread (recordTick) and Render thread (recordRender/getters).
+ * Synchronized to prevent ring buffer corruption.
  */
 public final class SystemMonitor {
 
@@ -61,7 +65,7 @@ public final class SystemMonitor {
     /**
      * PRIORITY 2: Record tick time sample.
      */
-    public void recordTickTimeMs(double tickTimeMs) {
+    public synchronized void recordTickTimeMs(double tickTimeMs) {
         if (!(tickTimeMs > 0.0) || Double.isNaN(tickTimeMs) || Double.isInfinite(tickTimeMs)) {
             return;
         }
@@ -85,7 +89,7 @@ public final class SystemMonitor {
     /**
      * PRIORITY 2: Record render time sample.
      */
-    public void recordRenderTimeMs(double renderTimeMs) {
+    public synchronized void recordRenderTimeMs(double renderTimeMs) {
         if (!(renderTimeMs > 0.0) || Double.isNaN(renderTimeMs) || Double.isInfinite(renderTimeMs)) {
             return;
         }
@@ -109,21 +113,21 @@ public final class SystemMonitor {
     /**
      * PRIORITY 2: Rolling average tick time.
      */
-    public double getAvgTickTimeMs() {
+    public synchronized double getAvgTickTimeMs() {
         return tickTimeCount == 0 ? 0.0 : (tickTimeSum / (double) tickTimeCount);
     }
 
     /**
      * PRIORITY 2: Rolling average render time.
      */
-    public double getAvgRenderTimeMs() {
+    public synchronized double getAvgRenderTimeMs() {
         return renderTimeCount == 0 ? 0.0 : (renderTimeSum / (double) renderTimeCount);
     }
 
     /**
      * PRIORITY 2: Derive bound detection from internally sampled tick/render times.
      */
-    public BoundType detectBoundFromHistory(int entityCount, boolean shadersActive, double resolutionScale) {
+    public synchronized BoundType detectBoundFromHistory(int entityCount, boolean shadersActive, double resolutionScale) {
         return detectBound(getAvgTickTimeMs(), getAvgRenderTimeMs(), entityCount, shadersActive, resolutionScale);
     }
 
@@ -585,7 +589,7 @@ public final class SystemMonitor {
     /**
      * Get comprehensive system status.
      */
-    public SystemStatus getStatus() {
+    public synchronized SystemStatus getStatus() {
         return new SystemStatus(
                 getSystemCpuLoad(),
                 getProcessCpuLoad(),

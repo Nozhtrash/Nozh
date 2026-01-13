@@ -1,43 +1,45 @@
 package dev.nozh.core.cloud;
 
-import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import dev.nozh.NozhConstants;
 
-import java.io.InputStreamReader;
-import java.net.HttpURLConnection;
-import java.net.URL;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.util.concurrent.CompletableFuture;
 
 /**
- * Remote Config Fetcher - Fetches dynamic configuration from the cloud.
+ * Remote Config Fetcher - Fetches hot-reloadable compatibility rules.
  * 
- * Primary use case: Updating mod compatibility rules without requiring a mod
- * update.
- * Uses GitHub Raw as a simple CDN.
- * 
- * Features:
- * 1. Async fetching
- * 2. Local caching (fallback if offline)
- * 3. Hot-reloading of compatibility rules
+ * Purpose:
+ * 1. Allow updating mod compatibility rules without releasing a new jar.
+ * 2. Fetch "knowledge" about new mods from a central repository.
+ * 3. Cache results locally to work offline.
  */
 public final class RemoteConfigFetcher {
 
     private static final RemoteConfigFetcher INSTANCE = new RemoteConfigFetcher();
-
-    // Default URL (placeholder - would point to main repo in production)
-    private static final String DEFAULT_CONFIG_URL = "https://raw.githubusercontent.com/Nozhtrash/Nozh-Testing/main/resources/compatibility.json";
-
-    private static final Gson GSON = new Gson();
-
-    private JsonObject cachedConfig = null;
-    private long lastFetchTime = 0;
+    // Default organization URL for public rules
+    private static final String REMOTE_URL = "https://raw.githubusercontent.com/TrxyyPC/nozh-rules/main/compatibility.json";
+    private static final String CACHE_FILENAME = "compatibility_cache.json";
     private static final long CACHE_TTL_MS = 3600_000; // 1 hour
 
+    private final HttpClient httpClient;
+    private final Path cachePath;
+    
+    private JsonObject cachedConfig = null;
+
     private RemoteConfigFetcher() {
+        this.httpClient = HttpClient.newBuilder()
+                .version(HttpClient.Version.HTTP_2)
+                .connectTimeout(Duration.ofSeconds(10))
+                .build();
+        this.cachePath = NozhConstants.CONFIG_DIR.resolve(CACHE_FILENAME);
     }
 
     public static RemoteConfigFetcher getInstance() {
@@ -45,92 +47,111 @@ public final class RemoteConfigFetcher {
     }
 
     /**
-     * Fetch configuration from the cloud.
-     * If cached and fresh, returns cache.
-     * Otherwise fetches async and updates cache.
+     * Fetch the config (from cache or remote).
+     * Async operation.
      */
-    public CompletableFuture<JsonObject> fetchConfig() {
-        if (!CloudManager.getInstance().isFeatureEnabled("compat_cloud")) {
-            return CompletableFuture.completedFuture(getLocalFallback());
-        }
-
-        // Return cache if fresh
-        if (cachedConfig != null && (System.currentTimeMillis() - lastFetchTime < CACHE_TTL_MS)) {
+    public CompletableFuture<JsonObject> fetch() {
+        // 1. Try memory cache
+        if (cachedConfig != null) {
             return CompletableFuture.completedFuture(cachedConfig);
         }
 
-        return CloudManager.getInstance().submitTask(() -> {
-            try {
-                NozhConstants.LOGGER.info("[NOZH] Fetching remote config from: {}", DEFAULT_CONFIG_URL);
-
-                URL url = new URL(DEFAULT_CONFIG_URL);
-                HttpURLConnection conn = (HttpURLConnection) url.openConnection();
-                conn.setConnectTimeout(5000); // 5s timeout
-                conn.setReadTimeout(5000);
-                conn.setRequestMethod("GET");
-
-                if (conn.getResponseCode() == 200) {
-                    try (InputStreamReader reader = new InputStreamReader(conn.getInputStream())) {
-                        JsonObject config = JsonParser.parseReader(reader).getAsJsonObject();
-
-                        // Validate basic structure
-                        if (config.has("version") && config.has("compatibility")) {
-                            cachedConfig = config;
-                            lastFetchTime = System.currentTimeMillis();
-                            saveToDisk(config); // Update local cache file
-                            String version = config.get("version").getAsString().replace('\n', '_').replace('\r', '_');
-                            NozhConstants.LOGGER.info("[NOZH] Remote config updated (v{})", version);
-                        } else {
-                            NozhConstants.LOGGER.warn("[NOZH] Invalid remote config format");
-                        }
-                    }
-                } else {
-                    NozhConstants.LOGGER.warn("[NOZH] Failed to fetch remote config: HTTP {}", conn.getResponseCode());
+        return CompletableFuture.supplyAsync(() -> {
+            // 2. Try disk cache if fresh enough
+            if (isCacheValid()) {
+                try {
+                    String json = Files.readString(cachePath);
+                    cachedConfig = JsonParser.parseString(json).getAsJsonObject();
+                    NozhConstants.LOGGER.info("[NOZH] Loaded compatibility rules from local cache");
+                    return cachedConfig;
+                } catch (Exception e) {
+                    NozhConstants.LOGGER.warn("[NOZH] Failed to read disk cache", e);
                 }
-
-            } catch (Exception e) {
-                NozhConstants.LOGGER.warn("[NOZH] Remote config fetch failed: {}", e.getMessage());
             }
-        }).thenApply(v -> {
-            // Return cached (new or old) or fallback if everything failed
-            return cachedConfig != null ? cachedConfig : getLocalFallback();
+            return null;
+        }).thenCompose(local -> {
+            if (local != null) {
+                return CompletableFuture.completedFuture(local);
+            }
+            
+            // 3. Fetch from Cloud
+            return fetchFromCloud();
         });
     }
 
-    /**
-     * Get the cached config immediately (non-blocking).
-     * Returns fallback if no cache available.
-     */
-    public JsonObject getConfigNow() {
-        return cachedConfig != null ? cachedConfig : getLocalFallback();
+    private CompletableFuture<JsonObject> fetchFromCloud() {
+        if (!CloudManager.getInstance().isFeatureEnabled("compat_cloud")) {
+            NozhConstants.LOGGER.info("[NOZH] Cloud compatibility disabled by user");
+            return CompletableFuture.completedFuture(new JsonObject());
+        }
+
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(REMOTE_URL))
+                .timeout(Duration.ofSeconds(15))
+                .header("User-Agent", "Nozh-Optimizer/" + NozhConstants.VERSION)
+                .GET()
+                .build();
+
+        NozhConstants.LOGGER.info("[NOZH] Fetching compatibility rules from cloud...");
+
+        return httpClient.sendAsync(request, HttpResponse.BodyHandlers.ofString())
+                .thenApply(response -> {
+                    if (response.statusCode() == 200) {
+                        try {
+                            JsonObject json = JsonParser.parseString(response.body()).getAsJsonObject();
+                            saveCache(response.body());
+                            cachedConfig = json;
+                            NozhConstants.LOGGER.info("[NOZH] Successfully updated compatibility rules");
+                            return json;
+                        } catch (Exception e) {
+                            NozhConstants.LOGGER.error("[NOZH] Invalid JSON from cloud", e);
+                            return getFallbackConfig();
+                        }
+                    } else {
+                        NozhConstants.LOGGER.warn("[NOZH] Failed to fetch rules: HTTP {}", response.statusCode());
+                        return loadDiskCacheForce(); // Fallback to stale cache
+                    }
+                })
+                .exceptionally(ex -> {
+                    NozhConstants.LOGGER.warn("[NOZH] Cloud fetch failed: {}", ex.getMessage());
+                    return loadDiskCacheForce();
+                });
     }
 
-    private JsonObject getLocalFallback() {
-        // Try to load from disk cache first
+    private void saveCache(String json) {
         try {
-            Path cachePath = NozhConstants.CONFIG_DIR.resolve("compatibility_cache.json");
+            Files.writeString(cachePath, json);
+        } catch (Exception e) {
+            NozhConstants.LOGGER.warn("[NOZH] Failed to save cache", e);
+        }
+    }
+
+    private boolean isCacheValid() {
+        try {
+            if (!Files.exists(cachePath)) return false;
+            long lastModified = Files.getLastModifiedTime(cachePath).toMillis();
+            return (System.currentTimeMillis() - lastModified) < CACHE_TTL_MS;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    private JsonObject loadDiskCacheForce() {
+        try {
             if (Files.exists(cachePath)) {
                 String json = Files.readString(cachePath);
-                return JsonParser.parseString(json).getAsJsonObject();
+                cachedConfig = JsonParser.parseString(json).getAsJsonObject();
+                NozhConstants.LOGGER.info("[NOZH] Using stale cache as fallback");
+                return cachedConfig;
             }
         } catch (Exception e) {
-            // Ignore
+            // ignore
         }
-
-        // Return minimal default
-        JsonObject defaultConf = new JsonObject();
-        defaultConf.addProperty("version", "0.0.0");
-        defaultConf.add("compatibility", new JsonObject());
-        return defaultConf;
+        return getFallbackConfig();
     }
 
-    private void saveToDisk(JsonObject config) {
-        try {
-            Path cachePath = NozhConstants.CONFIG_DIR.resolve("compatibility_cache.json");
-            Files.createDirectories(cachePath.getParent());
-            Files.writeString(cachePath, GSON.toJson(config));
-        } catch (Exception e) {
-            NozhConstants.LOGGER.error("[NOZH] Failed to save config cache", e);
-        }
+    private JsonObject getFallbackConfig() {
+        // Return minimal default config or empty
+        return new JsonObject();
     }
 }

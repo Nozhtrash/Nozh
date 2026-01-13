@@ -11,6 +11,21 @@ First off, thank you for considering contributing to NOZH. This project follows 
     * The `CrashLoopGuard` must be respected.
 3. **Zero Allocations**: Use `FrameTimeSampler` and `RollingWindowStats` patterns. Do not allocate objects (`new ...`) inside the render loop (`onFrame`).
 4. **Strict Typing**: Use Enums (`ActionType`, `DecisionSeverity`) instead of strings or magic numbers.
+5. **Hygiene**:
+    *   **NO `System.out` / `System.err` / `printStackTrace`**. (Commit will be rejected)
+    *   Use `NozhConstants.LOGGER` for all logging.
+
+## Development Workflow
+
+We use a **pre-commit hook** to ensure quality:
+1.  **Automatic Tests**: `./gradlew quickTest` runs before every commit.
+2.  **Sanitation Check**: Staged files are scanned for banned keywords.
+
+**To bypass checks (Emergency Only):**
+```bash
+git commit --no-verify -m "Emergency fix"
+```
+*Note: Bypassing checks for non-emergencies is grounds for PR rejection.*
 
 ## Pull Request Process
 

@@ -79,6 +79,10 @@ public class NozhCommand {
                 .then(literal("hud")
                         .then(argument("mode", StringArgumentType.word())
                                 .executes(NozhCommand::setHudMode)))
+                .then(literal("gui")
+                        .executes(NozhCommand::openGui))
+                .then(literal("menu")
+                        .executes(NozhCommand::openGui))
         );
     }
 
@@ -446,6 +450,13 @@ public class NozhCommand {
         sendMessage(source, "Synergy detection system ready", Formatting.WHITE);
         sendMessage(source, "Analyzing loaded mods...", Formatting.GRAY);
         
+        return 1;
+    }
+
+    private static int openGui(CommandContext<FabricClientCommandSource> context) {
+        net.minecraft.client.MinecraftClient client = net.minecraft.client.MinecraftClient.getInstance();
+        // Execute on main thread to avoid thread safety issues
+        client.execute(() -> client.setScreen(new dev.nozh.client.gui.NozhConfigScreen(client.currentScreen)));
         return 1;
     }
 

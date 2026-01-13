@@ -56,7 +56,7 @@ public final class ModpackQuickTestRunner {
             results
         );
 
-        System.out.printf(Locale.ROOT, "Quick test plan + results written to %s%n", outputPath.toAbsolutePath());
+        dev.nozh.NozhConstants.LOGGER.info("Quick test plan + results written to {}", outputPath.toAbsolutePath());
     }
 
     private static BenchmarkResult runScenario(ScenarioDefinition scenario, String sampleDir) throws IOException {
