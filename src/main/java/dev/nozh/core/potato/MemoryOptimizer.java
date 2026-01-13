@@ -58,6 +58,15 @@ public final class MemoryOptimizer {
     }
 
     /**
+     * Gets current memory pressure (alias for usage percent).
+     * 
+     * @return memory pressure 0.0 to 1.0
+     */
+    public double getMemoryPressure() {
+        return getMemoryUsagePercent();
+    }
+
+    /**
      * Checks if system is under memory pressure.
      * 
      * <p>
