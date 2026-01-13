@@ -35,8 +35,7 @@ public final class HardwareProfiler {
 
     public static HardwareProfile detectHardware() {
         int cores = Runtime.getRuntime().availableProcessors();
-        long ramGb = detectPhysicalMemoryGb().orElseGet(() ->
-                Runtime.getRuntime().maxMemory() / (1024 * 1024 * 1024));
+        long ramGb = detectPhysicalMemoryGb().orElseGet(() -> Runtime.getRuntime().maxMemory() / (1024 * 1024 * 1024));
         String gpuName = detectGpuName().orElse("unknown");
         StorageType storageType = detectStorageType();
 
@@ -56,6 +55,7 @@ public final class HardwareProfiler {
                 gpuName);
     }
 
+    @SuppressWarnings("deprecation")
     private static Optional<Long> detectPhysicalMemoryGb() {
         try {
             var osBean = ManagementFactory.getOperatingSystemMXBean();

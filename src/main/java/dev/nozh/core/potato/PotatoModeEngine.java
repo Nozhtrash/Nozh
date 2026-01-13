@@ -70,10 +70,9 @@ public final class PotatoModeEngine {
             this.description = desc;
         }
     }
-    
+
     // Global tracker for static access
     private static volatile boolean globalActive = false;
-
 
     /**
      * Potato mode configuration.
@@ -154,6 +153,17 @@ public final class PotatoModeEngine {
                         false, // clouds off
                         false // shadows off
                     );
+                case SURVIVAL -> new PotatoConfig(
+                        level,
+                        32, // standard max render distance
+                        16, // standard max entity distance
+                        1.0, // 100% particles
+                        true, // animations on
+                        true, // smooth lighting on
+                        true, // clouds on
+                        true // shadows on
+                    );
+                default -> throw new IllegalArgumentException("Unrecognized level: " + level);
             };
         }
     }
@@ -296,7 +306,7 @@ public final class PotatoModeEngine {
                 currentConfig.renderDistance,
                 currentConfig.entityDistance,
                 (int) (currentConfig.particleMultiplier * 100));
-        
+
         globalActive = true;
     }
 
@@ -328,7 +338,7 @@ public final class PotatoModeEngine {
     public boolean isActive() {
         return active;
     }
-    
+
     /**
      * Static check for global potato mode state.
      */
