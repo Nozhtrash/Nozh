@@ -857,6 +857,10 @@ public final class IntegratedGovernor {
         return lastDecisionReasoning;
     }
 
+    public VitalsRecorder getVitalsRecorder() {
+        return vitalsRecorder;
+    }
+
     public boolean isHealthy() {
         return healthMonitor != null && !healthMonitor.isCritical();
     }
