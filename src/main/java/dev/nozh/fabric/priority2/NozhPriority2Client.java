@@ -153,13 +153,13 @@ public final class NozhPriority2Client implements ClientModInitializer {
             if (PENDING.size() == 0 && Priority2PerfGate.performanceVeryGood(tickMs, renderMs, bottleneck)) {
                 try {
                     actionApplier.tryGradualRecovery(client, true);
-                } catch (Throwable t) {
-                    NozhConstants.LOGGER.debug("Gradual recovery skipped due to exception", t);
+                } catch (Exception e) {
+                    NozhConstants.LOGGER.debug("Gradual recovery skipped due to exception", e);
                 }
             }
         });
 
-        NozhConstants.LOGGER.info("Priority3 bundle enabled: predictive + efficiency scoring + i18n (pending)");
+        NozhConstants.LOGGER.info("Priority2 client initialized: predictive analysis + efficiency scoring enabled");
     }
 
     private static double safe(double ms) {

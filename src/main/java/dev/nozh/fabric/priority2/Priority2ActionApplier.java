@@ -72,9 +72,9 @@ public final class Priority2ActionApplier {
                     return new Result(ApplyResult.NOOP, "Unknown suggestion id: " + suggestionId);
                 }
             }
-        } catch (Throwable t) {
-            NozhConstants.LOGGER.warn("Failed to apply suggestion " + suggestionId, t);
-            return new Result(ApplyResult.FAILED, "Exception while applying: " + t.getClass().getSimpleName());
+        } catch (Exception e) {
+            NozhConstants.LOGGER.warn("Failed to apply suggestion " + suggestionId, e);
+            return new Result(ApplyResult.FAILED, "Exception while applying: " + e.getClass().getSimpleName());
         }
     }
 
@@ -116,7 +116,8 @@ public final class Priority2ActionApplier {
             Method setValue = opt.getClass().getMethod("setValue", current.getClass());
             setValue.invoke(opt, next);
             return true;
-        } catch (Throwable ignored) {
+        } catch (ReflectiveOperationException | RuntimeException e) {
+            NozhConstants.LOGGER.debug("Could not decrease particles via reflection", e);
         }
 
         return false;
@@ -139,7 +140,8 @@ public final class Priority2ActionApplier {
             Method setValue = opt.getClass().getMethod("setValue", current.getClass());
             setValue.invoke(opt, next);
             return true;
-        } catch (Throwable ignored) {
+        } catch (ReflectiveOperationException | RuntimeException e) {
+            NozhConstants.LOGGER.debug("Could not increase particles via reflection", e);
         }
         return false;
     }
@@ -177,7 +179,8 @@ public final class Priority2ActionApplier {
             Method setValue = opt.getClass().getMethod("setValue", Double.class);
             setValue.invoke(opt, next);
             return true;
-        } catch (Throwable ignored) {
+        } catch (ReflectiveOperationException | RuntimeException e) {
+            NozhConstants.LOGGER.debug("Could not decrease entity distance scale via reflection", e);
         }
         return false;
     }
@@ -193,7 +196,8 @@ public final class Priority2ActionApplier {
             Method setValue = opt.getClass().getMethod("setValue", Integer.class);
             setValue.invoke(opt, maxFps);
             return true;
-        } catch (Throwable ignored) {
+        } catch (ReflectiveOperationException | RuntimeException e) {
+            NozhConstants.LOGGER.debug("Could not cap FPS via reflection", e);
         }
         return false;
     }
@@ -207,7 +211,8 @@ public final class Priority2ActionApplier {
             Field f = options.getClass().getDeclaredField(fieldName);
             f.setAccessible(true);
             return f.get(options);
-        } catch (Throwable ignored) {
+        } catch (NoSuchFieldException | IllegalAccessException | RuntimeException e) {
+            NozhConstants.LOGGER.debug("Could not find option field: {}", fieldName);
             return null;
         }
     }
@@ -224,7 +229,8 @@ public final class Priority2ActionApplier {
             Method setValue = opt.getClass().getMethod("setValue", Integer.class);
             setValue.invoke(opt, next);
             return true;
-        } catch (Throwable ignored) {
+        } catch (ReflectiveOperationException | RuntimeException e) {
+            NozhConstants.LOGGER.debug("Could not step int option: {}", fieldName);
         }
         return false;
     }
@@ -262,7 +268,8 @@ public final class Priority2ActionApplier {
             // Yarn: options.write() exists; keep it reflection-safe.
             Method write = client.options.getClass().getMethod("write");
             write.invoke(client.options);
-        } catch (Throwable ignored) {
+        } catch (ReflectiveOperationException | RuntimeException e) {
+            NozhConstants.LOGGER.debug("Could not persist options", e);
         }
     }
 }

@@ -15,7 +15,8 @@
         "MixinItemFrameEntity",
         "MixinBlockEntityRenderDispatcher",
         "MixinClientChunkManager",
-        "MixinParticleManager"
+        "MixinParticleManager",
+        "MixinClientPlayNetworkHandler"
     ],
     "injectors": {
         "defaultRequire": 1

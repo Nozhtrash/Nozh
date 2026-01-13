@@ -32,6 +32,7 @@ public final class ActionProviderMapping {
         ACTION_TO_PROVIDER.put("lower_particles", "particles");
         ACTION_TO_PROVIDER.put("disable_clouds", "clouds");
         ACTION_TO_PROVIDER.put("reduce_shadows", "entity_shadows");
+        ACTION_TO_PROVIDER.put("lower_entity_distance", "entity_distance");
         
         // GRAPHICS QUALITY (Tier 2 - May require reload)
         ACTION_TO_PROVIDER.put("lower_graphics_quality", "graphics_mode");

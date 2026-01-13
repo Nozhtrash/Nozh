@@ -168,7 +168,9 @@ public final class SodiumAdapterExpanded {
         Class<?> enumClass = currentValue.getClass();
 
         // Find matching enum constant
-        Object enumValue = Enum.valueOf((Class<Enum>) enumClass, enumName);
+        @SuppressWarnings("unchecked")
+        Class<Enum> castEnumClass = (Class<Enum>) enumClass;
+        Object enumValue = Enum.valueOf(castEnumClass, enumName);
 
         // Set value
         Method setter = option.getClass().getMethod("setValue", enumClass);

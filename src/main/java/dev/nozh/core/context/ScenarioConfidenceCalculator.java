@@ -39,6 +39,11 @@ public final class ScenarioConfidenceCalculator {
             int conflictingSignals,
             double stabilityFactor) {
 
+        if (Double.isNaN(stabilityFactor)) {
+            stabilityFactor = 0.5;
+        }
+        stabilityFactor = Math.max(0.0, Math.min(1.0, stabilityFactor));
+
         double confidence = BASE_CONFIDENCE;
 
         // Add bonus for supporting signals

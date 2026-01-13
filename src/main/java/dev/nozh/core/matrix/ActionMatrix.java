@@ -43,9 +43,9 @@ public final class ActionMatrix {
     private static final double PERFORMANCE_PRESSURE_WEIGHT = 0.25;
     private static final double BASELINE_FRAME_MS = 16.67;
     private static final double MAX_SPIKE_PRESSURE = 5.0;
-    private static final String[] PARTICLE_ORDER = {"MINIMAL", "DECREASED", "ALL"};
-    private static final String[] CLOUD_ORDER = {"OFF", "FAST", "FANCY"};
-    private static final String[] GRAPHICS_ORDER = {"FAST", "FANCY", "FABULOUS"};
+    private static final String[] PARTICLE_ORDER = { "MINIMAL", "DECREASED", "ALL" };
+    private static final String[] CLOUD_ORDER = { "OFF", "FAST", "FANCY" };
+    private static final String[] GRAPHICS_ORDER = { "FAST", "FANCY", "FABULOUS" };
 
     private final ProviderRegistry registry;
     private final ActionSuccessTracker successTracker;
@@ -90,7 +90,7 @@ public final class ActionMatrix {
     private static dev.nozh.core.compatibility.CompatibilityMatrix createCompatibilityMatrixSafe() {
         try {
             return new dev.nozh.core.compatibility.CompatibilityMatrix();
-        } catch (Throwable e) {
+        } catch (Exception e) {
             // Tests don't have FabricLoader available
             return null;
         }
@@ -99,12 +99,12 @@ public final class ActionMatrix {
     /**
      * Generate candidates for current state.
      * 
-     * @param policy       Mode policy to enforce
-     * @param currentBound Performance bound (CPU/GPU/BALANCED)
-     * @param scenario     Current scenario (combat/building/etc.)
-     * @param profile      Optimization profile (aggressive/balanced)
+     * @param policy         Mode policy to enforce
+     * @param currentBound   Performance bound (CPU/GPU/BALANCED)
+     * @param scenario       Current scenario (combat/building/etc.)
+     * @param profile        Optimization profile (aggressive/balanced)
      * @param p95FrametimeMs Current p95 frametime (ms)
-     * @param spikeCount   Current spike count
+     * @param spikeCount     Current spike count
      * @return Sorted candidates (best first), may be empty
      */
     public List<ActionCandidate> generateCandidates(
@@ -638,7 +638,8 @@ public final class ActionMatrix {
         double normalizedLearnedGain = maxLearnedGain > 0 ? learnedGain / maxLearnedGain : 0.0;
         double p95Gain = sessionLearning.getAvgP95Gain(candidate.capabilityId(), context.scenario());
         double normalizedP95Gain = maxP95Gain > 0 ? p95Gain / maxP95Gain : 0.0;
-        double spikePenalty = Math.max(0.0, sessionLearning.getAvgSpikeDelta(candidate.capabilityId(), context.scenario()));
+        double spikePenalty = Math.max(0.0,
+                sessionLearning.getAvgSpikeDelta(candidate.capabilityId(), context.scenario()));
         double normalizedSpikePenalty = maxSpikePenalty > 0 ? spikePenalty / maxSpikePenalty : 0.0;
         double scenarioBoost = scenarioRules.ruleWeight(candidate.capabilityId(), context.scenario(),
                 context.profile()) * context.tuning().scenarioWeightMultiplier();
@@ -722,9 +723,9 @@ public final class ActionMatrix {
             case CLOUDS -> compareEnum(current, baseline, CLOUD_ORDER);
             case GRAPHICS_MODE -> compareEnum(current, baseline, GRAPHICS_ORDER);
             case ENTITY_SHADOWS, ARMOR_STANDS, ITEM_FRAMES, BLOCK_ENTITIES, ANIMATIONS, VSYNC, DYNAMIC_LIGHTING ->
-                    compareBool(current, baseline);
+                compareBool(current, baseline);
             case RENDER_DISTANCE, SIMULATION_DISTANCE, ENTITY_DISTANCE, BIOME_BLEND, MIPMAP_LEVEL, FOG ->
-                    compareInt(current, baseline);
+                compareInt(current, baseline);
             case RESOLUTION_SCALE, DISTORTION_EFFECT_SCALE -> compareFloat(current, baseline);
             default -> false;
         };

@@ -27,8 +27,18 @@ public final class AdaptiveVisualQualityController {
     private record QualityStep(CapabilityId capabilityId, CapabilityValue targetValue) {
     }
 
-    private static final long MIN_STEP_INTERVAL_MS = 15_000L;
-    private static final int REQUIRED_STREAK = 2;
+    // Timing constants
+    private static final long MIN_DOWNSHIFT_INTERVAL_MS = 10_000L; // 10s between quality reductions
+    private static final long MIN_UPSHIFT_INTERVAL_MS = 30_000L; // 30s of stability before quality increase
+    private static final long STABILITY_WINDOW_MS = 60_000L; // 1 minute stability for full recovery
+
+    // Streak requirements (hysteresis)
+    private static final int REQUIRED_DOWNSHIFT_STREAK = 2; // Quick to reduce quality
+    private static final int REQUIRED_UPSHIFT_STREAK = 4; // Slow to restore quality (hysteresis)
+
+    // Threshold multipliers (hysteresis: easier to drop, harder to raise)
+    private static final double DOWNSHIFT_THRESHOLD_MULT = 1.0; // Standard threshold to drop
+    private static final double UPSHIFT_THRESHOLD_MULT = 1.5; // 50% more headroom needed to raise
 
     private static final List<QualityStep> DEFAULT_STEPS = List.of(
             new QualityStep(CapabilityId.ENTITY_SHADOWS, new CapabilityValue.BoolValue(false)),
@@ -50,7 +60,9 @@ public final class AdaptiveVisualQualityController {
             new QualityStep(CapabilityId.DISTORTION_EFFECT_SCALE, new CapabilityValue.FloatValue(0.0f)));
 
     private int currentStep = 0;
-    private long lastChangeMillis = 0L;
+    private long lastDownshiftMillis = 0L;
+    private long lastUpshiftMillis = 0L;
+    private long lastStabilityBreakMillis = 0L; // Track when stability was last broken
     private int downshiftStreak = 0;
     private int upshiftStreak = 0;
     private boolean initialized = false;
@@ -83,41 +95,68 @@ public final class AdaptiveVisualQualityController {
         int minStep = Math.max(0, Math.min(config.adaptiveVisualQualityMinStep, maxStep));
         syncStepFromSettings(state.currentSettings(), minStep, maxStep);
 
-        if (nowMillis - lastChangeMillis < MIN_STEP_INTERVAL_MS) {
-            return Optional.empty();
-        }
-
         double targetFrameMs = 1000.0 / Math.max(1, config.targetFps);
         double sensitivityMs = clamp(config.adaptiveVisualQualitySensitivityMs, 0.25, 8.0);
-        double upperThreshold = targetFrameMs + sensitivityMs;
-        double lowerThreshold = targetFrameMs - sensitivityMs;
 
-        if (frametimeMs > upperThreshold) {
+        // Asymmetric thresholds (hysteresis)
+        double downshiftThreshold = targetFrameMs + (sensitivityMs * DOWNSHIFT_THRESHOLD_MULT);
+        double upshiftThreshold = targetFrameMs - (sensitivityMs * UPSHIFT_THRESHOLD_MULT);
+
+        // Track streaks
+        if (frametimeMs > downshiftThreshold) {
             downshiftStreak++;
             upshiftStreak = 0;
-        } else if (frametimeMs < lowerThreshold) {
+            lastStabilityBreakMillis = nowMillis;
+        } else if (frametimeMs < upshiftThreshold) {
             upshiftStreak++;
             downshiftStreak = 0;
         } else {
-            downshiftStreak = 0;
-            upshiftStreak = 0;
-            return Optional.empty();
+            // In neutral zone - decay streaks slowly
+            downshiftStreak = Math.max(0, downshiftStreak - 1);
+            // Keep upshift streak if still in good range
         }
 
-        if (downshiftStreak >= REQUIRED_STREAK && currentStep < maxStep) {
-            return resolveDownshift(state.currentSettings(), registry, maxStep);
+        // === DOWNSHIFT: Quick response to performance issues ===
+        if (downshiftStreak >= REQUIRED_DOWNSHIFT_STREAK && currentStep < maxStep) {
+            // Check minimum interval since last downshift
+            if (nowMillis - lastDownshiftMillis >= MIN_DOWNSHIFT_INTERVAL_MS) {
+                return resolveDownshift(state.currentSettings(), registry, maxStep);
+            }
         }
 
-        if (upshiftStreak >= REQUIRED_STREAK && currentStep > minStep) {
-            return resolveUpshift(state.currentSettings(), state.baselineSnapshot(), registry, minStep);
+        // === UPSHIFT: Cautious recovery with sustained stability ===
+        if (upshiftStreak >= REQUIRED_UPSHIFT_STREAK && currentStep > minStep) {
+            // CONFLICT RESOLUTION: If Potato Mode is active, do not upshift.
+            // The user requested maximum performance; restoring quality contradicts that.
+            if (dev.nozh.core.potato.PotatoModeEngine.isGlobalActive()) {
+                return Optional.empty();
+            }
+
+            // Check minimum interval since last upshift
+            if (nowMillis - lastUpshiftMillis < MIN_UPSHIFT_INTERVAL_MS) {
+                return Optional.empty();
+            }
+
+            // Check stability: require no stability breaks for STABILITY_WINDOW_MS
+            // (unless we're at a very low quality step)
+            if (currentStep > 3 && (nowMillis - lastStabilityBreakMillis) < STABILITY_WINDOW_MS) {
+                return Optional.empty(); // Not stable enough yet
+            }
+
+            return resolveUpshift(state.currentSettings(), state.baselineSnapshot(), registry, minStep, nowMillis);
         }
 
         return Optional.empty();
     }
 
     public void onChangeApplied(int nextStep, long nowMillis) {
+        boolean wasUpshift = nextStep < currentStep;
         currentStep = nextStep;
-        lastChangeMillis = nowMillis;
+        if (wasUpshift) {
+            lastUpshiftMillis = nowMillis;
+        } else {
+            lastDownshiftMillis = nowMillis;
+        }
         downshiftStreak = 0;
         upshiftStreak = 0;
         initialized = true;
@@ -141,7 +180,7 @@ public final class AdaptiveVisualQualityController {
     }
 
     private Optional<QualityChange> resolveUpshift(Map<CapabilityId, CapabilityValue> currentSettings,
-            BaselineSnapshot baselineSnapshot, ProviderRegistry registry, int minStep) {
+            BaselineSnapshot baselineSnapshot, ProviderRegistry registry, int minStep, long nowMillis) {
         int undoIndex = Math.min(currentStep - 1, DEFAULT_STEPS.size() - 1);
         for (int index = undoIndex; index >= minStep && index >= 0; index--) {
             QualityStep step = DEFAULT_STEPS.get(index);
@@ -156,7 +195,8 @@ public final class AdaptiveVisualQualityController {
                 continue;
             }
             int nextStep = index;
-            String reason = String.format("Adaptive visual quality ↑ (step %d/%d)", nextStep, currentStep);
+            String reason = String.format("Adaptive visual quality ↑ (step %d/%d) - stable %.1fs",
+                    nextStep, currentStep, (nowMillis - lastStabilityBreakMillis) / 1000.0);
             return Optional.of(new QualityChange(step.capabilityId(), target, nextStep, reason));
         }
         return Optional.empty();
@@ -222,9 +262,10 @@ public final class AdaptiveVisualQualityController {
             case CLOUDS -> compareEnum(current, target, List.of("OFF", "FAST", "FANCY")) <= 0;
             case GRAPHICS_MODE -> compareEnum(current, target, List.of("FAST", "FANCY", "FABULOUS")) <= 0;
             case ENTITY_SHADOWS, VSYNC, SMOOTH_LIGHTING, DYNAMIC_LIGHTING, ANIMATIONS, ARMOR_STANDS, ITEM_FRAMES,
-                    BLOCK_ENTITIES -> compareBool(current, target) <= 0;
+                    BLOCK_ENTITIES ->
+                compareBool(current, target) <= 0;
             case RENDER_DISTANCE, SIMULATION_DISTANCE, ENTITY_DISTANCE, BIOME_BLEND, MIPMAP_LEVEL, FOG ->
-                    compareInt(current, target) <= 0;
+                compareInt(current, target) <= 0;
             case RESOLUTION_SCALE, DISTORTION_EFFECT_SCALE -> compareFloat(current, target) <= 0;
             default -> false;
         };
@@ -242,9 +283,10 @@ public final class AdaptiveVisualQualityController {
             case CLOUDS -> compareEnum(current, target, List.of("OFF", "FAST", "FANCY")) > 0;
             case GRAPHICS_MODE -> compareEnum(current, target, List.of("FAST", "FANCY", "FABULOUS")) > 0;
             case ENTITY_SHADOWS, VSYNC, SMOOTH_LIGHTING, DYNAMIC_LIGHTING, ANIMATIONS, ARMOR_STANDS, ITEM_FRAMES,
-                    BLOCK_ENTITIES -> compareBool(current, target) > 0;
+                    BLOCK_ENTITIES ->
+                compareBool(current, target) > 0;
             case RENDER_DISTANCE, SIMULATION_DISTANCE, ENTITY_DISTANCE, BIOME_BLEND, MIPMAP_LEVEL, FOG ->
-                    compareInt(current, target) > 0;
+                compareInt(current, target) > 0;
             case RESOLUTION_SCALE, DISTORTION_EFFECT_SCALE -> compareFloat(current, target) > 0;
             default -> false;
         };
@@ -287,7 +329,8 @@ public final class AdaptiveVisualQualityController {
         return Double.compare(currentFloat.value(), targetFloat.value());
     }
 
-    private CapabilityValue resolveUpshiftTarget(CapabilityId id, int previousIndex, BaselineSnapshot baselineSnapshot) {
+    private CapabilityValue resolveUpshiftTarget(CapabilityId id, int previousIndex,
+            BaselineSnapshot baselineSnapshot) {
         if (previousIndex >= 0) {
             for (int i = previousIndex; i >= 0; i--) {
                 QualityStep step = DEFAULT_STEPS.get(i);

@@ -5,8 +5,6 @@ import dev.nozh.core.governor.IntegratedGovernor;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallback;
 import net.minecraft.client.MinecraftClient;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.nio.file.Path;
 
@@ -17,8 +15,9 @@ import java.nio.file.Path;
  */
 public class NozhMod implements ClientModInitializer {
 
-    public static final String MOD_ID = "nozh";
-    public static final Logger LOGGER = LoggerFactory.getLogger(MOD_ID);
+    // Use NozhConstants as single source of truth for MOD_ID and LOGGER
+    public static final String MOD_ID = NozhConstants.MOD_ID;
+    public static final org.slf4j.Logger LOGGER = NozhConstants.LOGGER;
     
     private static IntegratedGovernor governor;
 
@@ -34,6 +33,9 @@ public class NozhMod implements ClientModInitializer {
         
         // Initialize governor
         governor = new IntegratedGovernor(client, logPath);
+        
+        // Initialize cloud services
+        dev.nozh.core.cloud.CloudManager.getInstance().start();
         
         // Register commands
         NozhCommand.setGovernor(governor);
@@ -59,5 +61,6 @@ public class NozhMod implements ClientModInitializer {
         if (governor != null) {
             governor.shutdown();
         }
+        dev.nozh.core.cloud.CloudManager.getInstance().shutdown();
     }
 }

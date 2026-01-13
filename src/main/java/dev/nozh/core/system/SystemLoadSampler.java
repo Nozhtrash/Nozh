@@ -37,7 +37,8 @@ public final class SystemLoadSampler {
                 return OptionalDouble.empty();
             }
             return OptionalDouble.of(d);
-        } catch (Throwable ignored) {
+        } catch (ReflectiveOperationException | RuntimeException e) {
+            // Method not available on this JVM implementation
             return OptionalDouble.empty();
         }
     }

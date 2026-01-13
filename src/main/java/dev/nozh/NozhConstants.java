@@ -12,8 +12,8 @@ import java.nio.file.Path;
 public final class NozhConstants {
 
     public static final String MOD_ID = "nozh";
-    public static final String MOD_NAME = "NOZH";
-
+    public static final String MOD_NAME = "Nozh FPS Optimizer";
+    public static final String MOD_VERSION = "1.0.0-RC1";
     // Dynamic version from mod metadata (not hardcoded)
     private static String cachedVersion = null;
 
@@ -45,7 +45,8 @@ public final class NozhConstants {
         Path configDir;
         try {
             configDir = FabricLoader.getInstance().getConfigDir().resolve(MOD_ID);
-        } catch (Throwable ignored) {
+        } catch (Exception e) {
+            // Fallback if FabricLoader not available (e.g., in tests)
             configDir = Path.of("config").resolve(MOD_ID);
         }
         CONFIG_DIR = configDir;
@@ -64,6 +65,31 @@ public final class NozhConstants {
     // Profiler defaults
     public static final int DEFAULT_RING_BUFFER_SIZE = 300; // ~5 seconds at 60fps
     public static final int STATS_UPDATE_INTERVAL_FRAMES = 30; // Update stats every 30 frames
+
+    // =========================================
+    // Server Performance Callbacks
+    // =========================================
+    
+    private static volatile Runnable serverTickCallback = null;
+    
+    /**
+     * Set callback for server tick notifications.
+     * Called by ServerPerformanceDetector during initialization.
+     */
+    public static void setServerTickCallback(Runnable callback) {
+        serverTickCallback = callback;
+    }
+    
+    /**
+     * Notify that a server tick was received.
+     * Called by MixinClientPlayNetworkHandler.
+     */
+    public static void notifyServerTick() {
+        Runnable callback = serverTickCallback;
+        if (callback != null) {
+            callback.run();
+        }
+    }
 
     private NozhConstants() {
         // Utility class

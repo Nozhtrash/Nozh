@@ -202,12 +202,15 @@ public final class ProviderRegistry {
      * Call this during mod initialization.
      */
     public static void discoverProviders(ProviderRegistry registry) {
-        // Explicit provider list here
-        // Example:
-        // registry.register(new ParticlesProvider());
-        // registry.register(new CloudsProvider());
-        // ... etc
-
-        // For now, empty (will be populated in canary phase)
+        // Register all concrete OptimizationProviders
+        registry.register(new dev.nozh.core.capability.providers.ParticlesProvider());
+        registry.register(new dev.nozh.core.capability.providers.CloudsProvider());
+        registry.register(new dev.nozh.core.capability.providers.RenderDistanceProvider());
+        registry.register(new dev.nozh.core.capability.providers.EntityShadowsProvider());
+        registry.register(new dev.nozh.core.capability.providers.EntityDistanceProvider());
+        registry.register(new dev.nozh.core.capability.providers.GraphicsModeProvider());
+        
+        dev.nozh.NozhConstants.LOGGER.info("[ProviderRegistry] Registered {} optimization providers", 
+            registry.getRegisteredProviderIds().size());
     }
 }

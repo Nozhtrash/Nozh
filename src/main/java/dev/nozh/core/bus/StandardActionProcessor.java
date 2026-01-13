@@ -169,16 +169,16 @@ public final class StandardActionProcessor implements ActionProcessor {
                 logger.warn("Command execution failed: " + cmd.id() + " - " + failure.error());
             }
 
-        } catch (Throwable t) {
+        } catch (Exception e) {
             // Execution threw exception (NEVER propagate)
-            error = Optional.of(t.getMessage() != null ? t.getMessage() : t.getClass().getSimpleName());
+            error = Optional.of(e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName());
             CrashLoopGuard.recordFailureContext(CrashFailureContext.forCommandFailure(
                     "ACTION_EXECUTION",
                     capability,
                     cmd.type(),
                     value,
                     error.orElse("unknown"),
-                    t));
+                    e));
 
             // Attempt rollback if supported
             if (supportsRollback && oldValue.isPresent()) {
@@ -194,7 +194,7 @@ public final class StandardActionProcessor implements ActionProcessor {
                 finalState = CommandLifecycle.FAILED;
             }
 
-            logger.error("Command execution threw exception: " + cmd.id(), t);
+            logger.error("Command execution threw exception: " + cmd.id(), e);
         }
 
         // Close report
@@ -298,8 +298,8 @@ public final class StandardActionProcessor implements ActionProcessor {
 
             return success;
 
-        } catch (Throwable t) {
-            logger.error("Rollback threw exception for " + capability, t);
+        } catch (Exception e) {
+            logger.error("Rollback threw exception for " + capability, e);
             return false;
         }
     }

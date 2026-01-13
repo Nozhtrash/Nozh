@@ -356,8 +356,16 @@ public class NozhCommand {
         if (!checkGovernor(context.getSource())) return 0;
         
         FabricClientCommandSource source = context.getSource();
-        sendMessage(source, String.format("Starting %s benchmark...", type), Formatting.YELLOW);
-        sendMessage(source, "Benchmark system (not yet fully integrated)", Formatting.GRAY);
+        
+        if (dev.nozh.core.profiler.BenchmarkSuite.getInstance().isRunning()) {
+            sendMessage(source, "Benchmark is already running!", Formatting.RED);
+            return 0;
+        }
+        
+        sendMessage(source, String.format("Starting %s benchmark (10s)...", type), Formatting.YELLOW);
+        sendMessage(source, "Please perform typical gameplay actions.", Formatting.WHITE);
+        
+        dev.nozh.core.profiler.BenchmarkSuite.getInstance().startBenchmark();
         
         return 1;
     }

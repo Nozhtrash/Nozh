@@ -26,7 +26,7 @@ public final class ModpackRegistry {
                     return Optional.of(profile);
                 }
             }
-        } catch (Throwable ignored) {
+        } catch (Exception e) {
             // FabricLoader not available (tests/server)
         }
         return Optional.empty();
