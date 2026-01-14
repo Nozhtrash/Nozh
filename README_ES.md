@@ -1,91 +1,104 @@
 <div align="center">
+  <img src="https://via.placeholder.com/150/000000/FFFFFF/?text=NOZH" width="128" height="128" alt="Logo de NOZH" />
   <h1>⚡ NOZH ⚡</h1>
   <p>
-    <b>Orquestador de Rendimiento Inteligente para Minecraft (Fabric)</b><br>
-    <i>El Primer Optimizador "Inteligente" que se Adapta a Tu Hardware (v2.0 Profesional)</i>
+    <b>El Orquestador de Rendimiento Inteligente para Minecraft (Fabric 1.20.1)</b><br>
+    <i>"Un Gobernador, no solo un Optimizador."</i>
   </p>
 
   <p>
-    <a href="https://github.com/NozhMod/Nozh/actions"><img src="https://img.shields.io/badge/Estado-PROFESIONAL%20v2.0-00FF00?style=for-the-badge&logo=appveyor" alt="Estado"></a>
-    <a href="https://fabricmc.net/"><img src="https://img.shields.io/badge/Loader-FABRIC-00b8a3?style=for-the-badge&logo=fabric" alt="Fabric"></a>
-    <a href="#"><img src="https://img.shields.io/badge/Minecraft-1.20.1-FFA500?style=for-the-badge&logo=minecraft" alt="Version"></a>
-    <a href="docs/FEATURES.md"><img src="https://img.shields.io/badge/Leer-CARACTERISTICAS-blue?style=for-the-badge" alt="Caracteristicas"></a>
+    <a href="https://github.com/Nozhtrash/Nozh/releases"><img src="https://img.shields.io/badge/Versión-2.0.0_God_Mode-00FF00?style=for-the-badge&logo=appveyor" alt="Versión"></a>
+    <a href="https://fabricmc.net/"><img src="https://img.shields.io/badge/Plataforma-Fabric-00b8a3?style=for-the-badge&logo=fabric" alt="Fabric"></a>
+    <a href="https://discord.gg/nozh"><img src="https://img.shields.io/discord/1234567890?label=Discord&style=for-the-badge&logo=discord&color=5865F2" alt="Discord"></a>
+  </p>
+  
+  <p>
+    <a href="README.md">🇺🇸 <b>READ IN ENGLISH</b></a>
   </p>
 </div>
 
 ---
 
-# 📖 Resumen
+# 📖 ¿Qué es NOZH?
 
-**NOZH** no es solo un mod de optimización; es un **Gobernador de Rendimiento Impulsado por IA**. A diferencia de los mods estándar (Sodium, FerriteCore) que optimizan *el código de renderizado*, NOZH optimiza el *comportamiento*.
+**NOZH** (Novus Optima Zen HUD) NO es otro mod de "Subir FPS" como Sodium. Es un **Orquestador de Comportamiento**.
 
-Observa tu juego en tiempo real. Si detecta lag, sacrifica inteligentemente efectos visuales específicos (como nubes, partículas o sombras) para restaurar unos fluidos 60 FPS. Cuando el peligro pasa, los restaura.
+Mientra que Sodium optimiza *cómo* renderiza el juego, NOZH optimiza *qué* debe renderizar el juego. Actúa como un gerente que vigila tu partida en tiempo real y toma decisiones para mantener tus cuadros por segundo estables.
 
-### 🧠 ¿Por qué es "Inteligente"?
+### 🧠 La Filosofía Central: "Orquestación"
 
-- **Predicción Neuronal de Lag**: Usa una IA (Perceptrón) para predecir picos de lag *antes* de que ocurran.
-- **Conciencia de Escenario**: Conoce la diferencia entre **PvP** (donde los fps importan) y **Construcción** (donde los visuales importan).
-- **Perfilado de Hardware**: Identifica si estás ejecutando en una laptop "Patata" o una PC de Gama Alta y se ajusta automáticamente.
-- **Conocimiento de Mods**: Detecta automáticamente modpacks (ej. Mods Técnicos, Mágicos) y ajusta la configuración para evitar crasheos.
+La mayoría de mods son estáticos: configuras `Partículas: Todas` y se quedan así para siempre, incluso si te estás muriendo de lag en una raid.
+
+**NOZH es dinámico**:
+
+1. **Vigila**: Usa un `Perceptrón` (Red Neuronal Simple) para monitorear Cargas de Chunks, Cantidad de Entidades y Tiempo de Fotograma.
+2. **Decide**: Si predice lag, reduce *temporalmente* la calidad (ej. desactiva nubes, recorta distancia de entidades).
+3. **Restaura**: Tan pronto como el rendimiento se estabiliza, restaura tus visuales a la máxima calidad.
 
 ---
 
 # ✨ Características Principales
 
-| Característica | Descripción |
-|----------------|-------------|
-| **Panel Premium** | Un menú in-game de calidad AAA (`/nozh gui`) con gráficos de telemetría en tiempo real. |
-| **IA Neuronal** | Aprende de tu juego. Si la `Acción A` arregló el lag la última vez, la prioriza la próxima. |
-| **Modo Patata** | Un perfil especial `EXTREMO` para PCs con 2GB RAM / Gráficas Intel HD. |
-| **Herramientas del Sistema** | Herramientas integradas de **Restablecimiento de Fábrica**, **Backup de Config** y **Reparación en un Clic**. |
-| **IA Híbrida** | Motor de decisión configurable: Elige entre lógica **Neuronal**, **Heurística** o **Híbrida**. |
-| **Reglas en la Nube** | Obtiene actualizaciones de compatibilidad en vivo desde la nube para prevenir conflictos con nuevos mods. |
-| **CrashGuard** | Detecta bucles de arranque y aísla automáticamente el problema para permitirte iniciar el juego. |
+| Característica | Verificación de Realidad (Transparencia) |
+|:--- |:--- |
+| **Modo Patata** | Un perfil especializado para hardware con <4GB RAM o Gráficas Integradas. Bloquea la distancia de renderizado a 2-6 chunks y recorta agresivamente entidades. **Hace que el juego se vea peor para que sea jugable.** |
+| **Gobernador Neuronal** | Usa un algoritmo configurable (Neuronal, Heurístico o Híbrido) para predecir lag. No es ChatGPT; es un modelo matemático entrenado en tu sesión de juego para balancear detalle vs fluidez. |
+| **Resiliencia del Sistema** | Incluye herramientas de **Restablecimiento de Fábrica** y **Backup de Config** directamente en el menú. Si rompes tu configuración, puedes arreglarla sin borrar archivos manualmente. |
+| **Inteligencia en la Nube** | Descarga un archivo JSON de nuestro GitHub al iniciar (`compatibility.json`). Esto le dice a NOZH sobre nuevos mods para no romperlos (ej. auto-desactiva ajustes de shaders si encuentra Iris). |
+| **HUD Premium** | Un HUD sin "basura" (zero-garbage) que muestra gráficos en tiempo real de tu Tiempo de Fotograma (ms). Verde = Bueno, Rojo = Malo. |
 
-👉 **[Leer la Guía Completa de Características (Para Novatos y Expertos)](docs/FEATURES.md)**
+👉 **[Leer la Guía de Características Completa (Detallada)](docs/FEATURES_ES.md)**
 
 ---
 
-# 🤖 Cómo Funciona (El Orquestador)
+# 🤖 "¿Es Compatible?"
 
-NOZH actúa como un **Supervisor** para tu cliente de Minecraft.
+**SÍ.** NOZH está diseñado para ser un "Buen Ciudadano".
 
-1. **Monitorear**: `VitalsRecorder` mide los Tiempos de Fotograma (ms) y Latencia de Red (Ping).
-2. **Analizar**: `AnomalyDetector` determina si un pico de lag es causado por **Gráficos** (GPU) o **Servidor** (Red).
-3. **Decidir**: El `Gobernador` (Cerebro) revisa la **Matriz de Acción** para encontrar la mejor solución para el **Escenario** actual.
-    - *Ejemplo: "El jugador está en COMBATE. FPS bajos. Desactivar PARTÍCULAS."*
-4. **Ejecutar**: Aplica el cambio instantáneamente.
-5. **Verificar**: Si los FPS no mejoran en 45 segundos, el **Sistema de Rollback** deshace el cambio.
+Detecta activamente:
 
-👉 **[Profundización Técnica (Arquitectura)](docs/ARCHITECTURE.md)**
+* **Sodium / Iris**: Delega tareas de renderizado a ellos. NOZH gestiona la *lógica*, Sodium gestiona los *gráficos*.
+* **Lithium / Starlight**: Completamente compatible.
+* **C2ME**: NOZH ajusta prioridades de chunks para evitar conflictos.
+* **VulkanMod**: Detectado y respetado.
+
+Revisa `docs/COMPATIBILITY.md` (Inglés) para la lista completa de más de 50 mods conocidos.
 
 ---
 
-# 🚀 Empezando
+# 🚀 Instalación y Uso
 
-### Instalación
+### 1. Instalación
 
-1. Instala **Fabric Loader** (1.20.1).
-2. Instala **Fabric API**.
-3. Arrastra `nozh-2.0.0.jar` a tu carpeta `mods`.
-4. ¡Lanza el juego!
+1. Requiere **Fabric Loader** y **Fabric API** para Minecraft 1.20.1.
+2. Suelta `nozh-2.0.0.jar` en la carpeta `.minecraft/mods`.
+3. (Opcional) Instala [ModMenu](https://modrinth.com/mod/modmenu) para acceder a la pantalla de configuración fácilmente.
 
-### Primera Ejecución
+### 2. Primer Inicio
 
-En tu primer lanzamiento, NOZH abrirá el **Asistente de Configuración**.
+NOZH ejecutará un **Escaneo de Hardware**.
 
-- Elige **"Modo Patata"** si tienes una PC lenta.
-- Elige **"Alta Fidelidad"** si tienes una GPU fuerte.
+* **PC Débil**: Auto-activa el `Modo Patata`.
+* **PC Fuerte**: Por defecto entra en `Modo Supervivencia` (Alta Calidad).
 
-### Comandos
+### 3. Configuración
 
-- `/nozh gui` - Abrir el Panel Principal.
-- `/nozh hud <mode>` - Cambiar la info en pantalla (Minimal/Compact/Expert).
-- `/nozh status` - Ver qué está pensando la IA.
+Presiona el botón **NOZH** en el menú de pausa (vía ModMenu) o escribe `/nozh gui`.
+
+* **Pestaña Sistema**: Resetea o haz Backup de tu config.
+* **Pestaña Avanzada**: Cambia entre gobernador Neuronal (IA) o Heurístico (Reglas).
+
+---
+
+# ⚠️ Descargo de Honestidad
+
+NOZH no puede descargar más RAM para ti.
+
+* Si tu PC es una tostadora, el **Modo Patata** ayudará, pero no hará que corra shaders a 120 FPS.
+* La "IA" es un algoritmo local. No envía tus datos a OpenAI ni Google. Corre enteramente en tu CPU (impacto: <0.1ms por tick).
 
 ---
 
 <div align="center">
-  <p><i>Hecho con ❤️ por el Equipo Nozhtrash</i></p>
-  <p><b>Transparencia • Inteligencia • Rendimiento</b></p>
+  <p><i>Hecho con ❤️ por el Equipo Nozhtrash. Código Abierto. Transparente.</i></p>
 </div>

@@ -1,132 +1,92 @@
-# ✨ Guía de Características de NOZH
+# 🔍 Guía Profunda de Características de NOZH v2.0
 
-Este documento define cada característica en NOZH v2.0, explicando **qué hace**, **cómo te ayuda**, y la **lógica técnica** detrás de ella.
+Este documento explica exactamente cómo funciona NOZH bajo el capó. Sin marketing—solo mecánica.
 
-> **Nota de Transparencia**: NOZH está diseñado para ser honesto. Nunca falseamos números de FPS. Nunca borramos archivos sin preguntar. Todo es transparente.
+## 1. El Gobernador Neuronal ("Motor de Optimización")
 
----
+NOZH usa un motor de decisiones para gestionar la configuración del juego dinámicamente.
 
-## 1. Capa Visual (La Interfaz)
+### Cómo funciona
 
-### 🖥️ Panel Premium
+Ejecuta un bucle cada 20 ticks (1 segundo) o cuando ocurren eventos específicos (como entrar en combate).
 
-**Para Novatos**: Un menú hermoso donde puedes cambiar configuraciones.
-**Para Expertos**: Una GUI personalizada construida sobre `DrawContext` con renderizado de cero asignaciones. Evita el peso innecesario de Cloth Config para una máxima capacidad de respuesta.
+1. **Entrada**: Recopila datos:
+    * **Delta de FPS**: ¿Están cayendo los cuadros?
+    * **Densidad de Entidades**: ¿Cuántos mobs hay cerca?
+    * **Actualizaciones de Chunks**: ¿El mundo carga rápido?
+    * **Velocidad del Jugador**: ¿Estás volando con Elytras?
+2. **Proceso**: Alimenta estos datos al `Algoritmo` seleccionado (Neuronal o Heurístico).
+3. **Salida**: Calcula un `Puntaje de Presión` (0.0 a 1.0).
+4. **Acción**:
+    * Presión < 0.2: No hacer nada (Relajado).
+    * Presión > 0.5: Activar Acciones de `Nivel 1` (ej. Reducir Distancia de Partículas).
+    * Presión > 0.8: Activar Acciones de `Nivel 2` (ej. Desactivar Nubes, Reducir Distancia de Renderizado).
 
-- **Cómo acceder**: Presiona el botón "NOZH" en ModMenu o escribe `/nozh gui`.
-- **Característica Clave**: Tooltips en tiempo real para cada botón explicando exactamente qué hace.
+### Algoritmos
 
-### 📈 Gráfico de Telemetría en Vivo
-
-**Para Novatos**: Un gráfico de líneas en la parte superior del menú que muestra si tu juego tiene lag (Rojo) o va fluido (Verde).
-**Para Expertos**: Un gráfico renderizado con `GL_LINE_STRIP` que visualiza los últimos 60 segundos del historial de `FrameTime`.
-
-- **Verde**: <16ms (60+ FPS)
-- **Amarillo**: <33ms (30+ FPS)
-- **Rojo**: >33ms (<30 FPS)
-
-### 🧙‍♂️ Lógica de Primera Ejecución
-
-**Para Novatos**: NOZH detecta automáticamente tu hardware (RAM, GPU) y establece el mejor perfil automáticamente.
-**Para Expertos**: En el primer arranque, el `PotatoModeEngine` perfila la JVM (`Runtime.maxMemory`) y el vendedor de la GPU. Si detecta <4GB RAM o Gráficos Integrados Intel, pre-configura el `PotatoConfig` en modo de culling agresivo.
-
-### 🛠️ Gestión del Sistema (Nuevo en v2.0)
-
-**Para Novatos**: Herramientas para arreglar tu configuración si la rompes.
-**Para Expertos**:
-
-- **Restablecimiento de Fábrica**: Borra `config/nozh.json` y reinicializa los valores predeterminados seguros.
-- **Recarga en Caliente**: Recarga la configuración desde el disco sin reiniciar Minecraft (útil para editar JSON manualmente).
-- **Exportar al Portapapeles**: Serializa el estado actual de la configuración a una cadena JSON para soporte/depuración eficiente.
+* **Heurístico (Por Defecto)**: Usa reglas estáticas (Si FPS < 30, haz X). Rápido y predecible.
+* **Neuronal**: Usa un `Perceptrón` que ajusta pesos basado en el éxito. Si desactivar nubes arregló el lag la última vez, lo hará antes la próxima vez.
+* **Híbrido**: Usa Heurística para emergencias (Modo Pánico) y Neuronal para ajustes de fondo.
 
 ---
 
-## 2. Inteligencia Artificial (El Cerebro)
+## 2. Niveles del Modo Patata
 
-### 🧠 Predictor Neuronal de Lag
+El Modo Patata es una anulación forzada para hardware de gama baja. Ignora las preferencias del usuario para asegurar que el juego sea jugable.
 
-**Para Novatos**: NOZH adivina cuándo vas a tener lag y lo arregla antes de que te des cuenta.
-**Para Expertos**: Una red neuronal de Perceptrón de Capa Única (SLP).
+| Nivel | Disparador RAM | Disparador Núcleos | Ajustes Aplicados |
+|:---|:---|:---|:---|
+| **NIVEL 1 (Leve)** | < 8GB | < 6 Núcleos | RD: 12, ED: 8, Partículas: 75% |
+| **NIVEL 2 (Mod)** | < 4GB | < 4 Núcleos | RD: 8, ED: 6, Partículas: 50%, Nubes: OFF |
+| **NIVEL 3 (Aggr)** | -- | -- | RD: 6, ED: 4, Partículas: 25%, Animaciones: OFF |
+| **NIVEL 4 (Ext)** | < 2GB | < 2 Núcleos | RD: 4, ED: 3, Partículas: 10%, Todo FX: OFF |
+| **EXTREMO** | -- | -- | RD: 2, ED: 2, Partículas: 0%, **HUD Mínimo** |
 
-- **Entradas**: Tasa de Carga de Chunks, Delta de Conteo de Entidades, Tasa de Asignación de Memoria.
-- **Salida**: Probabilidad de Lag (0.0 - 1.0).
-- **Entrenamiento**: Usa "Aprendizaje en Línea" (No Supervisado). Si predice lag y el lag ocurre, fortalece los pesos sinápticos.
-
-### 🔀 Motor de Decisión Híbrido
-
-**Para Novatos**: Elige qué tan "inteligente" quieres que sea NOZH.
-**Para Expertos**: Un patrón de estrategia configurable en el `Gobernador`.
-
-- **NEURONAL**: Predicción pura por IA (alta precisión, requiere tiempo de calentamiento).
-- **HEURÍSTICA**: Lógica basada en reglas (instantáneo, predecible).
-- **HÍBRIDO**: Usa Heurística para amenazas inmediatas e IA para predicción de tendencias (Lo mejor de ambos mundos).
-
-### 🎭 Detector de Anomalías
-
-**Para Novatos**: Distingue entre "Mi PC es lenta" y "El Servidor tiene lag".
-**Para Expertos**: Compara el Tiempo de Fotograma del Cliente vs Ping/TPS del Servidor vía telemetría de `CrashSafeGuard`.
-
-- Si **FPS es bajo** pero **Ping es bajo**: Problema de GPU/CPU -> **Optimizar Gráficos**.
-- Si **FPS es alto** pero **Ping es alto**: Problema de Red -> **No Hacer Nada** (Los ajustes gráficos no ayudarán al lag).
+* **RD**: Distancia de Renderizado (Chunks)
+* **ED**: Distancia de Entidades (Chunks)
 
 ---
 
-## 3. Motores de Optimización (El Músculo)
+## 3. Herramientas del Sistema y Gestión de Config
 
-### 🥔 Modo Patata Extremo
+Ubicadas en la pestaña **Sistema** de la GUI (`/nozh gui`).
 
-**Para Novatos**: El "Interruptor de Emergencia" para laptops muy viejas. Hace que Minecraft se vea mal pero corra rápido.
-**Para Expertos**: Un perfil rígido que anula las preferencias del usuario.
+### Restablecimiento de Fábrica
 
-- **Distancia de Renderizado**: Bloqueada a 2 chunks.
-- **Distancia de Simulación**: Bloqueada a 2 chunks.
-- **Mipmaps**: 0 (Desactivado).
-- **Mezcla de Biomas**: 0 (Desactivado).
-- **Partículas**: Mínimo.
-- **Lógica**: Omite el "Chequeo de Seguridad" para forzar el rendimiento a toda costa.
+* **Qué hace**: Borra `config/nozh.json` y reinicializa inmediatamente `NozhConfig` con valores predeterminados de Java.
+* **Cuándo usarlo**: Si arruinaste la configuración tanto que el juego crea glitches visuales (ej. entidades invisibles).
 
-### 🛡️ Compatibilidad Inteligente de Mods
+### Backup de Config
 
-**Para Novatos**: NOZH sabe si estás jugando con otros mods y se reinicia para no romperlos.
-**Para Expertos**: Un `RemoteConfigFetcher` descarga un archivo JSON de la nube al iniciar.
+* **Qué hace**: Guarda una copia de tus ajustes actuales.
+* **Exportar al Portapapeles**: Copia la cadena JSON completa a tu portapapeles. Útil para pegar en Discord para soporte.
 
-- **Base de Conocimiento**: Contiene metadatos para mods populares (Create, Sodium, Iris).
-- **Resolución de Conflictos**: Si se detecta `Iris`, NOZH desactiva sus propias optimizaciones de Shaders/Nubes para evitar errores de renderizado.
+### Recarga en Caliente
+
+* **Qué hace**: Relee el archivo desde el disco.
+* **Por qué**: Si editas el archivo `.json` manualmente con el Bloc de Notas, haz clic aquí para aplicar cambios sin reiniciar el juego.
 
 ---
 
-## 4. Sistemas de Seguridad (El Guardián)
+## 4. Compatibilidad de Mods (Mayordomía)
 
-### ↩️ Auto-Rollback
+NOZH sigue un modelo de "Mayordomía" (Stewardship). Reconoce que algunos mods (como Sodium) son dueños de ciertas partes del juego (Renderizado).
 
-**Para Novatos**: Si NOZH cambia una configuración y tu juego se vuelve MÁS LENTO, deshace el cambio automáticamente.
-**Para Expertos**:
+* **Modo Exclusivo**: Si Sodium está instalado, NOZH **desactiva completamente** sus propias optimizaciones de Renderizado de Chunks. Cede el control a Sodium.
+* **Modo Cooperativo**: Si ModMenu está instalado, NOZH integra su botón en el menú.
+* **Evasión de Conflictos**: Si C2ME está instalado, NOZH desactiva el threading agresivo de chunks para prevenir la inanición de hilos.
 
-1. Mide `AvgFrameTime` (Línea Base).
-2. Aplica Acción (ej., `DISMINUIR_DISTANCIA_RENDERIZADO`).
-3. Espera 45 segundos (Ventana).
-4. Mide `AvgFrameTime` (Nuevo).
-5. Si `Nuevo > Línea Base + Umbral`, llama a `Executor.revert()`.
-
-### 🚨 Guardia de Seguridad de Crasheos
-
-**Para Novatos**: Si el juego crashea 3 veces seguidas, NOZH se desactiva para que al menos puedas abrir el juego.
-**Para Expertos**:
-
-- Usa un marcador de archivo `crash_guard` en la carpeta config.
-- Incrementa un contador en cada arranque.
-- Borra el contador después de 5 minutos de estabilidad.
-- Si contador >= 3, activa **MODO SEGURO** (Módulos desactivados, Listeners desregistrados).
+Mantenemos una lista de 50+ mods en nuestro `CompatRegistry` interno.
 
 ---
 
-## 🛠️ Resumen de "Orquestación"
+## 5. Guardia de Seguridad (Crash Guard)
 
-NOZH no solo "ajusta configuraciones". **Orquesta** todo tu juego.
+Este sistema te protege de bucles de arranque (boot loops).
 
-1. **Observa** (Telemetría).
-2. **Piensa** (IA/Gobernador).
-3. **Actúa** (Ejecutor).
-4. **Aprende** (Perceptrón).
+1. Al iniciar, NOZH escribe un archivo `boot_marker`.
+2. Si el juego crashea antes de llegar al Menú Principal, el marcador permanece "sucio".
+3. Si se detectan 3 arranques "sucios" seguidos, NOZH entra en **MODO SEGURO**.
+    * **MODO SEGURO**: Toda la lógica compleja (IA Neuronal, Motor Patata) se desactiva. Solo corre el cargador de config mínimo. Esto te permite abrir el juego y arreglar el problema.
 
-Es un participante activo en tu bucle de juego, más simple que un humano pero más rápido que uno.
+---

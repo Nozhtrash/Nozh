@@ -1,84 +1,48 @@
-# 🧠 Intelligence & Compatibility Guide
+# 🧠 NOZH Intelligence: How the AI Works
 
-NOZH distinguishes itself from other optimizers by having **"Intelligence"**. It relies on data, not hardcoded assumptions.
+> **Honesty Disclaimer**: NOZH uses "Narrow AI" (Statistical Machine Learning). It is not "Generative AI" like ChatGPT. It does not "think" like a human. It calculates probabilities based on patterns.
 
-This document details:
-1.  **Mod Awareness** (How it handles other mods).
-2.  **Cloud Sync** (How it stays updated).
-3.  **Neural Prediction** (How it learns).
+## Technical Architecture
 
----
+The core of NOZH's intelligence is the `PerformancePredictor.java` class. It implements a **Single-Layer Perceptron**.
 
-## 1. Mod Awareness System
+### 1. Inputs (The Senses)
 
-Minecraft is rarely played vanilla. NOZH includes a **Mod Knowledge Base** to ensure it plays nicely with others.
+The AI receives a vector of normalized values (-1.0 to 1.0) every second:
 
-### The Problem
-If NOZH lowers render distance while a mod like **Create** needs to render a distant train, visual glitches occur. If NOZH changes fog while **Iris** is handling shaders, the game might crash.
+* `x1`: **Entity Trend** (Is the number of mobs increasing rapidily?)
+* `x2`: **Chunk Load Pressure** (Are we generating new terrain?)
+* `x3`: **Frame Time Variance** (Is the FPS unstable?)
+* `x4`: **Player Velocity** (Are we moving fast?)
 
-### The Solution: `ModKnowledgeBase`
-NOZH scans your `mods` folder on startup. It tags mods with attributes:
+### 2. Processing (The Weights)
 
-| Mod Category | Examples | NOZH Behavior |
-|--------------|----------|---------------|
-| **Rendering** | Sodium, Iris, Canvas | **PASSIVE MODE**: NOZH disables its own rendering tweaks and lets these mods handle it. |
-| **Heavy Tech** | Create, Mekanism, AE2 | **AGGRESSIVE CULLING**: NOZH enables aggressive BlockEntity culling to save FPS in factories. |
-| **World Gen** | Terralith, Biomes O Plenty | **PRELOAD STRATEGY**: NOZH allows chunk pre-generation to prevent stutter while exploring. |
+Each input corresponds to a "Weight" (`w1` to `w4`).
 
-### Technical Implementation
-- **Class**: `dev.nozh.core.knowledge.ModKnowledgeBase`
-- **Method**: `detect()` scans Fabric Loader's mod container.
-- **Result**: Generates a `detected_environment` flag set (e.g., `ENV_HEAVY_TECH`).
+* Example: If `Entity Trend` historically causes lag on your PC, `w1` will be high (e.g., 0.8).
+* Example: If `Player Velocity` never causes lag (you have a fast SSD), `w4` will be low (e.g., 0.1).
 
----
+The Perception calculates the **Lag Probability**:
+`P = Activation( (x1*w1) + (x2*w2) + (x3*w3) + (x4*w4) )`
 
-## 2. Cloud Intelligence (Remote Config)
+### 3. Training (The Learning)
 
-Mod compatibility changes daily. We cannot release a new JAR file every time a mod updates.
+This is "Online Unsupervised Learning".
 
-### The Solution: `RemoteConfigFetcher`
-On startup, NOZH makes a lightweight `GET` request to our GitHub Repository.
-- **URL**: `raw.githubusercontent.com/TrxyyPC/nozh-rules/main/compatibility.json`
-- **Payload**: A JSON list of "Bad Mods" or "Conflict Rules".
+1. **Selection**: NOZH predicts lag (`P > 0.7`).
+2. **Action**: It takes an action (e.g., reduces particles).
+3. **Feedback**: It waits 5 seconds.
+    * If FPS improved: **Reward** (Strengthen the weights that triggered the action).
+    * If FPS stayed bad: **Punish** (Weaken the weights; that was a false positive).
 
-### How it works
-1.  **Boot**: Game starts.
-2.  **Fetch**: NOZH downloads latest rules (Async, doesn't slow down boot).
-3.  **Apply**: If a new conflict rules says *"Mod X causes crash with Action Y"*, NOZH hot-patches its `ActionMatrix` to disable Action Y.
-4.  **Cache**: If you are offline, it uses the last downloaded version from `compatibility_cache.json`.
+## Heuristic Fallback
 
----
+If the Neural Governor is unsure (`0.3 < P < 0.7`), it falls back to **Heuristics** (Hardcoded Rules).
 
-## 3. The Neural Predictor (AI)
+* *Rule*: "If FPS < 20 for 3 seconds -> EMERGENCY POTATO MODE".
+* *Rule*: "If Server TPS < 10 -> Ignore Client FPS (It's a server issue)".
 
-This is the crown jewel of NOZH v2.0.
+## Limitations
 
-### The Problem
-Traditional optimizers are **Reactive**. They wait for FPS to drop, THEN they fix it. This means you still feel the lag spike.
-
-### The Solution: **Proactive Prediction**
-NOZH uses a simple **Perceptron Neural Network** to predict lag *before* a frame is dropped.
-
-### How it Works
-The AI monitors 3 inputs (Neurons) continuously:
-1.  **Chunk Loading Rate**: Are we generating new terrain quickly?
-2.  **Entity Delta**: Did 50 zombies just spawn?
-3.  **GC Pressure**: Is Java about to run Garbage Collection?
-
-**The Calculation**:
-```
-Trigger = (ChunkRate * WeightA) + (EntityDelta * WeightB) + (GCPressure * WeightC)
-```
-
-If `Trigger > Threshold`, the AI assumes a lag spike is impending.
-It performs a **Pre-emptive Strike**: It lowers settings *milliseconds before* the lag happens.
-
-### Training (Online Learning)
-1.  **Predict**: AI says "Lag is coming!" -> Lowers settings.
-2.  **Observe**: Did lag happen?
-3.  **Feedback**:
-    - If Lag **DID NOT** happen: Good prediction. Weights are strengthened.
-    - If Lag **DID** happen anyway: Prediction was too weak. Weights are adjusted.
-    - If AI predicted lag, but everything was super smooth: False Positive. Weights are reduced.
-
-This means NOZH **learns your specific computer**. If your CPU handles entities well but struggles with Chunk Loading, the AI learns to ignore Entities and panic on Chunk Loading.
+* **Warm-up**: The AI starts with generic weights. It takes about 10-20 minutes of gameplay to "learn" your specific hardware bottlenecks.
+* **Local Only**: Training data is stored in `brain/weights.json` on your PC. It is never uploaded.

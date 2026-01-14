@@ -1,132 +1,92 @@
-# ✨ NOZH Features Guide
+# 🔍 NOZH v2.0 Deep Feature Guide
 
-This document defines every feature in NOZH v2.0, explaining **what it does**, **how it helps you**, and the **technical logic** behind it.
+This document explains exactly how NOZH works under the hood. No marketing fluff—just mechanics.
 
-> **Transparency Note**: NOZH is designed to be honest. We never fake FPS numbers. We never delete files without asking. Everything is transparent.
+## 1. The Neural Governor ("Optimization Engine")
 
----
+NOZH uses a decision engine to manage game settings dynamically.
 
-## 1. Visual Layer (The Interface)
+### How it works
 
-### 🖥️ Premium Dashboard
+It runs a loop every 20 ticks (1 second) or when specific events occur (like entering combat).
 
-**For Dummies**: A beautiful menu where you can change settings.
-**For Experts**: A custom GUI built on `DrawContext` with zero-allocation rendering. It bypasses standard Cloth Config bloat for maximum responsiveness.
+1. **Input**: It gathers data:
+    * **FPS Delta**: Are frames dropping?
+    * **Entity Density**: How many mobs are nearby?
+    * **Chunk Updates**: Is the world loading fast?
+    * **Player Speed**: Are you flying with Elytra?
+2. **Process**: It feeds this data into the selected `Algorithm` (Neural or Heuristic).
+3. **Output**: It calculates a `PressureScore` (0.0 to 1.0).
+4. **Action**:
+    * Pressure < 0.2: Do nothing (Relax).
+    * Pressure > 0.5: Activate `Level 1` Actions (e.g., Reduce Particle Distance).
+    * Pressure > 0.8: Activate `Level 2` Actions (e.g., Disable Clouds, Reduce Render Distance).
 
-- **How to access**: Press the "NOZH" button in ModMenu or type `/nozh gui`.
-- **Key Feature**: Real-time Tooltips for every button explaining exactly what it does.
+### Algorithms
 
-### 📈 Live Telemetry Graph
-
-**For Dummies**: A line graph at the top of the menu that shows if your game is lagging (Red) or smooth (Green).
-**For Experts**: A `GL_LINE_STRIP` rendered graph visualizing the last 60 seconds of `FrameTime` history.
-
-- **Green**: <16ms (60+ FPS)
-- **Yellow**: <33ms (30+ FPS)
-- **Red**: >33ms (<30 FPS)
-
-### 🧙‍♂️ First Run & Config Logic
-
-**For Dummies**: NOZH auto-detects your hardware (RAM, GPU) and sets the best profile automatically.
-**For Experts**: On first boot, the `PotatoModeEngine` profiles the JVM (`Runtime.maxMemory`) and GPU vendor. If it detects <4GB RAM or Intel Integrated Graphics, it pre-seeds the `PotatoConfig` to aggressive culling mode.
-
-### 🛠️ System Management (New in v2.0)
-
-**For Dummies**: Tools to fix your config if you break it.
-**For Experts**:
-
-- **Factory Reset**: Wipes `config/nozh.json` and re-initializes safe defaults.
-- **Hot Reload**: Reloads config from disk without restarting Minecraft (useful for editing JSON manually).
-- **Clipboard Export**: Serializes current config state to JSON string for efficient support/debugging.
+* **Heuristic (Default)**: Uses static rules (If FPS < 30, do X). Fast and predictable.
+* **Neural**: Uses a `Perceptron` that adjusts weights based on success. If disabling clouds fixed lag last time, it does it sooner next time.
+* **Hybrid**: Uses Heuristic for emergencies (Panic mode) and Neural for background tuning.
 
 ---
 
-## 2. Artificial Intelligence (The Brain)
+## 2. Potato Mode Levels
 
-### 🧠 Neural Lag Predictor
+Potato Mode is a hard override for low-end hardware. It bypasses user preferences to ensure the game is playable.
 
-**For Dummies**: NOZH guesses when you are about to lag and fixes it before you notice.
-**For Experts**: A Single-Layer Perceptron (SLP) neural network.
+| Level | RAM Trigger | Cores Trigger | Settings Applied |
+|:---|:---|:---|:---|
+| **LEVEL 1 (Mild)** | < 8GB | < 6 Cores | RD: 12, ED: 8, Particles: 75% |
+| **LEVEL 2 (Mod)** | < 4GB | < 4 Cores | RD: 8, ED: 6, Particles: 50%, Clouds: OFF |
+| **LEVEL 3 (Aggr)** | -- | -- | RD: 6, ED: 4, Particles: 25%, Animations: OFF |
+| **LEVEL 4 (Ext)** | < 2GB | < 2 Cores | RD: 4, ED: 3, Particles: 10%, All FX: OFF |
+| **EXTREME** | -- | -- | RD: 2, ED: 2, Particles: 0%, **Minimal HUD** |
 
-- **Inputs**: Chunk Loading Rate, Entity Count Delta, Memory Allocation Rate.
-- **Output**: Lag Probability (0.0 - 1.0).
-- **Training**: It uses "Online Learning" (Unsupervised). If it predicts lag and lag happens, it strengthens the synaptic weights.
-
-### 🔀 Hybrid Decision Engine
-
-**For Dummies**: Choose how "smart" you want NOZH to be.
-**For Experts**: A configurable strategy pattern in the `Governor`.
-
-- **NEURAL**: Pure AI prediction (high accuracy, warm-up time required).
-- **HEURISTIC**: Rule-based logic (instant, predictable).
-- **HYBRID**: Uses Heuristics for immediate threats and AI for trend prediction (Best of both worlds).
-
-### 🎭 Anomaly Detector
-
-**For Dummies**: Tells the difference between "My PC is slow" and "The Server is lagging".
-**For Experts**: Compares Client Frame Time vs Server Ping/TPS via `CrashSafeGuard` telemetry.
-
-- If **FPS is low** but **Ping is low**: GPU/CPU issue -> **Optimize Graphics**.
-- If **FPS is high** but **Ping is high**: Network issue -> **Do Nothing** (Graphics tweaks won't help lag).
+* **RD**: Render Distance (Chunks)
+* **ED**: Entity Distance (Chunks)
 
 ---
 
-## 3. Optimization Engines (The Muscle)
+## 3. System Tools & Config Management
 
-### 🥔 Extreme Potato Mode
+Located in the **System** tab of the GUI (`/nozh gui`).
 
-**For Dummies**: The "Emergency Switch" for very old laptops. Makes Minecraft look bad but run fast.
-**For Experts**: A rigid profile that overrides user preferences.
+### Factory Reset
 
-- **Render Distance**: Locked to 2 chunks.
-- **Simulation Distance**: Locked to 2 chunks.
-- **Mipmaps**: 0 (Disabled).
-- **Biome Blend**: 0 (Disabled).
-- **Particles**: Minimal.
-- **Logic**: Bypasses the "Safety Check" to enforce performance at all costs.
+* **What it does**: Deletes `config/nozh.json` and immediately re-initializes `NozhConfig` with default Java object values.
+* **When to use**: If you messed up settings so bad the game creates weird visual glitches (e.g., invisible entities).
 
-### 🛡️ Smart Mod Compatibility
+### Config Backup
 
-**For Dummies**: NOZH knows if you are playing with other mods and resets itself to not break them.
-**For Experts**: A `RemoteConfigFetcher` pulls a JSON file from the cloud on startup.
+* **What it does**: Saves a copy of your current settings.
+* **Clipboard Export**: Copies the entire JSON string to your clipboard. Useful for pasting into Discord for support.
 
-- **Knowledge Base**: Contains metadata for popular mods (Create, Sodium, Iris).
-- **Conflict Resolution**: If `Iris` is detected, NOZH disables its own Shader/Cloud optimizations to prevent rendering glitches.
+### Hot Reload
+
+* **What it does**: Re-reads the file from disk.
+* **Why**: If you edit the `.json` file manually with Notepad, click this to apply changes without restarting the game.
 
 ---
 
-## 4. Safety Systems (The Guardian)
+## 4. Mod Compatibility (Stewardship)
 
-### ↩️ Auto-Rollback
+NOZH follows a "Stewardship" model. It acknowledges that some mods (like Sodium) own certain parts of the game (Rendering).
 
-**For Dummies**: If NOZH changes a setting and your game gets SLOWER, it undoes the change automatically.
-**For Experts**:
+* **Exclusive Mode**: If Sodium is installed, NOZH **completely disables** its own Chunk Rendering optimizations. It hands over control to Sodium.
+* **Co-op Mode**: If ModMenu is installed, NOZH integrates its button into the menu.
+* **Conflict Avoidance**: If C2ME is installed, NOZH disables aggressive chunk threading to prevent thread starvation.
 
-1. Measure `AvgFrameTime` (Baseline).
-2. Apply Action (e.g., `DECREASE_RENDER_DISTANCE`).
-3. Wait 45 seconds (Window).
-4. Measure `AvgFrameTime` (New).
-5. If `New > Baseline + Threshold`, call `Executor.revert()`.
-
-### 🚨 Crash Safe Guard
-
-**For Dummies**: If the game crashes 3 times in a row, NOZH turns itself off so you can at least open the game.
-**For Experts**:
-
-- Uses a file marker `crash_guard` in the config folder.
-- Increments a counter on every boot.
-- Clears counter after 5 minutes of stability.
-- If counter >= 3, activates **SAFE MODE** (Modules disabled, Listeners unregistered).
+We maintain a list of 50+ mods in our internal `CompatRegistry`.
 
 ---
 
-## 🛠️ Summary of "Orchestration"
+## 5. Crash Guard
 
-NOZH doesn't just "tweak settings". It **Orchestrates** your entire game.
+This system protects you from boot loops.
 
-1. It **Watches** (Telemetry).
-2. It **Thinks** (AI/Governor).
-3. It **Acts** (Executor).
-4. It **Learns** (Perceptron).
+1. On boot, NOZH writes a `boot_marker` file.
+2. If the game crashes before reaching the Main Menu, the marker remains "dirty".
+3. If 3 "dirty" boots are detected in a row, NOZH enters **SAFE MODE**.
+    * **SAFE MODE**: All complex logic (Neural AI, Potato Engine) is disabled. Only the bare minimum config loader runs. This allows you to open the game and fix the issue.
 
-It is an active participant in your gameplay loop, simpler than a human but faster than one.
+---
