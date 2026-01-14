@@ -1,126 +1,88 @@
-# NOZH: Now Only Zen HUD (Ultimate Performance Edition) 🚀
+# NOZH: Intelligent Frame Pacing Engine
 
-> **The Intelligent FPS Optimizer & Frame Pacing Engine for Fabric 1.20.1**
+> **[LEER EN ESPAÑOL / READ IN SPANISH](README_ES.md)**
 
-![NOZH Banner](https://via.placeholder.com/800x200.png?text=NOZH:+Ultimate+Performance)
+**NOZH** is a client-side optimization mod for Minecraft Fabric 1.20.1. It is designed to stabilize frame times by dynamically adjusting render settings based on real-time performance telemetry.
 
-## 📌 Introduction
+Unlike general optimization mods that aim for "maximum FPS" (often at the cost of stability), NOZH prioritizes **consistency** (P99 frametimes). It achieves this by selectively reducing graphical fidelity during high-load scenarios and restoring it when the load decreases.
 
-**NOZH** (Now Only Zen HUD) is not just a mod; it is an **active intelligent system** designed to solve the most persistent problem in Minecraft: **inconsistency**.
+## 🛠 How It Works (Technical Deep Dive)
 
-While other optimization mods focuses on "max FPS" (often improving average FPS but ignoring stutter), **NOZH focuses on stability**. It uses a neurological frame predictor and a transactional governor to ensure your game feels smooth, liquid, and responsive, regardless of how many entities or particles are on screen.
+NOZH does not perform magic. It manages a trade-off: **Visual Fidelity vs. Input Latency**.
 
-## 🎯 Purpose: Why NOZH?
+### 1. The Perceptron Predictor
 
-Minecraft Java Edition suffers from "micro-stutter" due to its Garbage Collector and unoptimized update loops. You might have 200 FPS, but it *feels* like 30 because of 1% lows and jagged frametimes.
+NOZH uses a single-layer neural network (Perceptron) to forecast the probability of a lag spike in the *next* frame.
 
-**NOZH solves this by:**
+- **Inputs:** Entity Density (normalized), Particle Count, Chunk Updates, Player Velocity.
+- **Output:** A strict probability (0.0 to 1.0) of the next frame exceeding the target frametime (e.g., >8.33ms for 120 FPS).
+- **Training:** The model learns online. If it predicts a spike and one occurs, weights are reinforced. If it predicts a spike but the frame is smooth, it penalizes the weight. This allows it to adapt to *your* specific hardware over time (approx. 30-120 seconds of gameplay).
 
-1. **Thinking Ahead:** Using a neural network (Perceptron) to predict lag before it happens.
-2. **Governing Resources:** actively culling entities and particles *only when necessary* to maintain your target framerate.
-3. **Rolling Back Mistakes:** If NOZH makes a change that doesn't help execution time, it **undoes it** instantly.
+### 2. Transactional Governor
 
-### ❓ Is it for you?
+Any change made to your game settings (e.g., "Set Sodium Clouds to Fast") is executed as a **Transaction**.
 
-| You need NOZH if... | You might not need it if... |
-| :--- | :--- |
-| You hate micro-stutters and lag spikes. | You play on a super-computer with constant 1000 FPS. |
-| You play heavily modded packs. | You play pure vanilla with no other mods. |
-| You want performance *and* information (HUD). | You prefer F3 debug screen clutter. |
-| You want "set and forget" intelligence. | You like manually tweaking 50 settings every play session. |
+1. **Capture:** The current state of Sodium is recorded.
+2. **Execute:** The setting is changed.
+3. **Audit:** The system monitors performance for the next 40-200 ticks.
+4. **Rollback:** If the change does not statistically improve P99 frametimes (or makes them worse), the transaction is **rolled back**, restoring your original setting.
 
----
+This ensures NOZH doesn't just "turn everything off" blindly. It only keeps changes that actually help your specific situation.
 
-## 🧠 The Intelligence: How it Works
+### 3. Integrated Ring Buffer
 
-### 👶 For Novices ("It Just Works")
-
-Imagine NOZH as a **smart thermostat** for your PC.
-
-- When the game gets "hot" (laggy), NOZH gently turns down the heat (reducing particles/entities) until it's comfortable again.
-- When the game is "cool" (smooth), NOZH restores full visuals so you enjoy the best graphics.
-- You don't need to do anything. Just install it, and it learns your PC's capability in about 30 seconds.
-
-### 👨‍💻 For Experts (The Math & Logic)
-
-NOZH employs a **Transactional Governor Architecture** powered by three distinct layers:
-
-1. **Neural Perceptron Lag Predictor**:
-    - A lightweight neural network (4 inputs: Entity Density, Particle Count, Chunk Updates, Player Velocity).
-    - **Training:** Online learning (Backpropagation) happens every 5 seconds. The model adjusts weights based on whether a frame *actually* lagged relative to the prediction.
-    - **Result:** It can predict a lag spike with ~85% accuracy *before* the frame renders.
-
-2. **Integrated Ring Telemetry Buffer**:
-    - Stores the last 600 frames of telemetry data in a zero-allocation circular buffer.
-    - Calculates **P99** (1% lows) and **Standard Deviation** (jitter) in O(1) time using a rolling window algorithm.
-    - This allows the Governor to make decisions based on *trends*, not just single-frame noise.
-
-3. **Transactional Executor with Rollback**:
-    - Every optimization decision (e.g., "Reduce Particle Quality") is treated as a **Database Transaction**.
-    - **Capture:** The system snapshots the current Sodium/Game state.
-    - **Execute:** The change is applied.
-    - **Verify:** We measure performance for 200ms. If FPS/P99 worsens, the transaction acts atomically: it **ROLLS BACK** the change immediately.
+We store the last 600 frames of telemetry in a zero-allocation ring buffer. This allows us to calculate Standard Deviation and Mean in O(1) time, providing a statistically significant view of "smoothness" rather than reacting to single noise spikes.
 
 ---
 
-## 🎮 Usage & Commands
+## ⚠️ Realistic Expectations
 
-### 🟢 Basic Commands
+**NOZH is NOT for you if:**
 
-- `/nozh status` - Check the Governor's health, current specific optimization level, and neural accuracy.
-- `/nozh profile` - Run a 10s benchmark to see your P99 and Average FPS.
-- `/nozh toggle` - Instantly enable/disable the entire system.
-- `/nozh hud` - Cycle through HUD modes (Minimal, Compact, Detailed, Off).
+- You want 2000 FPS for screenshots.
+- You play vanilla Minecraft on a high-end PC (you likely don't need dynamic adjustment).
+- You want a mod that "just boosts FPS" without changing visuals. NOZH *will* change visuals (clouds, particles) to save frames.
 
-### 🔴 Advanced Commands
+**NOZH IS for you if:**
 
-- `/nozh force <level>` - Manually force an optimization level (0=OFF, 3=EXTREME). *Warning: Overrides the AI.*
-- `/nozh calibrate` - Re-train the neural network from scratch (useful if you changed hardware/settings).
-- `/nozh selfcheck` - Run a diagnostic self-test to verify internal systems (RingBuffer, Perceptron, Sodium Integration).
-
----
-
-## ⚙️ Configuration (`config/nozh.json`)
-
-| Field | Default | Description |
-| :--- | :--- | :--- |
-| `targetFps` | `120.0` | The framerate NOZH tries to maintain. Set this slightly *below* your monitor refresh rate for best results. |
-| `enableMlPredictor` | `true` | Enables the Perceptron Neural Network. Disable only if you have a CPU from 2010. |
-| `aggressiveness` | `BALANCED` | `PASSIVE` (visuals first), `BALANCED` (mix), or `PERFORMANCE` (FPS first). |
-| `allowedDegradations` | `["PARTICLES", "CLOUDS"]` | List of features NOZH is allowed to touch. Remove "CLOUDS" if you never want them turned off. |
+- You experience "micro-stutter" or "hitching" when loading chunks or fighting mobs.
+- You play heavily modded packs where entity counts fluctuate wildly.
+- You prefer a consistent 60/120/144 FPS over a fluctuating 400 FPS.
 
 ---
 
-## 🤝 Compatibility Guide
+## 🎮 Usage Guide
 
-### ✅ Best Friends (Highly Recommended)
+### Installation
 
-NOZH works best when paired with these foundational optimization mods:
+1. Install **Fabric Loader**.
+2. Install **Sodium** (Required). NOZH orchestrates Sodium settings; without it, NOZH does very little.
+3. Drop `nozh-2.0.0.jar` into your `mods` folder.
 
-- **Sodium**: *Essential.* NOZH controls Sodium settings dynamically.
-- **Lithium**: Optimizes server-side physics.
-- **ImmediatelyFast**: Speeds up rendering of HUD and particles.
-- **FerriteCore**: Reduces RAM usage.
+### Configuration
 
-### ⚠️ Frenemies (Use with Caution)
+The mod works out-of-the-box (`config/nozh.json`).
 
-- **Controlify**: Generally fine, but HUD might overlap controller hints.
-- **Other "AI" Optimizers**: Do NOT use another mod that claims to "dynamically adjust settings" (e.g., DynFPS) alongside NOZH. They will fight over the settings and cause flickering.
+- `targetFps`: Set this to your monitor's refresh rate (e.g., 60, 144).
+- `allowedDegradations`: List of features NOZH is allowed to touch. If you *really* love clouds, remove `"CLOUDS"` from this list, and NOZH will never touch them, even if you lag.
 
----
+### Commands
 
-## 🖥️ The HUD
-
-The NOZH HUD is designed to be **Zen**. It shows only what matters.
-
-- **FPS Graph**: Visualizes frame consistency (Lines = smooth, Spikes = stutter).
-- **Governor State**: Shows if NOZH is `IDLE`, `MONITORING`, or `OPTIMIZING`.
-- **CPU vs GPU**: Indicates which component is the bottleneck.
+- `/nozh status` - View current neural weights and Governor state.
+- `/nozh profile` - Run a distinct 10-second benchmark.
+- `/nozh toggle` - Disable/Enable the mod on the fly.
 
 ---
 
-## 🏆 Verdict: Is it Worth It?
+## 🤝 Compatibility
 
-**Yes.** For 99% of players, NOZH provides a "install and forget" smoothness upgrade that standard optimization mods cannot achieve alone. It captures the manual tweaking normally required by "pro" players and automates it with machine learning speed.
+- **Compatible:** Sodium, Lithium, ImmediatelyFast, FerriteCore, ModernFix.
+- **Incompatible:** Any other "dynamic settings" mod (e.g., Dynamic FPS, Adrenalin). Using two dynamic optimizers will cause them to fight over settings, resulting in flickering.
 
-**Download it. Measure it. Feel the Zen.**
+---
+
+## Open Source & Transparency
+
+This project is open source. There is no telemetry sent to external servers. All learning data (weights) is stored locally on your machine and deleted when you restart the game (unless persisted in future updates).
+
+We believe in honest optimization. NOZH trades visual quality for performance *only when necessary*, and strictly validates that trade-off.
