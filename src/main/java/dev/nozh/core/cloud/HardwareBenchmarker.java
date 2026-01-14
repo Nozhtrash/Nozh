@@ -101,7 +101,7 @@ public final class HardwareBenchmarker {
                     profile.addProperty("gpu_model", gpus.get(0).getName());
                     profile.addProperty("gpu_vram_mb", gpus.get(0).getVRam() / (1024 * 1024));
                 }
-            } catch (Throwable t) {
+            } catch (NoClassDefFoundError | Exception e) {
                 // OSHI not available or failed, stick to JVM info
                 profile.addProperty("detailed_info", "unavailable");
             }

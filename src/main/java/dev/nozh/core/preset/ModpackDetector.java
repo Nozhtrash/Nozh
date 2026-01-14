@@ -17,16 +17,16 @@ import java.util.Set;
 public final class ModpackDetector {
 
     private static final ModpackDetector INSTANCE = new ModpackDetector();
-    
+
     private final Set<String> loadedMods = new HashSet<>();
     private ModpackType detectedType = ModpackType.UNKNOWN;
 
     public enum ModpackType {
         UNKNOWN,
-        VANILLA_PLUS,   // < 50 mods
-        KITCHEN_SINK,   // > 150 mods, mix of tech/magic
-        HEAVY_TECH,     // Create, Mekanism dominating
-        HEAVY_MAGIC,    // Botania, Ars Nouveau dominating
+        VANILLA_PLUS, // < 50 mods
+        KITCHEN_SINK, // > 150 mods, mix of tech/magic
+        HEAVY_TECH, // Create, Mekanism dominating
+        HEAVY_MAGIC, // Botania, Ars Nouveau dominating
         PERFORMANCE_FOCUSED // Sodium, Lithium, etc.
     }
 
@@ -45,12 +45,12 @@ public final class ModpackDetector {
             FabricLoader.getInstance().getAllMods().forEach(mod -> {
                 loadedMods.add(mod.getMetadata().getId());
             });
-            
+
             analyzeType();
-            NozhConstants.LOGGER.info("[NOZH] Detected Environment: {} ({} mods loaded)", 
-                detectedType, loadedMods.size());
-            
-        } catch (Throwable t) {
+            NozhConstants.LOGGER.info("[NOZH] Detected Environment: {} ({} mods loaded)",
+                    detectedType, loadedMods.size());
+
+        } catch (Exception e) {
             // Fallback for tests or missing FabricLoader
             NozhConstants.LOGGER.warn("[NOZH] Mod scanning failed, assuming Vanilla");
             detectedType = ModpackType.UNKNOWN;
@@ -59,12 +59,12 @@ public final class ModpackDetector {
 
     private void analyzeType() {
         int count = loadedMods.size();
-        
+
         boolean hasSodium = loadedMods.contains("sodium") || loadedMods.contains("embeddium");
         boolean hasCreate = loadedMods.contains("create");
         boolean hasMekanism = loadedMods.contains("mekanism");
         boolean hasBotania = loadedMods.contains("botania");
-        
+
         if (count < 50) {
             if (hasSodium) {
                 detectedType = ModpackType.PERFORMANCE_FOCUSED;
@@ -73,7 +73,7 @@ public final class ModpackDetector {
             }
             return;
         }
-        
+
         if (count > 150) {
             if (hasCreate || hasMekanism) {
                 detectedType = ModpackType.HEAVY_TECH;
@@ -84,14 +84,14 @@ public final class ModpackDetector {
             }
             return;
         }
-        
+
         detectedType = ModpackType.VANILLA_PLUS;
     }
 
     public ModpackType getDetectedType() {
         return detectedType;
     }
-    
+
     public boolean isModLoaded(String modId) {
         return loadedMods.contains(modId);
     }

@@ -1,18 +1,26 @@
-[01:19:25] [Test worker/INFO]: No session stats file found, starting fresh
-[01:[01:19:25] [Test worker/WARN]: Render visibility check failed for test-excep[01:19:25] [Test worker/INFO]: No session stats file found, starting fresh
-[01:19:25] [Test worker/INFO]: Session learning stats saved (0 entries)
-[01:19:25] [Test worker/INFO]: Session learning loaded (0 entries)
-[01:19:25] [Test worker/INFO]: No session stats file found, starting fresh
-[01:19:25] [Test worker/INFO]: Session learning stats saved (1 entries)
-[01:19:25] [Test worker/INFO]: Session learning loaded (1 entries)
-[01:19:25] [Test worker/INFO]: No session stats file found, starting fresh
-[01:19:25] [Test worker/INFO]: Session learning reset for new session (new-session)
-[01:19:25] [Test worker/INFO]: No session stats file found, starting fresh
-rm.commons.util.ReflectionUtils.invokeMethod(ReflectionUtils.java:728) ~[junit-platform-commons-1.10.1.jar:1.10.1]
-	at org.junit.jupiter.engine.execution.MethodInvocation.proceed(MethodInvocation.java:60) ~[junit-jupiter-engine-5.10.1.jar:5.10.1]
-	at org.junit.jupiter.engine.execution.InvocationInterceptorChain$ValidatingInvocation.proceed(InvocationInterceptorChain.java:131) ~[junit-jupiter-engine-5.10.1.jar:5.10.1]
-	at org.junit.jupiter.engine.extension.TimeoutExtension.intercept(TimeoutExtension.java:156) ~[junit-jupiter-engine-5.10.1.jar:5.10.1]
-	at org.junit.jupiter.engine.extension.TimeoutExtension.interceptTestableMethod(TimeoutExtension.java:147) ~[junit-jupiter-engine-5.10.1.jar:5.10.1]
+[21:16:57] [Test worker/INFO]: No session stats file found, starting fresh
+[21:16:57] [Tes[21:16:57] [Test worker/INFO]: PerfManager initialized. Capacity=300 (5s @ 60fps)
+6:57] [Test worker/INFO]: Iter 1: 228950308,63 ops/s
+[21:16:57] [Test worker/INFO]: Iter 2: 254240089,09 ops/s
+[21:16:57] [Test worker/INFO]: Iter 3: 283135327,36 ops/s
+[21:16:57] [Test worker/INFO]: Iter 4: 304625432,57 ops/s
+[21:16:57] [Test worker/INFO]: Iter 5: 294941749,00 ops/s
+[21:16:57] [Test worker/INFO]: Iter 6: 246546499,90 ops/s
+[21:16:57] [Test worker/INFO]: Iter 7: 292230183,87 ops/s
+[21:16:57] [Test worker/INFO]: Iter 8: 289415496,46 ops/s
+[21:16:57] [Test worker/INFO]: Iter 9: 306819994,85 ops/s
+[21:16:57] [Test worker/INFO]: Iter 10: 312965536,24 ops/s
+[21:16:57] [Test worker/INFO]: Result: 281387061,80 +/- 28388783,01 ops/s
+[21:16:57] [Test worker/INFO]: Results written to C:\Users\knoth\Videos\Nozh\benchmark_results.json
+[21:16:57] [Test worker/INFO]: No session stats file found, starting fresh
+[21:16:57] [Test worker/INFO]: No session stats file found, starting fresh
+[21:16:57] [Test worker/INFO]: No session stats file found, starting fresh
+[21:16:57] [Test worker/INFO]: No session stats file found, starting fresh
+[21:16:57] [Test worker/INFO]: No session stats file found, starting fresh
+[21:16:57] [Test worker/INFO]: No session stats file found, starting fresh
+[21:16:57] [Test worker/INFO]: No session stats file found, starting fresh
+[21:16:57] [Test worker/INFO]: No session stats file found, starting fresh
+engine-5.10.1.jar:5.10.1]
 	at org.junit.jupiter.engine.extension.TimeoutExtension.interceptTestMethod(TimeoutExtension.java:86) ~[junit-jupiter-engine-5.10.1.jar:5.10.1]
 	at org.junit.jupiter.engine.execution.InterceptingExecutableInvoker$ReflectiveInterceptorCall.lambda$ofVoidMethod$0(InterceptingExecutableInvoker.java:103) ~[junit-jupiter-engine-5.10.1.jar:5.10.1]
 	at org.junit.jupiter.engine.execution.InterceptingExecutableInvoker.lambda$invoke$0(InterceptingExecutableInvoker.java:93) ~[junit-jupiter-engine-5.10.1.jar:5.10.1]
@@ -86,12 +94,3 @@ rm.commons.util.ReflectionUtils.invokeMethod(ReflectionUtils.java:728) ~[junit-p
 	at org.gradle.process.internal.worker.child.SystemApplicationClassLoaderWorker.call(SystemApplicationClassLoaderWorker.java:65) ~[?:?]
 	at worker.org.gradle.process.internal.worker.GradleWorkerMain.run(GradleWorkerMain.java:69) ~[gradle-worker.jar:?]
 	at worker.org.gradle.process.internal.worker.GradleWorkerMain.main(GradleWorkerMain.java:74) ~[gradle-worker.jar:?]
-[01:19:25] [Test worker/WARN]: Rejecting extreme frametime: Infinityms (max: 10000.0ms)
-[01:19:25] [Test worker/WARN]: Rejecting extreme frametime: 15000.0ms (max: 10000.0ms)
-[01:19:25] [Test worker/INFO]: StateStore initialized with defaults (version 10)
-[01:19:25] [Test worker/WARN]: StateStore reset to defaults
-[01:19:25] [Test worker/WARN]: StateStore reset to defaults
-[01:19:25] [Test worker/WARN]: StateStore reset to defaults
-[01:19:25] [Test worker/WARN]: StateStore reset to defaults
-[01:19:25] [Test worker/WARN]: StateStore reset to defaults
-[01:19:25] [Test worker/WARN]: StateStore reset to defaults

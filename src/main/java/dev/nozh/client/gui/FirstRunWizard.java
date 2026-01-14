@@ -55,13 +55,13 @@ public class FirstRunWizard extends Screen {
         } else {
             // Step 3: Finish
             addDrawableChild(ButtonWidget.builder(Text.literal("Start Playing"), btn -> {
-                ConfigManager.getConfig().isFirstRun = false;
+                ConfigManager.getConfig().tutorialStep = 3; // Mark wizard complete
                 ConfigManager.saveAndNotify();
                 this.client.setScreen(parent);
             }).dimensions(centerX - 100, centerY + 20, 200, 20).build());
         }
     }
-    
+
     private void nextStep() {
         step++;
         this.clearAndInit();
@@ -69,17 +69,19 @@ public class FirstRunWizard extends Screen {
 
     @Override
     public void render(DrawContext context, int mouseX, int mouseY, float delta) {
-        this.renderBackground(context, mouseX, mouseY, delta);
-        
+        this.renderBackground(context);
+
         int centerX = this.width / 2;
         int centerY = this.height / 2;
-        
+
         context.drawCenteredTextWithShadow(this.textRenderer, "NOZH OPTIMIZER SETUP", centerX, centerY - 60, 0x55FF55);
-        
+
         if (step == 0) {
-            context.drawCenteredTextWithShadow(this.textRenderer, "Welcome! Let's get your game optimized.", centerX, centerY - 30, 0xFFFFFF);
+            context.drawCenteredTextWithShadow(this.textRenderer, "Welcome! Let's get your game optimized.", centerX,
+                    centerY - 30, 0xFFFFFF);
         } else if (step == 1) {
-            context.drawCenteredTextWithShadow(this.textRenderer, "Choose your target experience:", centerX, centerY - 40, 0xFFFFFF);
+            context.drawCenteredTextWithShadow(this.textRenderer, "Choose your target experience:", centerX,
+                    centerY - 40, 0xFFFFFF);
         } else {
             context.drawCenteredTextWithShadow(this.textRenderer, "You are all set!", centerX, centerY - 30, 0xFFFFFF);
         }

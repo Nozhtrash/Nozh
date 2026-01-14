@@ -1,10 +1,12 @@
+package dev.nozh.core.config;
+
 public enum OptimizationProfile {
     AGGRESSIVE,
     EXTREME,
     CONSERVATIVE,
     BALANCED,
     CUSTOM;
-    
+
     public String getDisplayName() {
         return switch (this) {
             case AGGRESSIVE -> "Potato PC (Aggressive)";
@@ -14,7 +16,7 @@ public enum OptimizationProfile {
             case CUSTOM -> "Custom";
         };
     }
-    
+
     public int getTargetFps() {
         return switch (this) {
             case AGGRESSIVE -> 30;

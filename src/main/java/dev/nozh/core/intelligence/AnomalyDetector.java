@@ -18,10 +18,10 @@ public class AnomalyDetector {
 
     public enum LagType {
         NONE,
-        RENDER_LAG,   // GPU/CPU render bound -> OPTIMIZE
-        NETWORK_LAG,  // Bad ping/packet loss -> IGNORE
-        SERVER_LAG,   // Low TPS -> ADJUST TICK BEHAVIOR
-        SYSTEM_GC     // GC spike -> IGNORE (transient)
+        RENDER_LAG, // GPU/CPU render bound -> OPTIMIZE
+        NETWORK_LAG, // Bad ping/packet loss -> IGNORE
+        SERVER_LAG, // Low TPS -> ADJUST TICK BEHAVIOR
+        SYSTEM_GC // GC spike -> IGNORE (transient)
     }
 
     public AnomalyDetector(NetworkLatencyTracker latencyTracker) {
@@ -41,12 +41,13 @@ public class AnomalyDetector {
         }
 
         // 2. Check for Network Lag
-        // If ping is spiking simultaneously, it's likely a connection issue causing entity update stutters
+        // If ping is spiking simultaneously, it's likely a connection issue causing
+        // entity update stutters
         // rather than raw rendering load.
-        if (latencyTracker.getAveragePing() > NETWORK_LAG_THRESHOLD_MS) {
+        if (latencyTracker.getAveragePingMs() > NETWORK_LAG_THRESHOLD_MS) {
             // However, we must be careful: High Ping doesn't ALWAYS cause low FPS.
             // But if we have High Ping AND low FPS, optimizing chunks might not help.
-            return LagType.NETWORK_LAG; 
+            return LagType.NETWORK_LAG;
         }
 
         // 3. Check for massive GC spikes (System Lag)
@@ -54,10 +55,11 @@ public class AnomalyDetector {
         // it's likely a GC pause or IO stutter, not a sustained load.
         // (Simple heuristic implementation; a real GC monitor would be better)
         if (lastFrameTimeMs > SYSTEM_STUTTER_THRESHOLD_MS) {
-             return LagType.SYSTEM_GC;
+            return LagType.SYSTEM_GC;
         }
 
-        // 4. If ping is fine and it's not a single massive spike, it's likely true Render Lag.
+        // 4. If ping is fine and it's not a single massive spike, it's likely true
+        // Render Lag.
         return LagType.RENDER_LAG;
     }
 }

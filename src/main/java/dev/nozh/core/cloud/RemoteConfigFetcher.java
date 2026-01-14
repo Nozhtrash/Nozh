@@ -31,7 +31,7 @@ public final class RemoteConfigFetcher {
 
     private final HttpClient httpClient;
     private final Path cachePath;
-    
+
     private JsonObject cachedConfig = null;
 
     private RemoteConfigFetcher() {
@@ -73,7 +73,7 @@ public final class RemoteConfigFetcher {
             if (local != null) {
                 return CompletableFuture.completedFuture(local);
             }
-            
+
             // 3. Fetch from Cloud
             return fetchFromCloud();
         });
@@ -88,7 +88,7 @@ public final class RemoteConfigFetcher {
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create(REMOTE_URL))
                 .timeout(Duration.ofSeconds(15))
-                .header("User-Agent", "Nozh-Optimizer/" + NozhConstants.VERSION)
+                .header("User-Agent", "Nozh-Optimizer/" + NozhConstants.getVersion())
                 .GET()
                 .build();
 
@@ -128,7 +128,8 @@ public final class RemoteConfigFetcher {
 
     private boolean isCacheValid() {
         try {
-            if (!Files.exists(cachePath)) return false;
+            if (!Files.exists(cachePath))
+                return false;
             long lastModified = Files.getLastModifiedTime(cachePath).toMillis();
             return (System.currentTimeMillis() - lastModified) < CACHE_TTL_MS;
         } catch (Exception e) {

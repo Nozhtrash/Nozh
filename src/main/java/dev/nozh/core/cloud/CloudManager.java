@@ -24,16 +24,17 @@ public final class CloudManager {
 
     private static final CloudManager INSTANCE = new CloudManager();
 
-    // Async executor for network operations - single thread to avoid bandwidth contention
+    // Async executor for network operations - single thread to avoid bandwidth
+    // contention
     private final ExecutorService cloudExecutor;
-    
+
     // Feature flags (defaults)
     private final AtomicBoolean enableHardwareDatabase = new AtomicBoolean(true);
     private final AtomicBoolean enableCompatCloud = new AtomicBoolean(true);
     private final AtomicBoolean enableLeaderboards = new AtomicBoolean(false); // Opt-in only
-    
-    // Status
-    private CloudStatus status = CloudStatus.DISCONNECTED;
+
+    // Status - volatile for thread-safe reads from main thread
+    private volatile CloudStatus status = CloudStatus.DISCONNECTED;
 
     public enum CloudStatus {
         DISCONNECTED,
@@ -45,11 +46,10 @@ public final class CloudManager {
 
     private CloudManager() {
         this.cloudExecutor = Executors.newSingleThreadExecutor(
-            new ThreadFactoryBuilder()
-                .setNameFormat("nozh-cloud-%d")
-                .setDaemon(true)
-                .build()
-        );
+                new ThreadFactoryBuilder()
+                        .setNameFormat("nozh-cloud-%d")
+                        .setDaemon(true)
+                        .build());
         NozhConstants.LOGGER.info("[NOZH] CloudManager initialized");
     }
 
@@ -77,7 +77,7 @@ public final class CloudManager {
             Thread.sleep(500); // Simulate check
             status = CloudStatus.CONNECTED;
             NozhConstants.LOGGER.info("[NOZH] Cloud services online");
-            
+
             // Trigger auto-tasks
             if (enableCompatCloud.get()) {
                 // RemoteConfigFetcher.getInstance().fetch();

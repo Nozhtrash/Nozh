@@ -5,7 +5,9 @@ package dev.nozh.core.governor;
  */
 public enum OptimizationProfile {
     BALANCED,
-    AGGRESSIVE;
+    AGGRESSIVE,
+    EXTREME,
+    CONSERVATIVE;
 
     public static OptimizationProfile fromConfig(String value) {
         if (value == null) {
