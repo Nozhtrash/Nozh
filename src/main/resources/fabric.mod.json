@@ -9,7 +9,7 @@
   ],
   "contact": {},
   "license": "MIT",
-  "environment": "*",
+  "environment": "client",
   "entrypoints": {
     "client": [
       "dev.nozh.NozhMod",
