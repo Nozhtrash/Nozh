@@ -80,7 +80,7 @@ public final class CloudManager {
 
             // Trigger auto-tasks
             if (enableCompatCloud.get()) {
-                // RemoteConfigFetcher.getInstance().fetch();
+                RemoteConfigFetcher.getInstance().fetch();
             }
         } catch (Exception e) {
             status = CloudStatus.OFFLINE_MODE;

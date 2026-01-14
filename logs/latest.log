@@ -1,25 +1,34 @@
-[21:25:12] [Test worker/INFO]: PerfManager initialized. Capacity=300 (5s @ 6[21:25:12] [Test worker/INFO]: No session stat[21:25:12] [Test worker/INFO]: Measurement...
-[21:25:12] [Test worker/INFO]: Iter 1: 239932435,03 ops/s
-[21:25:12] [Test worker/INFO]: Iter 2: 267969355,02 ops/s
-[21:25:12] [Test worker/INFO]: Iter 3: 207695534,96 ops/s
-[21:25:12] [Test worker/INFO]: Iter 4: 192998031,42 ops/s
-[21:25:12] [Test worker/INFO]: Iter 5: 222658633,14 ops/s
-[21:25:12] [Test worker/INFO]: Iter 6: 179319125,28 ops/s
-[21:25:12] [Test worker/INFO]: Iter 7: 157787939,32 ops/s
-[21:25:12] [Test worker/INFO]: Iter 8: 198861715,54 ops/s
-[21:25:12] [Test worker/INFO]: Iter 9: 208482745,97 ops/s
-[21:25:12] [Test worker/INFO]: Iter 10: 206784602,82 ops/s
-[21:25:12] [Test worker/INFO]: Result: 208249011,85 +/- 30703733,49 ops/s
-[21:25:13] [Test worker/INFO]: Results written to C:\Users\knoth\Videos\Nozh\benchmark_results.json
-[21:25:13] [Test worker/INFO]: No session stats file found, starting fresh
-[21:25:13] [Test worker/INFO]: No session stats file found, starting fresh
-[21:25:13] [Test worker/INFO]: No session stats file found, starting fresh
-[21:25:13] [Test worker/INFO]: No session stats file found, starting fresh
-[21:25:13] [Test worker/INFO]: No session stats file found, starting fresh
-[21:25:13] [Test worker/INFO]: No session stats file found, starting fresh
-[21:25:13] [Test worker/INFO]: No session stats file found, starting fresh
-[21:25:13] [Test worker/INFO]: No session stats file found, starting fresh
-nsion.java:86) ~[junit-jupiter-engine-5.10.1.jar:5.10.1]
+[22:43:42] [Test worker/WARN]: Rejecting extreme frametime: Infinityms (max: 10000.0ms)
+[22:43:42] [Test worker/WARN]: Rejecting extreme frametime: 15000.0ms (max: 10000.0ms)
+[22:43:43] [Test worker/INFO]: StateStore initialized with defaults (version 10)
+[22:43:43] [Test worker/WARN]: StateStore reset to defaults
+[22:43:44] [Test worker/WARN]: StateStore reset to defaults
+[22:43:44] [Test worker/WARN]: StateStore reset to defaults
+[22:43:44] [Test worker/WARN]: StateStore reset to defaults
+[22:43:44] [Test worker/WARN]: StateStore reset to defaults
+[22:43:44] [Test worker/WARN]: StateStore reset to defaults
+[22:44:03] [Test worker/INFO]: No session stats file found, starting fresh
+[22:44:03] [Test worker/INFO]: No session stats file found, starting fresh
+[22:44:04] [Test worker/INFO]: Session learning stats saved (0 entries)
+[22:44:04] [Test worker/INFO]: Session learning loaded (0 entries)
+[22:44:04] [Test worker/INFO]: No session stats file found, starting fresh
+[22:44:04] [Test worker/INFO]: Session learning stats saved (1 entries)
+[22:44:04] [Test worker/INFO]: Session learning loaded (1 entries)
+[22:44:05] [Test worker/INFO]: No session stats file found, starting fresh
+[22:44:05] [Test worker/INFO]: Session learning reset for new session (new-session)
+[22:44:05] [Test worker/INFO]: No session stats file found, starting fresh
+ops/s
+[22:44:04] [Test worker/INFO]: Result: 92375658,73 +/- 87090820,29 ops/s
+[22:44:04] [Test worker/INFO]: Results written to C:\Users\knoth\Videos\Nozh\benchmark_results.json
+[22:44:08] [Test worker/INFO]: No session stats file found, starting fresh
+[22:44:09] [Test worker/INFO]: No session stats file found, starting fresh
+[22:44:09] [Test worker/INFO]: No session stats file found, starting fresh
+[22:44:10] [Test worker/INFO]: No session stats file found, starting fresh
+[22:44:10] [Test worker/INFO]: No session stats file found, starting fresh
+[22:44:10] [Test worker/INFO]: No session stats file found, starting fresh
+[22:44:10] [Test worker/INFO]: No session stats file found, starting fresh
+[22:44:10] [Test worker/INFO]: No session stats file found, starting fresh
+outExtension.java:86) ~[junit-jupiter-engine-5.10.1.jar:5.10.1]
 	at org.junit.jupiter.engine.execution.InterceptingExecutableInvoker$ReflectiveInterceptorCall.lambda$ofVoidMethod$0(InterceptingExecutableInvoker.java:103) ~[junit-jupiter-engine-5.10.1.jar:5.10.1]
 	at org.junit.jupiter.engine.execution.InterceptingExecutableInvoker.lambda$invoke$0(InterceptingExecutableInvoker.java:93) ~[junit-jupiter-engine-5.10.1.jar:5.10.1]
 	at org.junit.jupiter.engine.execution.InvocationInterceptorChain$InterceptedInvocation.proceed(InvocationInterceptorChain.java:106) ~[junit-jupiter-engine-5.10.1.jar:5.10.1]

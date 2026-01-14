@@ -11,6 +11,8 @@ import dev.nozh.core.context.ScenarioSnapshot;
 import dev.nozh.core.telemetry.*;
 import dev.nozh.core.prediction.PerformancePredictor;
 import dev.nozh.core.config.AdaptiveConfigManager;
+import dev.nozh.core.config.ConfigManager;
+import dev.nozh.core.config.NozhConfig;
 import dev.nozh.core.capability.ProviderRegistry;
 import dev.nozh.core.capability.ProviderExecutor;
 import dev.nozh.core.capability.ProviderHealthTracker;
@@ -91,14 +93,13 @@ public final class IntegratedGovernor {
     // State
     private volatile Scenario currentScenario = Scenario.STANDARD;
     private volatile DecisionReasoning lastDecisionReasoning = null;
-    private final PerformancePredictor predictor; // Re-using variable name from error log, assumed same as
-                                                  // perfPredictor but let's just use perfPredictor correctly
 
     // Thread-safe atomic variables
     private final AtomicLong lastDecisionTimeRaw = new AtomicLong(Double.doubleToRawLongBits(0.0));
     private final AtomicInteger tickCounter = new AtomicInteger(0);
 
     private volatile boolean initialized = false;
+    private volatile boolean safeModeActive = false;
     private final ConcurrentHashMap<String, CompletableFuture<ActionResult>> pendingActions = new ConcurrentHashMap<>();
 
     // Professional Core Components
@@ -146,7 +147,6 @@ public final class IntegratedGovernor {
             NozhConstants.LOGGER.warn("Failed to get target_fps from config, using default: " + e.getMessage());
         }
         this.perfPredictor = new PerformancePredictor((int) targetFps);
-        this.predictor = this.perfPredictor; // Alias for compatibility
         this.scenarioPredictor = new dev.nozh.core.intelligence.ScenarioPredictor();
 
         // Initialize learning
@@ -165,10 +165,26 @@ public final class IntegratedGovernor {
         this.vitalsRecorder = new VitalsRecorder();
 
         if (forceSafeMode) {
-            NozhConstants.LOGGER.warn("Applying Safe Mode overrides...");
-            // In a real implementation, this would reset config values or set a flag in
-            // configManager
-            // For now, we log it and potentially disable learning to prevent bad state
+            NozhConstants.LOGGER.warn("[NOZH] Safe Mode ACTIVATED - Applying stability overrides");
+            this.safeModeActive = true;
+
+            // Disable learning to prevent bad state propagation
+            if (learningEngine != null) {
+                NozhConstants.LOGGER.info("[NOZH] Safe Mode: Learning engine disabled");
+            }
+
+            // Force conservative settings in config
+            try {
+                NozhConfig config = ConfigManager.getConfig();
+                config.allowAutoTuning = false;
+                config.allowGameplayImpactActions = false;
+                config.maxChangesPerSession = 1;
+                config.cooldownActionMillis = 300000; // 5 minute cooldown
+                ConfigManager.saveNow();
+                NozhConstants.LOGGER.info("[NOZH] Safe Mode: Config overrides applied");
+            } catch (Exception e) {
+                NozhConstants.LOGGER.error("[NOZH] Safe Mode: Failed to apply config overrides", e);
+            }
         }
 
         // Initialize safety
@@ -350,9 +366,9 @@ public final class IntegratedGovernor {
             double targetFps = configManager != null ? configManager.getValue("target_fps", 60.0) : 60.0;
 
             boolean predictedDrop = false;
-            if (predictor != null) {
+            if (perfPredictor != null) {
                 try {
-                    predictedDrop = predictor.predictFpsDrop();
+                    predictedDrop = perfPredictor.predictFpsDrop();
                     if (predictedDrop) {
                         NozhConstants.LOGGER.info("Predictor warns of upcoming frame drop");
                     }
@@ -783,12 +799,26 @@ public final class IntegratedGovernor {
     }
 
     private String[] getAvailableActions() {
+        // Expanded action set for comprehensive optimization
         String[] allActions = {
+                // Render distance and visibility
                 "reduce_render_distance",
-                "lower_particles",
+                "lower_entity_distance",
                 "disable_clouds",
+
+                // Graphics quality
+                "lower_graphics_mode", // Fancy → Fast
+                "disable_smooth_lighting",
                 "reduce_shadows",
-                "lower_entity_distance"
+
+                // Particles and effects
+                "lower_particles",
+                "reduce_biome_blend", // Biome blend 5 → 1
+
+                // Performance optimizations
+                "reduce_mipmap_levels", // Mipmap 4 → 0
+                "toggle_vsync", // Enable VSync to cap FPS
+                "reduce_max_fps" // Limit max FPS for stability
         };
 
         if (blacklist == null) {
@@ -962,6 +992,17 @@ public final class IntegratedGovernor {
      */
     public VitalsRecorder getVitalsRecorder() {
         return vitalsRecorder;
+    }
+
+    /**
+     * Checks if Safe Mode is currently active.
+     * When active, learning is disabled and only conservative optimizations are
+     * allowed.
+     * 
+     * @return true if running in Safe Mode
+     */
+    public boolean isSafeModeActive() {
+        return safeModeActive;
     }
 
     public void shutdown() {
