@@ -33,7 +33,7 @@ public class NozhHudRenderer implements HudRenderCallback {
 
     private final StateStore stateStore;
     private final ProviderRegistry providerRegistry;
-    private final Supplier<PerfSnapshot> perfSnapshotSupplier;
+    private final Supplier<TelemetrySnapshot> telemetrySupplier;
     private final PerfManager perfManager;
     private final Supplier<String> exportKeySupplier;
     private final FrametimeGraphRenderer graphRenderer;
@@ -41,11 +41,11 @@ public class NozhHudRenderer implements HudRenderCallback {
     private long lastRenderTime = 0;
 
     public NozhHudRenderer(StateStore stateStore, ProviderRegistry providerRegistry,
-            Supplier<PerfSnapshot> perfSnapshotSupplier, PerfManager perfManager,
+            Supplier<TelemetrySnapshot> telemetrySupplier, PerfManager perfManager,
             Supplier<String> exportKeySupplier) {
         this.stateStore = stateStore;
         this.providerRegistry = providerRegistry;
-        this.perfSnapshotSupplier = perfSnapshotSupplier;
+        this.telemetrySupplier = telemetrySupplier;
         this.perfManager = perfManager;
         this.exportKeySupplier = exportKeySupplier;
         this.graphRenderer = new FrametimeGraphRenderer();
@@ -173,19 +173,11 @@ public class NozhHudRenderer implements HudRenderCallback {
     }
 
     private TelemetrySnapshot buildTelemetry() {
-        if (perfSnapshotSupplier == null) {
+        if (telemetrySupplier == null) {
             return TelemetrySnapshot.EMPTY;
         }
-        PerfSnapshot snapshot = perfSnapshotSupplier.get();
-        if (snapshot == null) {
-            return TelemetrySnapshot.EMPTY;
-        }
-        return TelemetrySnapshot.of(
-                snapshot.avgFrametimeMs(),
-                snapshot.p95FrametimeMs(),
-                snapshot.spikeCount(),
-                snapshot.sampleCount(),
-                0);
+        TelemetrySnapshot snapshot = telemetrySupplier.get();
+        return snapshot != null ? snapshot : TelemetrySnapshot.EMPTY;
     }
 
     private PerfDiagnosticsSnapshot buildDiagnostics() {
@@ -205,6 +197,14 @@ public class NozhHudRenderer implements HudRenderCallback {
         }
         lines.add(Text.translatable("nozh.hud.metrics.fps", formatFps(viewModel.avgFrametimeMs())));
         if (hudMode != HudMode.COMPACT) {
+            // New Phase 2 Metrics
+            lines.add(Text.translatable(
+                    "nozh.hud.metrics.p99",
+                    formatMs(viewModel.p99FrametimeMs())));
+            lines.add(Text.translatable(
+                    "nozh.hud.metrics.variance",
+                    formatMs(viewModel.frametimeVariance())));
+
             lines.add(Text.translatable(
                     "nozh.hud.metrics.p95_spikes",
                     formatMs(viewModel.p95FrametimeMs()),

@@ -98,7 +98,7 @@ public final class DynamicLightingProvider implements CapabilityProvider {
 
         @Override
         public RollbackGuarantee rollbackGuarantee() {
-            return RollbackGuarantee.WEAK;
+            return RollbackGuarantee.BEST_EFFORT;
         }
 
         @Override

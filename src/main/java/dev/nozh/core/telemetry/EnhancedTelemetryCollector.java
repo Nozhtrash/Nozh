@@ -9,12 +9,12 @@ import net.minecraft.client.world.ClientWorld;
  * No synthetic data - returns null if data is invalid.
  */
 public class EnhancedTelemetryCollector {
-    
+
     private long worldLoadTime = 0;
     private static final long STABILIZATION_PERIOD_MS = 5000; // 5 seconds
     private static final double MIN_VALID_FRAMETIME = 1.0; // 1ms minimum
     private static final double MAX_VALID_FRAMETIME = 1000.0; // 1 second maximum
-    
+
     /**
      * Collect telemetry sample with validation.
      * Returns null if world is not ready or data is invalid.
@@ -24,7 +24,7 @@ public class EnhancedTelemetryCollector {
         if (!isWorldReady(client)) {
             return null;
         }
-        
+
         // Wait for stabilization after world load
         if (worldLoadTime > 0) {
             long timeSinceLoad = System.currentTimeMillis() - worldLoadTime;
@@ -32,7 +32,7 @@ public class EnhancedTelemetryCollector {
                 return null; // Still stabilizing
             }
         }
-        
+
         try {
             // Get FPS
             int fps = client.getCurrentFps();
@@ -40,43 +40,42 @@ public class EnhancedTelemetryCollector {
                 NozhConstants.LOGGER.debug("Invalid FPS: {}", fps);
                 return null;
             }
-            
+
             // Calculate frametime from FPS (milliseconds per frame)
             double frametime = 1000.0 / fps;
-            
+
             if (frametime < MIN_VALID_FRAMETIME || frametime > MAX_VALID_FRAMETIME) {
                 NozhConstants.LOGGER.debug("Frametime out of valid range: {}", frametime);
                 return null;
             }
-            
+
             // Get world metrics
             ClientWorld world = client.world;
             int entities = world.getRegularEntityCount();
             int loadedChunks = getLoadedChunksCount(world);
-            
+
             // Get memory
             Runtime runtime = Runtime.getRuntime();
             long memoryUsed = runtime.totalMemory() - runtime.freeMemory();
-            
+
             // Get tick time estimate
             double tickTime = estimateTickTime(client);
-            
+
             return new TelemetrySample(
-                System.currentTimeMillis(),
-                frametime,
-                tickTime,
-                fps,
-                entities,
-                loadedChunks,
-                memoryUsed
-            );
-            
+                    System.currentTimeMillis(),
+                    frametime,
+                    tickTime,
+                    fps,
+                    entities,
+                    loadedChunks,
+                    memoryUsed);
+
         } catch (Exception e) {
             NozhConstants.LOGGER.error("Failed to collect telemetry", e);
             return null;
         }
     }
-    
+
     /**
      * Check if world is ready for telemetry collection.
      */
@@ -84,28 +83,28 @@ public class EnhancedTelemetryCollector {
         if (client == null) {
             return false;
         }
-        
+
         ClientWorld world = client.world;
         if (world == null) {
             worldLoadTime = 0; // Reset
             return false;
         }
-        
+
         // Track world load time
         if (worldLoadTime == 0) {
             worldLoadTime = System.currentTimeMillis();
             NozhConstants.LOGGER.info("World loaded, starting stabilization period");
             return false;
         }
-        
+
         // Check player exists
         if (client.player == null) {
             return false;
         }
-        
+
         return true;
     }
-    
+
     /**
      * Estimate tick time from available metrics.
      */
@@ -118,20 +117,20 @@ public class EnhancedTelemetryCollector {
                 float tickTime = client.getServer().getTickTime();
                 return tickTime;
             }
-            
+
             // Estimate based on entity count and world complexity
             int entities = client.world.getRegularEntityCount();
             double baseTickTime = 10.0; // Base 10ms
             double entityOverhead = Math.min(entities * 0.01, 40.0); // Max 40ms from entities
-            
+
             return baseTickTime + entityOverhead;
-            
+
         } catch (Exception e) {
             NozhConstants.LOGGER.debug("Failed to estimate tick time", e);
             return 15.0; // Reasonable default if all else fails
         }
     }
-    
+
     /**
      * Get count of loaded chunks.
      * 
@@ -144,10 +143,10 @@ public class EnhancedTelemetryCollector {
             if (client == null || client.options == null) {
                 return 0;
             }
-            
+
             // Get render distance from options
             int renderDistance = client.options.getViewDistance().getValue();
-            
+
             // Approximate loaded chunks based on render distance
             // Formula: (2 * renderDistance + 1)^2 for a square area
             int diameter = 2 * renderDistance + 1;
@@ -157,14 +156,14 @@ public class EnhancedTelemetryCollector {
             return 0;
         }
     }
-    
+
     /**
      * Reset world load time (call when changing worlds).
      */
     public void resetWorldLoadTime() {
         worldLoadTime = 0;
     }
-    
+
     public static class TelemetrySample {
         public final long timestamp;
         public final double frametimeMs;
@@ -173,9 +172,9 @@ public class EnhancedTelemetryCollector {
         public final int entityCount;
         public final int loadedChunks;
         public final long memoryUsedBytes;
-        
+
         public TelemetrySample(long timestamp, double frametimeMs, double tickTimeMs,
-                              int fps, int entityCount, int loadedChunks, long memoryUsedBytes) {
+                int fps, int entityCount, int loadedChunks, long memoryUsedBytes) {
             this.timestamp = timestamp;
             this.frametimeMs = frametimeMs;
             this.tickTimeMs = tickTimeMs;
@@ -184,11 +183,11 @@ public class EnhancedTelemetryCollector {
             this.loadedChunks = loadedChunks;
             this.memoryUsedBytes = memoryUsedBytes;
         }
-        
+
         @Override
         public String toString() {
             return String.format("TelemetrySample{fps=%d, frametime=%.2fms, tick=%.2fms, entities=%d, chunks=%d}",
-                               fps, frametimeMs, tickTimeMs, entityCount, loadedChunks);
+                    fps, frametimeMs, tickTimeMs, entityCount, loadedChunks);
         }
     }
 }

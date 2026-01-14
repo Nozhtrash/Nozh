@@ -1,221 +1,344 @@
 package dev.nozh.core.governor;
 
 import dev.nozh.NozhConstants;
+import dev.nozh.core.capability.ProviderExecutor;
+import dev.nozh.core.capability.ProviderRegistry;
+import dev.nozh.core.capability.ProviderHealthTracker;
+import dev.nozh.core.cloud.CloudManager;
 import dev.nozh.core.compatibility.ModConflictDetector;
-import dev.nozh.core.context.Scenario;
-import dev.nozh.core.learning.*;
-import dev.nozh.core.monitoring.*;
-import dev.nozh.core.safety.*;
-import dev.nozh.core.context.CameraActivityTracker;
-import dev.nozh.core.context.ScenarioSnapshot;
-import dev.nozh.core.telemetry.*;
-import dev.nozh.core.prediction.PerformancePredictor;
 import dev.nozh.core.config.AdaptiveConfigManager;
 import dev.nozh.core.config.ConfigManager;
 import dev.nozh.core.config.NozhConfig;
-import dev.nozh.core.capability.ProviderRegistry;
-import dev.nozh.core.capability.ProviderExecutor;
-import dev.nozh.core.capability.ProviderHealthTracker;
+import dev.nozh.core.context.CameraActivityTracker;
+import dev.nozh.core.context.Scenario;
+import dev.nozh.core.context.ScenarioSnapshot;
+import dev.nozh.core.governor.TelemetryService;
+import dev.nozh.core.governor.DecisionEngine;
+import dev.nozh.core.intelligence.AnomalyDetector;
+import dev.nozh.core.telemetry.TelemetrySample;
+import dev.nozh.core.telemetry.TelemetrySnapshot;
+import dev.nozh.core.safety.ProviderBlacklist;
 import dev.nozh.fabric.context.EnhancedFabricScenarioDetector;
 import dev.nozh.fabric.telemetry.FabricFrameTickSampler;
+import dev.nozh.core.monitoring.NetworkLatencyTracker;
+import dev.nozh.core.telemetry.VitalsRecorder;
 import net.minecraft.client.MinecraftClient;
+
 import java.nio.file.Path;
-import java.util.Arrays;
 import java.util.concurrent.*;
-import java.util.concurrent.atomic.*;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * Integrated Governor - The main orchestration brain.
- * 
- * Complete pipeline:
- * 1. Telemetry → Filtering
- * 2. Scenario detection → Confidence
- * 3. Performance prediction
- * 4. Action selection (Q-learning)
- * 5. Transactional execution
- * 6. Outcome measurement
- * 7. Learning update
- * 8. Weight adaptation
- * 9. Health monitoring
- * 
- * This is the production-ready, self-learning governor.
- *
- * (Patch) Director Mode v2 wiring:
- * - Real tickMs via ClientTickEvents.
- * - Real render frametime via WorldRenderEvents.
- * - CPU/GPU bias multipliers from ModConflictDetector.
+ * <p>
+ * REFACTORED (Audit 2026): Now acts as a coordinator rather than a God Object.
+ * Delegates logic to {@link TelemetryService} and {@link DecisionEngine}.
  */
 public final class IntegratedGovernor {
 
     // Core systems
     private final MinecraftClient client;
-    private final IntegratedRingTelemetryBuffer telemetryBuffer;
-    private final EnhancedFabricScenarioDetector scenarioDetector;
-    // Removed unused executor to clean up code
 
-    // Director Mode inputs
+    // Services (Refactored)
+    private final TelemetryService telemetryService;
+    private final DecisionEngine decisionEngine;
+
+    // Inputs / Detectors
+    private final EnhancedFabricScenarioDetector scenarioDetector;
     private final FabricFrameTickSampler frameTickSampler;
     private final ModConflictDetector modConflictDetector;
-    private final double cpuBias;
-    private final double gpuBias;
-
-    // Context tracking
     private final CameraActivityTracker cameraTracker;
-    // Removed unused environmentContext, confidenceCalculator
+    private final NetworkLatencyTracker latencyTracker;
+    private final VitalsRecorder vitalsRecorder;
 
-    // Intelligence
-    private final PerformancePredictor perfPredictor;
-    private final dev.nozh.core.intelligence.ScenarioPredictor scenarioPredictor;
-    private final dev.nozh.core.intelligence.NeuralLagPredictor neuralPredictor;
-
-    // Neural State
-    private int lastEntityCount = 0;
-    private int lastParticleCount = 0;
-    private int lastChunkUpdates = 0;
-    private double lastPlayerSpeed = 0.0;
-    private boolean lastFramePredictionReady = false;
-
-    // Learning & Adaptation
-    private final ActionEffectivenessTracker effectivenessTracker;
-    private final PerformanceLearningEngine learningEngine;
-    private final AdaptiveWeightTuner weightTuner;
-
-    // Monitoring
-    private final SystemHealthMonitor healthMonitor;
-    private final PerformanceEventLogger eventLogger;
-    private final MetricsCollector metricsCollector;
-
-    // Configuration
-    private final AdaptiveConfigManager configManager;
-
-    // Safety
-    private final ProviderBlacklist blacklist;
-
-    // Action Execution System
+    // Execution
     private final ProviderRegistry providerRegistry;
     private final ProviderExecutor providerExecutor;
-
-    // Async action execution
     private final ScheduledExecutorService asyncExecutor;
+    private final ConcurrentHashMap<String, CompletableFuture<ProviderExecutor.ExecutionResult>> pendingActions = new ConcurrentHashMap<>();
+
+    // Config & Safety
+    private final AdaptiveConfigManager configManager;
+    private final ProviderBlacklist blacklist;
 
     // State
     private volatile Scenario currentScenario = Scenario.STANDARD;
     private volatile DecisionReasoning lastDecisionReasoning = null;
-
-    // Thread-safe atomic variables
     private final AtomicLong lastDecisionTimeRaw = new AtomicLong(Double.doubleToRawLongBits(0.0));
     private final AtomicInteger tickCounter = new AtomicInteger(0);
-
     private volatile boolean initialized = false;
     private volatile boolean safeModeActive = false;
-    private final ConcurrentHashMap<String, CompletableFuture<ActionResult>> pendingActions = new ConcurrentHashMap<>();
 
-    // Professional Core Components
-    private final NetworkLatencyTracker latencyTracker;
-    private final dev.nozh.core.intelligence.AnomalyDetector anomalyDetector;
-    private final VitalsRecorder vitalsRecorder;
+    // --- Constructor ---
 
     public IntegratedGovernor(MinecraftClient client, Path logPath) {
         this(client, logPath, false);
     }
 
     public IntegratedGovernor(MinecraftClient client, Path logPath, boolean forceSafeMode) {
-        if (client == null) {
+        if (client == null)
             throw new NullPointerException("MinecraftClient cannot be null");
-        }
-        if (logPath == null) {
+        if (logPath == null)
             throw new NullPointerException("Log path cannot be null");
-        }
 
         this.client = client;
 
-        // Director Mode wiring: real tick/render sampling + bias from detected mods
+        // 1. Initialize Director Mode wiring (Hardware/Input)
         this.frameTickSampler = new FabricFrameTickSampler(client);
         this.modConflictDetector = new ModConflictDetector();
-        this.cpuBias = modConflictDetector.getCpuBiasAdjustment();
-        this.gpuBias = modConflictDetector.getGpuBiasAdjustment();
+        double cpuBias = modConflictDetector.getCpuBiasAdjustment();
+        double gpuBias = modConflictDetector.getGpuBiasAdjustment();
 
-        // Initialize core systems
-        this.telemetryBuffer = new IntegratedRingTelemetryBuffer(512);
+        // 2. Initialize Detectors
         this.scenarioDetector = new EnhancedFabricScenarioDetector(client);
-        // Removed executor init
-
-        // Initialize context
         this.cameraTracker = new CameraActivityTracker(client);
-        // Removed environmentContext, confidenceCalculator init
-
-        // Initialize configuration FIRST
-        this.configManager = new AdaptiveConfigManager();
-
-        // Initialize intelligence
-        double targetFps = 60.0;
-        try {
-            targetFps = this.configManager.getValue("target_fps", 60.0);
-        } catch (Exception e) {
-            NozhConstants.LOGGER.warn("Failed to get target_fps from config, using default: " + e.getMessage());
-        }
-        this.perfPredictor = new PerformancePredictor((int) targetFps);
-        this.scenarioPredictor = new dev.nozh.core.intelligence.ScenarioPredictor();
-        this.neuralPredictor = new dev.nozh.core.intelligence.NeuralLagPredictor();
-
-        // Initialize learning
-        this.effectivenessTracker = new ActionEffectivenessTracker();
-        this.learningEngine = new PerformanceLearningEngine(effectivenessTracker);
-        this.weightTuner = new AdaptiveWeightTuner(effectivenessTracker);
-
-        // Initialize monitoring
-        this.healthMonitor = new SystemHealthMonitor();
-        this.eventLogger = new PerformanceEventLogger(logPath);
-        this.metricsCollector = new MetricsCollector();
-
-        // Initialize Professional Core
         this.latencyTracker = new NetworkLatencyTracker();
-        this.anomalyDetector = new dev.nozh.core.intelligence.AnomalyDetector(this.latencyTracker);
         this.vitalsRecorder = new VitalsRecorder();
 
-        if (forceSafeMode) {
-            NozhConstants.LOGGER.warn("[NOZH] Safe Mode ACTIVATED - Applying stability overrides");
-            this.safeModeActive = true;
+        // 3. Initialize Config
+        this.configManager = new AdaptiveConfigManager();
+        double targetFps = safeGetTargetFps();
 
-            // Disable learning to prevent bad state propagation
-            if (learningEngine != null) {
-                NozhConstants.LOGGER.info("[NOZH] Safe Mode: Learning engine disabled");
-            }
+        // 4. Initialize Services
+        this.telemetryService = new TelemetryService(logPath);
 
-            // Force conservative settings in config
-            try {
-                NozhConfig config = ConfigManager.getConfig();
-                config.allowAutoTuning = false;
-                config.allowGameplayImpactActions = false;
-                config.maxChangesPerSession = 1;
-                config.cooldownActionMillis = 300000; // 5 minute cooldown
-                ConfigManager.saveNow();
-                NozhConstants.LOGGER.info("[NOZH] Safe Mode: Config overrides applied");
-            } catch (Exception e) {
-                NozhConstants.LOGGER.error("[NOZH] Safe Mode: Failed to apply config overrides", e);
-            }
-        }
+        AnomalyDetector anomalyDetector = new AnomalyDetector(this.latencyTracker);
+        this.decisionEngine = new DecisionEngine(configManager, anomalyDetector, targetFps, cpuBias, gpuBias);
 
-        // Initialize safety
+        // 5. Initialize Safety & Execution
         this.blacklist = new ProviderBlacklist();
         this.blacklist.initializeDefaults();
 
-        // Initialize async executor
         this.asyncExecutor = Executors.newScheduledThreadPool(2, r -> {
             Thread t = new Thread(r, "Governor-Async");
             t.setDaemon(true);
             return t;
         });
 
-        // Initialize provider system - THIS IS CRITICAL FOR ACTUAL ACTION EXECUTION
         ProviderHealthTracker healthTracker = new ProviderHealthTracker();
         this.providerRegistry = new ProviderRegistry(healthTracker);
         ProviderRegistry.discoverProviders(this.providerRegistry);
         this.providerExecutor = new ProviderExecutor(this.providerRegistry, this.asyncExecutor);
 
+        // 6. Safe Mode Handling
+        if (forceSafeMode) {
+            activateSafeMode();
+        }
+
         this.initialized = true;
-        NozhConstants.LOGGER.info("IntegratedGovernor initialized - Full autonomous pipeline active");
-        NozhConstants.LOGGER.info("Available providers: {}", this.providerRegistry.getRegisteredProviderIds());
+        NozhConstants.LOGGER.info("IntegratedGovernor (Refactored) initialized - Coordinators active");
+    }
+
+    // --- Main Loop ---
+
+    public void tick() {
+        if (!initialized || client == null || client.world == null)
+            return;
+
+        try {
+            int ticks = tickCounter.incrementAndGet();
+
+            // 1. Update Context Trackers
+            if (cameraTracker != null)
+                cameraTracker.tick();
+
+            // 2. Collect Data
+            TelemetrySample sample = collectTelemetry();
+            if (sample == null)
+                return;
+
+            // 3. Process Telemetry (Buffer, Log, Monitor) - PROCESS FIRST for fresh data
+            telemetryService.processSample(sample, ticks);
+
+            // 4. Enrich State for AI (Feeding FRESH data to DecisionEngine)
+            int entityCount = client.world.getRegularEntityCount();
+            int particleCount = frameTickSampler.getParticleCount();
+            int chunkUpdates = frameTickSampler.getChunkUpdateCount();
+            double speed = (client.player != null) ? client.player.getVelocity().length() : 0.0;
+
+            // Intelligence update with LATEST snapshot
+            decisionEngine.feedPredictors(
+                    telemetryService.getSnapshot(),
+                    ticks, entityCount, particleCount, chunkUpdates, speed);
+
+            // 5. Vitals
+            if (vitalsRecorder != null) {
+                vitalsRecorder.recordFrame((float) sample.frametimeMs());
+            }
+
+            // 6. Configured Decision Loop
+            double decisionInterval = configManager.getValue("decision_interval_ms", 2000.0);
+            double now = System.currentTimeMillis();
+            if (now - getLastDecisionTime() >= decisionInterval) {
+                makeDecision();
+                setLastDecisionTime(now);
+            }
+
+        } catch (Exception e) {
+            NozhConstants.LOGGER.error("Governor tick error", e);
+            telemetryService.recordError("tick_error: " + e.getMessage());
+        }
+    }
+
+    // --- Decision Making ---
+
+    private void makeDecision() {
+        // Safety First
+        if (safeModeActive) {
+            if (tickCounter.get() % 200 == 0)
+                NozhConstants.LOGGER.debug("Safe Mode active: Optimization suspended.");
+            return;
+        }
+
+        TelemetrySnapshot snapshot = telemetryService.getSnapshot();
+        if (snapshot == null)
+            return;
+
+        // 1. Detect Scenario
+        Scenario detected = Scenario.STANDARD;
+        try {
+            ScenarioSnapshot scenarioSnap = scenarioDetector.detect();
+            if (scenarioSnap != null)
+                detected = scenarioSnap.scenario();
+        } catch (Exception e) {
+            /* ignore */ }
+
+        currentScenario = detected;
+
+        // 2. Calculate FPS
+        double currentFps = 1000.0 / snapshot.avgFrametimeMs();
+        if (!Double.isFinite(currentFps) || currentFps <= 0)
+            return;
+
+        // 3. Consult Decision Engine
+        double targetFps = safeGetTargetFps();
+        boolean shouldOptimize = decisionEngine.shouldOptimize(snapshot, currentFps, targetFps);
+
+        if (!shouldOptimize) {
+            if (tickCounter.get() % 200 == 0) {
+                NozhConstants.LOGGER.debug("Performance stable: {:.1f} FPS", currentFps);
+            }
+            return;
+        }
+
+        // 4. Select Action
+        String[] availableActions = getAvailableActions(); // From where? We need to implement this helper or delegate
+
+        String selectedAction = decisionEngine.selectAction(currentScenario, currentFps, availableActions);
+
+        if (selectedAction == null) {
+            NozhConstants.LOGGER.debug("No suitable action selected.");
+            return;
+        }
+
+        // 5. Execute
+        DecisionReasoning reasoning = DecisionReasoning.create(
+                currentScenario, currentFps, targetFps, 0.0, 0.0, false, snapshot.spikeCount());
+        this.lastDecisionReasoning = reasoning;
+
+        executeAction(selectedAction, reasoning, currentFps);
+    }
+
+    private void executeAction(String actionId, DecisionReasoning reasoning, double fpsBefore) {
+        if (pendingActions.containsKey(actionId))
+            return;
+
+        long startTime = System.currentTimeMillis();
+        double expectedFpsDelta = configManager.getValue("expected_fps_delta", 15.0);
+
+        decisionEngine.getEffectivenessTracker().recordActionStart(actionId, expectedFpsDelta, reasoning);
+
+        NozhConstants.LOGGER.info("Governor requesting action: {}", actionId);
+
+        // Safe execution via ProviderExecutor (which now handles thread safety)
+        CompletableFuture<ProviderExecutor.ExecutionResult> future = providerExecutor.executeAction(actionId);
+
+        // Track completion & Cleanup using whenComplete for robustness
+        future.whenComplete((result, ex) -> {
+            boolean success = (result != null && result.isSuccess());
+            long duration = System.currentTimeMillis() - startTime;
+
+            if (ex != null) {
+                NozhConstants.LOGGER.error("Action '{}' failed exceptionally", actionId, ex);
+            }
+
+            // Post-execution measurement & learning (async)
+            asyncExecutor.schedule(() -> {
+                try {
+                    TelemetrySnapshot after = telemetryService.getSnapshot();
+                    double fpsAfter = (after != null) ? 1000.0 / after.avgFrametimeMs() : fpsBefore;
+                    double actualDelta = fpsAfter - fpsBefore;
+
+                    // Feed back to learning engine
+                    decisionEngine.getEffectivenessTracker().recordActionResult(actionId, actualDelta, success);
+
+                    NozhConstants.LOGGER.info("Action '{}' completed. Result: {}, Delta: {:.1f} FPS",
+                            actionId, success ? "Success" : "Failed", actualDelta);
+                } finally {
+                    // Robust cleanup: Always remove from pending map
+                    pendingActions.remove(actionId);
+                }
+            }, 1500, TimeUnit.MILLISECONDS);
+        });
+
+        pendingActions.put(actionId, future);
+    }
+
+    // --- Helpers ---
+
+    private TelemetrySample collectTelemetry() {
+        // Simple delegate to sampling logic
+        if (frameTickSampler == null)
+            return null;
+        if (client.world == null)
+            return null;
+
+        double frametimeMs = frameTickSampler.getLastRenderMs();
+        double tickMs = frameTickSampler.getLastTickMs();
+        int fps = (frametimeMs > 0) ? (int) (1000.0 / frametimeMs) : client.getCurrentFps();
+        int entities = client.world.getRegularEntityCount();
+        int chunks = client.world.getChunkManager().getLoadedChunkCount();
+
+        return new TelemetrySample(
+                System.currentTimeMillis(),
+                frametimeMs,
+                tickMs,
+                fps,
+                entities,
+                chunks,
+                -1, // drawCalls (unavailable)
+                0, // droppedSamples (fresh)
+                frameTickSampler.getConsecutiveSlowFrames(), // Layer 1
+                frameTickSampler.getMaxChunkEntityCount(), // Layer 2
+                frameTickSampler.getDenseChunkCount() // Layer 2
+        );
+    }
+
+    private double safeGetTargetFps() {
+        try {
+            return configManager.getValue("target_fps", 60.0);
+        } catch (Exception e) {
+            return 60.0;
+        }
+    }
+
+    private void activateSafeMode() {
+        this.safeModeActive = true;
+        NozhConstants.LOGGER.warn("[NOZH] Safe Mode ACTIVATED");
+        try {
+            NozhConfig config = ConfigManager.getConfig();
+            config.allowAutoTuning = false;
+            ConfigManager.saveNow();
+        } catch (Exception e) {
+            NozhConstants.LOGGER.error("Failed to force safe config", e);
+        }
+    }
+
+    private String[] getAvailableActions() {
+        // Naive implementation for refactor compatibility - ideally move to a Registry
+        // Helper
+        return providerRegistry.getRegisteredProviderIds().toArray(new String[0]);
     }
 
     private double getLastDecisionTime() {
@@ -226,921 +349,52 @@ public final class IntegratedGovernor {
         lastDecisionTimeRaw.set(Double.doubleToRawLongBits(time));
     }
 
-    public void tick() {
-        if (!initialized) {
-            return;
-        }
+    // --- Public API for Commands ---
 
-        if (client == null || client.world == null) {
-            return;
-        }
-
-        try {
-            tickCounter.incrementAndGet();
-
-            if (cameraTracker != null) {
-                cameraTracker.tick();
-            }
-
-            // Intelligence: Feed Scenario Predictor
-            if (scenarioPredictor != null && client.player != null) {
-                double velocity = client.player.getVelocity().length();
-                // Estimate recent actions via interaction manager if possible, or 0
-                scenarioPredictor.recordScenario(toApiScenario(currentScenario), velocity, 0);
-            }
-
-            TelemetrySample sample = collectTelemetry();
-            if (sample != null && telemetryBuffer != null) {
-                telemetryBuffer.add(sample);
-
-                if (sample.hasFrametimeData() && perfPredictor != null) {
-                    perfPredictor.addSample(sample.frametimeMs());
-                }
-
-                // Vitals Recording
-                if (vitalsRecorder != null) {
-                    vitalsRecorder.recordFrame((float) sample.frametimeMs());
-                }
-
-                // AI Training (Neural Lag Predictor)
-                // Train only every 5 ticks to save CPU
-                if (neuralPredictor != null && lastFramePredictionReady && tickCounter.get() % 5 == 0) {
-                    boolean actuallyLagged = sample.frametimeMs() > 30.0; // >33ms is <30FPS. Strict threshold.
-                    try {
-                        neuralPredictor.train(actuallyLagged, lastEntityCount, lastParticleCount, lastChunkUpdates,
-                                lastPlayerSpeed);
-                    } catch (Exception e) {
-                        // Ignore training errors
-                    }
-                }
-            }
-
-            if (telemetryBuffer == null) {
-                NozhConstants.LOGGER.error("CRITICAL: Telemetry buffer is null");
-                if (healthMonitor != null) {
-                    healthMonitor.recordError("null_telemetry_buffer");
-                }
-                return;
-            }
-
-            TelemetrySnapshot snapshot = telemetryBuffer.snapshot();
-            if (snapshot == null) {
-                NozhConstants.LOGGER.error("CRITICAL: Null telemetry snapshot");
-                if (healthMonitor != null) {
-                    healthMonitor.recordError("null_telemetry_snapshot");
-                }
-                return;
-            }
-
-            if (healthMonitor != null) {
-                try {
-                    healthMonitor.updateFromTelemetry(snapshot);
-                } catch (Exception e) {
-                    NozhConstants.LOGGER.error("Health monitor update failed", e);
-                }
-            }
-
-            if (metricsCollector != null) {
-                try {
-                    metricsCollector.recordTelemetry(snapshot);
-                } catch (Exception e) {
-                    NozhConstants.LOGGER.error("Metrics recording failed", e);
-                }
-            }
-
-            if (tickCounter.get() % 100 == 0 && eventLogger != null) {
-                try {
-                    double avgFps = 1000.0 / snapshot.avgFrametimeMs();
-                    eventLogger.logMetrics(avgFps, snapshot.p95FrametimeMs(), snapshot.spikeCount());
-                } catch (Exception e) {
-                    NozhConstants.LOGGER.error("Event logging failed", e);
-                }
-            }
-
-            if (configManager != null) {
-                double decisionInterval = configManager.getValue("decision_interval_ms", 2000.0);
-                double now = System.currentTimeMillis();
-                if (now - getLastDecisionTime() >= decisionInterval) {
-                    makeDecision(snapshot);
-                    setLastDecisionTime(now);
-                }
-            }
-
-        } catch (Exception e) {
-            NozhConstants.LOGGER.error("Governor tick error", e);
-            if (healthMonitor != null) {
-                healthMonitor.recordError("tick_error: " + e.getMessage());
-            }
-        }
-    }
-
-    private void makeDecision(TelemetrySnapshot snapshot) {
-        if (snapshot == null) {
-            NozhConstants.LOGGER.warn("Cannot make decision with null snapshot");
-            return;
-        }
-
-        // Intelligence: Check Scenario Prediction
-        if (scenarioPredictor != null) {
-            try {
-                dev.nozh.core.intelligence.ScenarioPredictor.ScenarioPrediction prediction = scenarioPredictor
-                        .predictNextScenario();
-
-                // Neural Lag Prediction
-                if (neuralPredictor != null && client.player != null && client.world != null) {
-                    try {
-                        int entityCount = client.world.getRegularEntityCount();
-                        int particleCount = frameTickSampler != null ? frameTickSampler.getParticleCount() : 0;
-                        int chunkUpdates = frameTickSampler != null ? frameTickSampler.getChunkUpdateCount() : 0;
-                        double speed = client.player.getVelocity().length();
-
-                        var neuralResult = neuralPredictor.predict(entityCount, particleCount, chunkUpdates, speed);
-
-                        // Store for next training step
-                        lastEntityCount = entityCount;
-                        lastParticleCount = particleCount;
-                        lastChunkUpdates = chunkUpdates;
-                        lastPlayerSpeed = speed;
-                        lastFramePredictionReady = true;
-
-                        if (neuralResult.isSpikePredicted()) {
-                            NozhConstants.LOGGER.debug("Neural AI predicts lag spike! (Prob: {})",
-                                    String.format("%.2f", neuralResult.probability()));
-                            // In future: Trigger preventive culling here
-                        }
-                    } catch (Exception e) {
-                        // Squelch errors to prevent spam
-                    }
-                }
-
-                if (prediction.confidence() > 0.8
-                        && scenarioPredictor.preWarmForScenario(prediction.predictedScenario())) {
-                    NozhConstants.LOGGER.info(
-                            "Intelligence: Predicting transition to {} (confidence: {}). Pre-warming engines.",
-                            prediction.predictedScenario(), String.format("%.2f", prediction.confidence()));
-                    // Potential extension: loosen/tighten thresholds based on prediction
-                }
-            } catch (Exception e) {
-                NozhConstants.LOGGER.warn("Prediction failed", e);
-            }
-        }
-
-        try {
-            Scenario detected = detectScenario();
-            if (detected == null) {
-                NozhConstants.LOGGER.warn("Scenario detection failed, using default");
-                detected = Scenario.STANDARD;
-            }
-
-            currentScenario = detected;
-
-            double currentFps = 1000.0 / snapshot.avgFrametimeMs();
-            if (!Double.isFinite(currentFps) || currentFps <= 0) {
-                NozhConstants.LOGGER.warn("Invalid FPS calculated: " + currentFps);
-                return;
-            }
-
-            // Check for Anomalies (Network Lag vs True Lag)
-            dev.nozh.core.intelligence.AnomalyDetector.LagType anomaly = anomalyDetector
-                    .analyze(snapshot.avgFrametimeMs());
-            if (anomaly == dev.nozh.core.intelligence.AnomalyDetector.LagType.NETWORK_LAG) {
-                // If it's network lag, DON'T OPTIMIZE aggressively
-                if (tickCounter.get() % 100 == 0) {
-                    NozhConstants.LOGGER.info("Detected NETWORK LAG (Ping blocked). Optimization suspended.");
-                }
-                return;
-            }
-
-            double targetFps = configManager != null ? configManager.getValue("target_fps", 60.0) : 60.0;
-
-            boolean predictedDrop = false;
-            if (perfPredictor != null) {
-                try {
-                    predictedDrop = perfPredictor.predictFpsDrop();
-                    if (predictedDrop) {
-                        NozhConstants.LOGGER.info("Predictor warns of upcoming frame drop");
-                    }
-                } catch (Exception e) {
-                    NozhConstants.LOGGER.error("Predictor check failed", e);
-                }
-            }
-
-            boolean needsOptimization = currentFps < targetFps ||
-                    predictedDrop ||
-                    snapshot.spikeCount() > 5;
-
-            if (!needsOptimization) {
-                if (tickCounter.get() % 200 == 0) {
-                    NozhConstants.LOGGER.debug(String.format(
-                            "Performance stable: %.1f FPS (target: %.0f), scenario: %s",
-                            currentFps, targetFps, currentScenario));
-                }
-                return;
-            }
-
-            String[] availableActions = getAvailableActions();
-            if (availableActions == null || availableActions.length == 0) {
-                NozhConstants.LOGGER.warn("No available actions to optimize performance");
-                return;
-            }
-
-            // Director Mode: reorder + tie-break using bias multipliers.
-            availableActions = applyDirectorBias(availableActions);
-
-            String hardwareProfile = determineHardwareProfile(currentFps);
-            PerformanceLearningEngine.GameState currentState = new PerformanceLearningEngine.GameState(
-                    currentScenario,
-                    currentFps,
-                    hardwareProfile);
-
-            String selectedAction = null;
-            if (learningEngine != null) {
-                selectedAction = selectBestActionWithBias(currentState, availableActions);
-            }
-
-            if (selectedAction == null && availableActions.length > 0) {
-                selectedAction = availableActions[0];
-                NozhConstants.LOGGER.warn("Using fallback action: " + selectedAction);
-            }
-
-            if (selectedAction == null) {
-                NozhConstants.LOGGER.error("No action selected, cannot proceed");
-                return;
-            }
-
-            double qValue = 0.0;
-            if (learningEngine != null) {
-                try {
-                    qValue = learningEngine.getActionValue(currentState, selectedAction);
-                } catch (Exception e) {
-                    NozhConstants.LOGGER.error("Q-value retrieval failed", e);
-                }
-            }
-
-            DecisionReasoning reasoning = DecisionReasoning.create(
-                    currentScenario,
-                    currentFps,
-                    targetFps,
-                    0.0,
-                    qValue,
-                    predictedDrop,
-                    snapshot.spikeCount());
-
-            this.lastDecisionReasoning = reasoning;
-
-            NozhConstants.LOGGER.info(String.format(
-                    "DECISION: Executing '%s' | %s",
-                    selectedAction,
-                    reasoning));
-
-            executeAction(
-                    selectedAction,
-                    reasoning,
-                    snapshot,
-                    currentState,
-                    currentFps);
-
-        } catch (Exception e) {
-            NozhConstants.LOGGER.error("Decision making failed", e);
-            if (healthMonitor != null) {
-                healthMonitor.recordError("decision_error: " + e.getMessage());
-            }
-        }
-    }
-
-    private String selectBestActionWithBias(PerformanceLearningEngine.GameState state, String[] actions) {
-        if (learningEngine == null || actions == null || actions.length == 0) {
-            return null;
-        }
-
-        String best = null;
-        double bestScore = -Double.MAX_VALUE;
-
-        for (String action : actions) {
-            if (action == null) {
-                continue;
-            }
-
-            double q;
-            try {
-                q = learningEngine.getActionValue(state, action);
-            } catch (Exception e) {
-                q = 0.0;
-            }
-
-            double score = q * getActionBiasMultiplier(action);
-            if (best == null || score > bestScore) {
-                best = action;
-                bestScore = score;
-            }
-        }
-
-        return best;
-    }
-
-    private String[] applyDirectorBias(String[] actions) {
-        if (actions == null || actions.length <= 1) {
-            return actions;
-        }
-
-        try {
-            return Arrays.stream(actions)
-                    .sorted((a, b) -> Double.compare(getActionBiasMultiplier(b), getActionBiasMultiplier(a)))
-                    .toArray(String[]::new);
-        } catch (Exception e) {
-            NozhConstants.LOGGER.error("Failed to apply Director Mode bias", e);
-            return actions;
-        }
-    }
-
-    private String determineHardwareProfile(double fps) {
-        // 1. Check actual hardware limitations first
-        // If the system has <= 4GB RAM or <= 2 cores, it is low-end regardless of
-        // current FPS
-        // (e.g. looking at the floor might give 60fps but logic will choke)
-        long maxMemory = Runtime.getRuntime().maxMemory();
-        int processors = Runtime.getRuntime().availableProcessors();
-
-        if (maxMemory < 3L * 1024 * 1024 * 1024 || processors <= 2) { // < 3GB heap or dual-core
-            return "low";
-        }
-
-        if (fps <= 0 || !Double.isFinite(fps)) {
-            return "medium";
-        }
-
-        double highThreshold = configManager != null ? configManager.getValue("hw_profile_high_fps", 120.0) : 120.0;
-        double mediumThreshold = configManager != null ? configManager.getValue("hw_profile_medium_fps", 60.0) : 60.0;
-
-        if (fps >= highThreshold)
-            return "high";
-        if (fps >= mediumThreshold)
-            return "medium";
-        return "low";
-    }
-
-    // Pre-computed action bias types to avoid string switching in hot paths
-    private static final java.util.Set<String> GPU_ACTIONS = java.util.Set.of(
-            "disable_clouds", "reduce_shadows", "lower_particles", "reduce_render_distance", "graphics_mode");
-    private static final java.util.Set<String> CPU_ACTIONS = java.util.Set.of(
-            "lower_entity_distance");
-
-    private double getActionBiasMultiplier(String actionId) {
-        if (actionId == null) {
-            return 1.0;
-        }
-
-        double mult = 1.0;
-        if (GPU_ACTIONS.contains(actionId)) {
-            mult *= gpuBias;
-        }
-        if (CPU_ACTIONS.contains(actionId)) {
-            mult *= cpuBias;
-        }
-        return mult;
-    }
-
-    private Scenario detectScenario() {
-        if (scenarioDetector == null) {
-            return Scenario.STANDARD;
-        }
-
-        try {
-            ScenarioSnapshot snapshot = scenarioDetector.detect();
-            if (snapshot == null) {
-                return Scenario.STANDARD;
-            }
-            return snapshot.scenario();
-        } catch (Exception e) {
-            NozhConstants.LOGGER.error("Scenario detection failed", e);
-            return Scenario.STANDARD;
-        }
-    }
-
-    private void executeAction(String actionId, DecisionReasoning reasoning,
-            TelemetrySnapshot beforeSnapshot,
-            PerformanceLearningEngine.GameState state,
-            double fpsBefore) {
-        if (actionId == null) {
-            NozhConstants.LOGGER.error("CRITICAL: Cannot execute action with null actionId");
-            if (healthMonitor != null) {
-                healthMonitor.recordError("null_action_id");
-            }
-            if (metricsCollector != null) {
-                metricsCollector.recordAction("unknown", false, 0);
-            }
-            return;
-        }
-
-        if (reasoning == null) {
-            NozhConstants.LOGGER.error("CRITICAL: Cannot execute action " + actionId + " with null reasoning");
-            if (healthMonitor != null) {
-                healthMonitor.recordError("null_reasoning_" + actionId);
-            }
-            if (effectivenessTracker != null) {
-                effectivenessTracker.recordActionResult(actionId, 0.0, false);
-            }
-            return;
-        }
-
-        if (beforeSnapshot == null) {
-            NozhConstants.LOGGER.error("CRITICAL: Cannot execute action " + actionId + " with null snapshot");
-            if (healthMonitor != null) {
-                healthMonitor.recordError("null_snapshot_" + actionId);
-            }
-            if (effectivenessTracker != null) {
-                effectivenessTracker.recordActionResult(actionId, 0.0, false);
-            }
-            return;
-        }
-
-        if (state == null) {
-            NozhConstants.LOGGER.error("CRITICAL: Cannot execute action " + actionId + " with null state");
-            if (healthMonitor != null) {
-                healthMonitor.recordError("null_state_" + actionId);
-            }
-            if (effectivenessTracker != null) {
-                effectivenessTracker.recordActionResult(actionId, 0.0, false);
-            }
-            return;
-        }
-
-        if (fpsBefore <= 0 || !Double.isFinite(fpsBefore)) {
-            NozhConstants.LOGGER.error("CRITICAL: Invalid FPS before for action " + actionId + ": " + fpsBefore);
-            if (healthMonitor != null) {
-                healthMonitor.recordError("invalid_fps_" + actionId);
-            }
-            if (effectivenessTracker != null) {
-                effectivenessTracker.recordActionResult(actionId, 0.0, false);
-            }
-            return;
-        }
-
-        if (pendingActions.containsKey(actionId)) {
-            NozhConstants.LOGGER.warn("Action already pending: " + actionId);
-            return;
-        }
-
-        long startTime = System.currentTimeMillis();
-        double expectedFpsDelta = configManager != null ? configManager.getValue("expected_fps_delta", 15.0) : 15.0;
-
-        if (effectivenessTracker != null) {
-            try {
-                effectivenessTracker.recordActionStart(actionId, expectedFpsDelta, reasoning);
-            } catch (Exception e) {
-                NozhConstants.LOGGER.error("Failed to record action start", e);
-            }
-        }
-
-        // CRITICAL: Actually execute the action using ProviderExecutor
-        NozhConstants.LOGGER.info("Executing action via ProviderExecutor: {}", actionId);
-
-        CompletableFuture<ProviderExecutor.ExecutionResult> executionFuture = providerExecutor.executeAction(actionId);
-
-        // Wrap the result for our internal tracking
-        CompletableFuture<ActionResult> future = executionFuture.thenApply(result -> {
-            NozhConstants.LOGGER.info("Action '{}' execution result: success={}, message={}, duration={}ms",
-                    actionId, result.isSuccess(), result.getMessage(), result.getExecutionTimeMs());
-            return new ActionResult(result.isSuccess(), startTime);
-        }).exceptionally(ex -> {
-            NozhConstants.LOGGER.error("Action execution failed: " + actionId, ex);
-            return new ActionResult(false, startTime);
-        });
-
-        asyncExecutor.schedule(() -> {
-            try {
-                ActionResult result = future.get(5, TimeUnit.SECONDS);
-                measureAndLearnFromAction(
-                        actionId, reasoning, state, fpsBefore,
-                        expectedFpsDelta, result.executionSuccess, result.startTime);
-            } catch (TimeoutException e) {
-                NozhConstants.LOGGER.warn("Action execution timed out: {}", actionId);
-                if (effectivenessTracker != null) {
-                    effectivenessTracker.recordActionResult(actionId, 0.0, false);
-                }
-            } catch (Exception e) {
-                NozhConstants.LOGGER.error("Failed to measure action results: " + actionId, e);
-                if (effectivenessTracker != null) {
-                    effectivenessTracker.recordActionResult(actionId, 0.0, false);
-                }
-                if (healthMonitor != null) {
-                    healthMonitor.recordError("measurement_failed_" + actionId);
-                }
-            } finally {
-                pendingActions.remove(actionId);
-            }
-        }, 1500, TimeUnit.MILLISECONDS); // Increased delay to allow action to take effect
-
-        pendingActions.put(actionId, future);
-    }
-
-    @SuppressWarnings({ "unused", "java:S1172" })
-    private void measureAndLearnFromAction(
-            String actionId,
-            DecisionReasoning reasoning,
-            PerformanceLearningEngine.GameState state,
-            double fpsBefore,
-            double expectedFpsDelta,
-            boolean executionSuccess,
-            long startTime) {
-
-        try {
-            TelemetrySnapshot afterSnapshot = telemetryBuffer != null ? telemetryBuffer.snapshot() : null;
-
-            if (afterSnapshot == null) {
-                NozhConstants.LOGGER.error("No telemetry after action execution for: " + actionId);
-
-                if (effectivenessTracker != null) {
-                    effectivenessTracker.recordActionResult(actionId, 0.0, false);
-                }
-
-                if (healthMonitor != null) {
-                    healthMonitor.recordError("missing_telemetry_after_action_" + actionId);
-                }
-
-                if (metricsCollector != null) {
-                    long duration = System.currentTimeMillis() - startTime;
-                    metricsCollector.recordAction(actionId, false, duration);
-                }
-
-                return;
-            }
-
-            double fpsAfter = 1000.0 / afterSnapshot.avgFrametimeMs();
-            double actualFpsDelta = fpsAfter - fpsBefore;
-
-            long duration = System.currentTimeMillis() - startTime;
-            boolean success = executionSuccess && actualFpsDelta > 0;
-
-            if (effectivenessTracker != null) {
-                try {
-                    effectivenessTracker.recordActionResult(actionId, actualFpsDelta, success);
-                } catch (Exception e) {
-                    NozhConstants.LOGGER.error("Failed to record action result", e);
-                }
-            }
-
-            if (eventLogger != null) {
-                try {
-                    eventLogger.logActionExecution(actionId, success, duration);
-                } catch (Exception e) {
-                    NozhConstants.LOGGER.error("Failed to log action execution", e);
-                }
-            }
-
-            if (metricsCollector != null) {
-                try {
-                    metricsCollector.recordAction(actionId, success, duration);
-                } catch (Exception e) {
-                    NozhConstants.LOGGER.error("Failed to record action metrics", e);
-                }
-            }
-
-            if (!success && healthMonitor != null) {
-                healthMonitor.recordError("action_failed: " + actionId);
-            }
-
-            double visualImpact = 0.0;
-            double gameplayImpact = 0.0;
-            double reward = PerformanceLearningEngine.calculateReward(
-                    fpsBefore, fpsAfter, visualImpact, gameplayImpact);
-
-            if (learningEngine != null) {
-                try {
-                    PerformanceLearningEngine.GameState newState = new PerformanceLearningEngine.GameState(
-                            currentScenario, fpsAfter, determineHardwareProfile(fpsAfter));
-                    learningEngine.updateFromExperience(state, actionId, reward, newState);
-                } catch (Exception e) {
-                    NozhConstants.LOGGER.error("Failed to update learning", e);
-                }
-            }
-
-            if (weightTuner != null) {
-                try {
-                    weightTuner.adaptWeights(currentScenario, actionId, actualFpsDelta, visualImpact, gameplayImpact);
-                } catch (Exception e) {
-                    NozhConstants.LOGGER.error("Failed to adapt weights", e);
-                }
-            }
-
-            if (configManager != null) {
-                try {
-                    configManager.adaptValue("target_fps", fpsAfter, configManager.getValue("target_fps", 60.0));
-                } catch (Exception e) {
-                    NozhConstants.LOGGER.error("Failed to adapt config", e);
-                }
-            }
-
-        } catch (Exception e) {
-            NozhConstants.LOGGER.error("Failed to measure and learn from action: " + actionId, e);
-        }
-    }
-
-    private static class ActionResult {
-        final boolean executionSuccess;
-        final long startTime;
-
-        ActionResult(boolean executionSuccess, long startTime) {
-            this.executionSuccess = executionSuccess;
-            this.startTime = startTime;
-        }
-    }
-
-    private String[] getAvailableActions() {
-        // Expanded action set for comprehensive optimization
-        String[] allActions = {
-                // Render distance and visibility
-                "reduce_render_distance",
-                "lower_entity_distance",
-                "disable_clouds",
-
-                // Graphics quality
-                "lower_graphics_mode", // Fancy → Fast
-                "disable_smooth_lighting",
-                "reduce_shadows",
-
-                // Particles and effects
-                "lower_particles",
-                "reduce_biome_blend", // Biome blend 5 → 1
-
-                // Performance optimizations
-                "reduce_mipmap_levels", // Mipmap 4 → 0
-                "toggle_vsync", // Enable VSync to cap FPS
-                "reduce_max_fps" // Limit max FPS for stability
-        };
-
-        if (blacklist == null) {
-            return allActions;
-        }
-
-        try {
-            return Arrays.stream(allActions)
-                    .filter(action -> !blacklist.isBlacklisted(action))
-                    .toArray(String[]::new);
-        } catch (Exception e) {
-            NozhConstants.LOGGER.error("Failed to filter actions", e);
-            return allActions;
-        }
-    }
-
-    // Removed duplicate determineHardwareProfile method to fix compilation error
-
-    private TelemetrySample collectTelemetry() {
-        if (client == null || client.world == null) {
-            return null;
-        }
-
-        try {
-            double renderMs = frameTickSampler != null ? frameTickSampler.getLastRenderMs() : -1.0;
-
-            double rawFrame = client.getLastFrameDuration();
-            double fallbackFrameMs = rawFrame;
-            if (Double.isFinite(rawFrame) && rawFrame > 0.0 && rawFrame < 1.0) {
-                fallbackFrameMs = rawFrame * 1000.0;
-            }
-
-            double frametimeMs = (renderMs >= 0.0) ? renderMs : fallbackFrameMs;
-
-            double tickMs = frameTickSampler != null ? frameTickSampler.getLastTickMs() : -1.0;
-
-            int fps = client.getCurrentFps();
-
-            if (frametimeMs < 0 || !Double.isFinite(frametimeMs)) {
-                frametimeMs = 16.67;
-            }
-
-            if (tickMs < 0 || !Double.isFinite(tickMs)) {
-                tickMs = -1;
-            }
-
-            if (fps < 0) {
-                fps = 60;
-            }
-
-            int droppedCount = telemetryBuffer != null ? telemetryBuffer.getDroppedCount() : 0;
-
-            return new TelemetrySample(
-                    System.currentTimeMillis(),
-                    frametimeMs,
-                    tickMs,
-                    fps,
-                    -1,
-                    -1,
-                    -1,
-                    droppedCount);
-        } catch (Exception e) {
-            NozhConstants.LOGGER.error("Failed to collect telemetry", e);
-            return null;
-        }
+    public boolean isInitialized() {
+        return initialized;
     }
 
     public DecisionReasoning getLastDecisionReasoning() {
         return lastDecisionReasoning;
     }
 
-    public boolean isHealthy() {
-        return healthMonitor != null && !healthMonitor.isCritical();
-    }
-
     public String getHealthStatus() {
-        if (healthMonitor == null) {
-            return "UNKNOWN";
-        }
-
-        try {
-            return healthMonitor.getHealthStatus();
-        } catch (Exception e) {
-            NozhConstants.LOGGER.error("Failed to get health status", e);
-            return "ERROR";
-        }
+        return telemetryService.getHealthMonitor().getHealthStatus();
     }
 
     public String getHealthReport() {
-        if (healthMonitor == null) {
-            return "Health monitor unavailable";
-        }
-
-        try {
-            return String.format(
-                    "Health: %s (%.2f) | Memory: %.1f%% | GC: %d pauses (%.1fms avg)",
-                    healthMonitor.getHealthStatus(),
-                    healthMonitor.getHealthScore(),
-                    healthMonitor.getMemoryUsagePercent() * 100,
-                    healthMonitor.getGCCount(),
-                    healthMonitor.getAverageGCPause());
-        } catch (Exception e) {
-            NozhConstants.LOGGER.error("Failed to generate health report", e);
-            return "Health report generation failed: " + e.getMessage();
-        }
+        return telemetryService.getHealthMonitor().generateHealthReport();
     }
 
     public java.util.Map<String, Object> getLearningStats() {
-        if (learningEngine == null) {
-            return java.util.Collections.emptyMap();
-        }
-
-        try {
-            return learningEngine.getStatistics();
-        } catch (Exception e) {
-            NozhConstants.LOGGER.error("Failed to get learning stats", e);
-            return java.util.Collections.emptyMap();
-        }
+        return decisionEngine.getLearningEngine().getStatistics();
     }
 
     public java.util.Map<String, Object> getMetricsSummary() {
-        if (metricsCollector == null) {
-            return java.util.Collections.emptyMap();
-        }
-
-        try {
-            return metricsCollector.getSummary();
-        } catch (Exception e) {
-            NozhConstants.LOGGER.error("Failed to get metrics summary", e);
-            return java.util.Collections.emptyMap();
-        }
+        return telemetryService.getMetricsCollector().getSummary();
     }
 
     public double getActionEffectiveness(String actionId) {
-        if (actionId == null) {
-            throw new NullPointerException("Action ID cannot be null");
-        }
-
-        if (effectivenessTracker == null) {
-            return 0.0;
-        }
-
-        try {
-            return effectivenessTracker.getEffectivenessScore(actionId);
-        } catch (Exception e) {
-            NozhConstants.LOGGER.error("Failed to get action effectiveness for: " + actionId, e);
-            return 0.0;
-        }
+        return decisionEngine.getEffectivenessTracker().getEffectivenessScore(actionId);
     }
 
     public void resetLearning() {
-        if (effectivenessTracker != null) {
-            try {
-                effectivenessTracker.clear();
-                NozhConstants.LOGGER.info("Learning data reset");
-            } catch (Exception e) {
-                NozhConstants.LOGGER.error("Failed to reset learning", e);
-            }
-        }
+        decisionEngine.getLearningEngine().reset();
+        // Also reset internal tracker
+        decisionEngine.getEffectivenessTracker().clear();
     }
 
-    public int getPendingActionsCount() {
-        return pendingActions.size();
-    }
-
-    /**
-     * Get the VitalsRecorder instance for frame time visualization.
-     * Used by NozhConfigScreen to display the realtime graph.
-     * 
-     * @return the VitalsRecorder instance, never null
-     */
     public VitalsRecorder getVitalsRecorder() {
         return vitalsRecorder;
     }
 
-    /**
-     * Checks if Safe Mode is currently active.
-     * When active, learning is disabled and only conservative optimizations are
-     * allowed.
-     * 
-     * @return true if running in Safe Mode
-     */
-    public boolean isSafeModeActive() {
-        return safeModeActive;
+    public TelemetryService getTelemetryService() {
+        return telemetryService;
     }
 
     public void shutdown() {
-        NozhConstants.LOGGER.info("Starting IntegratedGovernor shutdown...");
-
-        int errorCount = 0;
-
-        if (eventLogger != null) {
-            try {
-                eventLogger.shutdown();
-            } catch (Exception e) {
-                errorCount++;
-                NozhConstants.LOGGER.error("Failed to shutdown event logger", e);
-            }
-        }
-
-        if (effectivenessTracker != null) {
-            try {
-                effectivenessTracker.shutdown();
-            } catch (Exception e) {
-                errorCount++;
-                NozhConstants.LOGGER.error("Failed to shutdown effectiveness tracker", e);
-            }
-        }
-
-        if (asyncExecutor != null) {
-            asyncExecutor.shutdown();
-            try {
-                if (!asyncExecutor.awaitTermination(5, TimeUnit.SECONDS)) {
-                    NozhConstants.LOGGER.warn("Async executor did not terminate in time, forcing shutdown");
-                    java.util.List<Runnable> pendingTasks = asyncExecutor.shutdownNow();
-                    if (!pendingTasks.isEmpty()) {
-                        NozhConstants.LOGGER.warn("Forced shutdown of " + pendingTasks.size() + " pending tasks");
-                    }
-
-                    if (!asyncExecutor.awaitTermination(2, TimeUnit.SECONDS)) {
-                        errorCount++;
-                        NozhConstants.LOGGER.error("Async executor still did not terminate after forced shutdown");
-                    }
-                }
-            } catch (InterruptedException e) {
-                errorCount++;
-                NozhConstants.LOGGER.error("Interrupted while waiting for async executor shutdown", e);
-                asyncExecutor.shutdownNow();
-                Thread.currentThread().interrupt();
-            }
-        }
-
-        try {
-            int pending = pendingActions.size();
-            if (pending > 0) {
-                NozhConstants.LOGGER.warn("Cancelling " + pending + " pending actions during shutdown");
-                pendingActions.values().forEach(future -> future.cancel(true));
-            }
-            pendingActions.clear();
-        } catch (Exception e) {
-            errorCount++;
-            NozhConstants.LOGGER.error("Failed to clear pending actions", e);
-        }
-
-        initialized = false;
-
-        if (errorCount == 0) {
-            NozhConstants.LOGGER.info("IntegratedGovernor shutdown completed successfully");
-        } else {
-            NozhConstants.LOGGER.error("IntegratedGovernor shutdown completed with " + errorCount + " errors");
-        }
-    }
-
-    public boolean isInitialized() {
-        return initialized;
-    }
-
-    private dev.nozh.api.Scenario toApiScenario(Scenario contextScenario) {
-        if (contextScenario == null)
-            return dev.nozh.api.Scenario.UNKNOWN;
-        try {
-            // Try explicit mapping for mismatched names, otherwise valueOf
-            switch (contextScenario) {
-                case STANDARD:
-                    return dev.nozh.api.Scenario.EXPLORATION;
-                case EXPLORING:
-                    return dev.nozh.api.Scenario.EXPLORATION;
-                case LOADING:
-                    return dev.nozh.api.Scenario.WORLD_LOADING;
-                default:
-                    return dev.nozh.api.Scenario.valueOf(contextScenario.name());
-            }
-        } catch (IllegalArgumentException e) {
-            return dev.nozh.api.Scenario.UNKNOWN;
-        }
+        asyncExecutor.shutdown();
+        CloudManager.getInstance().shutdown();
     }
 }

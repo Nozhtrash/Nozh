@@ -158,6 +158,8 @@ public final class HudViewModelBuilder {
 
                 telemetry.avgFrametimeMs(),
                 telemetry.p95FrametimeMs(),
+                telemetry.p99FrametimeMs(),
+                telemetry.frametimeVariance(),
                 telemetry.spikeCount(),
                 telemetry.sampleCount(),
                 telemetry.droppedSamples(),

@@ -32,6 +32,24 @@ public class NozhConfig {
     public boolean safeModeForce = false; // Forces safe mode when compatibility risk is detected.
     public boolean rollbackEnabled = true; // Enables rollback when telemetry worsens after changes.
     public boolean hybridModelEnabled = true; // Enables hybrid decision logic for stability.
+    public boolean enableNeuralPredictor = false; // Enables neural network prediction (Experimental).
+
+    // --- Heuristic Tuning ---
+    // Mild Stutter (Micro-stutters, loaded worlds)
+    public double thresholdP99Mild = 22.0; // ~45 FPS 1% lows
+    public double thresholdVarianceMild = 8.0;
+
+    // Severe Stutter (Heavy combat, spikes)
+    public double thresholdP99Severe = 33.0; // ~30 FPS 1% lows
+    public double thresholdVarianceSevere = 25.0;
+
+    // Reset / Stable (Exit condition - Hysteresis)
+    public double thresholdP99Reset = 18.0;
+    public double thresholdVarianceReset = 6.0;
+
+    // Decision Control
+    public long decisionCooldownMs = 12000; // 12s cooldown to prevent flickering
+    public boolean enableSilentLogging = false; // Writes to nozh_metrics.csv
 
     // Tuning Parameters (Rollback)
     public int rollbackWindowMillis = 45000; // Lookback window for rollback evaluation (ms).
@@ -428,6 +446,9 @@ public class NozhConfig {
             case "adaptive_visual_quality_enabled":
             case "adaptivevisualqualityenabled":
                 return adaptiveVisualQualityEnabled;
+            case "enable_neural_predictor":
+            case "enableneuralpredictor":
+                return enableNeuralPredictor;
             default:
                 NozhConstants.LOGGER.warn("Unknown boolean config key '{}', using default: {}", key, defaultValue);
                 return defaultValue;

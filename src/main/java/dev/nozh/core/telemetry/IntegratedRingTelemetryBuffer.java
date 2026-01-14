@@ -14,7 +14,8 @@ import java.util.concurrent.atomic.AtomicInteger;
  * This is the production-ready telemetry system with ~50% noise reduction.
  * 
  * INTEGRATION: Tasks 2 complete
- * AUDIT FIX #18: Fixed race condition by moving ALL filtering logic inside synchronized block.
+ * AUDIT FIX #18: Fixed race condition by moving ALL filtering logic inside
+ * synchronized block.
  */
 public final class IntegratedRingTelemetryBuffer implements TelemetryBuffer {
 
@@ -26,7 +27,7 @@ public final class IntegratedRingTelemetryBuffer implements TelemetryBuffer {
     private volatile int startIndex = 0;
     private volatile int size = 0;
     private volatile long averageAddNanos = 0;
-    
+
     // AUDIT FIX #18: Use AtomicInteger for thread-safe counters
     private final AtomicInteger droppedCount = new AtomicInteger(0);
     private final AtomicInteger filteredCount = new AtomicInteger(0);
@@ -55,7 +56,7 @@ public final class IntegratedRingTelemetryBuffer implements TelemetryBuffer {
         this.capacity = capacity;
         this.buffer = new TelemetrySample[capacity];
         this.frametimeScratch = new double[capacity];
-        
+
         // Initialize filters
         this.noiseFilter = new TelemetryNoiseFilter();
         this.outlierDetector = new OutlierDetector();
@@ -84,31 +85,44 @@ public final class IntegratedRingTelemetryBuffer implements TelemetryBuffer {
             // === FILTERING PIPELINE ===
             if (sample.hasFrametimeData()) {
                 double rawFrametime = sample.frametimeMs();
-                
+
                 // Step 1: Check if outlier (skip if warmup)
                 if (warmupTracker.isStable() && outlierDetector.isOutlier(rawFrametime)) {
                     filteredCount.incrementAndGet();
                     recordOverheadIfNeeded(trackOverhead, startNanos);
                     return; // Discard outlier
                 }
-                
+
                 // Step 2: Apply noise filter
                 double filteredFrametime = noiseFilter.filter(rawFrametime);
-                
+
                 // Step 3: Record to warmup tracker
                 warmupTracker.recordSample(filteredFrametime);
-                
+
                 // Replace sample with filtered version (preserve all other fields)
+                long ts = sample.timestampMillis();
+                double tick = sample.tickMs();
+                int fps = sample.fps();
+                int ent = sample.entities();
+                int chk = sample.chunks();
+                int draws = sample.drawCalls();
+                int drops = sample.droppedSamples();
+                int slow = sample.consecutiveSlowFrames();
+                int maxEnt = sample.maxChunkEntityCount();
+                int denseCh = sample.denseChunkCount();
+
                 sample = new TelemetrySample(
-                    sample.timestampMillis(),
-                    filteredFrametime,
-                    sample.tickMs(),
-                    sample.fps(),
-                    sample.entities(),
-                    sample.chunks(),
-                    sample.drawCalls(),
-                    sample.droppedSamples()
-                );
+                        ts,
+                        filteredFrametime,
+                        tick,
+                        fps,
+                        ent,
+                        chk,
+                        draws,
+                        drops,
+                        slow,
+                        maxEnt,
+                        denseCh);
             }
 
             // === ADAPTIVE SAMPLING ===
@@ -190,8 +204,31 @@ public final class IntegratedRingTelemetryBuffer implements TelemetryBuffer {
             }
 
             double avg = sumFrametime / frametimeSamples;
-            double p95 = calculateP95(frametimeScratch, frametimeCount);
-            return TelemetrySnapshot.of(avg, p95, spikes, currentSize, currentDropped);
+
+            // Variance Calculation (Pre-sort or Post-sort doesn't matter for sum)
+            double varianceSum = 0.0;
+            for (int i = 0; i < frametimeCount; i++) {
+                double diff = frametimeScratch[i] - avg;
+                varianceSum += diff * diff;
+            }
+            double variance = varianceSum / frametimeCount;
+
+            // Percentile Calculation
+            Arrays.sort(frametimeScratch, 0, frametimeCount);
+
+            double p95 = getPercentile(frametimeScratch, frametimeCount, 0.95);
+            double p99 = getPercentile(frametimeScratch, frametimeCount, 0.99);
+            double p999 = getPercentile(frametimeScratch, frametimeCount, 0.999);
+
+            // Layer 1: Get latest consecutiveSlowFrames from the freshest sample
+            int lastIndex = (startIndex + size - 1) % capacity;
+            TelemetrySample latest = buffer[lastIndex];
+            int consecutiveSlow = (latest != null) ? latest.consecutiveSlowFrames() : 0;
+            int maxChunkEntityCount = (latest != null) ? latest.maxChunkEntityCount() : 0;
+            int denseChunkCount = (latest != null) ? latest.denseChunkCount() : 0;
+
+            return TelemetrySnapshot.of(avg, p95, p99, p999, variance, spikes, currentSize, currentDropped,
+                    consecutiveSlow, maxChunkEntityCount, denseChunkCount);
         }
     }
 
@@ -259,15 +296,14 @@ public final class IntegratedRingTelemetryBuffer implements TelemetryBuffer {
         return averageAddNanos <= (long) (maxMs * 1_000_000.0);
     }
 
-    private double calculateP95(double[] values, int count) {
+    private double getPercentile(double[] sortedValues, int count, double percentile) {
         if (count == 0) {
             return 0;
         }
-
-        Arrays.sort(values, 0, count);
-        int p95Index = (int) Math.ceil(count * 0.95) - 1;
-        p95Index = Math.max(0, Math.min(p95Index, count - 1));
-        return values[p95Index];
+        // Array is assumed to be sorted by caller
+        int index = (int) Math.ceil(count * percentile) - 1;
+        index = Math.max(0, Math.min(index, count - 1));
+        return sortedValues[index];
     }
 
     private void recordOverheadIfNeeded(boolean trackOverhead, long startNanos) {

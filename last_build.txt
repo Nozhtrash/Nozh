@@ -1,0 +1,43 @@
+
+> Configure project :
+Fabric Loom: 1.6.5
+
+> Task :clean
+
+> Task :compileJava
+C:\Users\knoth\Videos\Nozh\src\main\java\dev\nozh\core\governor\components\TelemetryManager.java:121: error: constructor TelemetrySample in record TelemetrySample cannot be applied to given types;
+            return new TelemetrySample(
+                   ^
+  required: long,double,double,int,int,int,int,int,int
+  found:    long,double,int,int,int,int,int,int
+  reason: actual and formal argument lists differ in length
+C:\Users\knoth\Videos\Nozh\src\main\java\dev\nozh\core\testing\ChaosTestRunner.java:308: error: constructor TelemetrySample in record TelemetrySample cannot be applied to given types;
+            buffer.add(new TelemetrySample(
+                       ^
+  required: long,double,double,int,int,int,int,int,int
+  found:    long,double,double,int,int,int,int,int
+  reason: actual and formal argument lists differ in length
+C:\Users\knoth\Videos\Nozh\src\main\java\dev\nozh\fabric\compat\SodiumAdapterExpanded.java:173: warning: [unchecked] unchecked method invocation: method valueOf in class Enum is applied to given types
+        Object enumValue = Enum.valueOf(castEnumClass, enumName);
+                                       ^
+  required: Class<T>,String
+  found:    Class<Enum>,String
+  where T is a type-variable:
+    T extends Enum<T> declared in method <T>valueOf(Class<T>,String)
+2 errors
+1 warning
+
+> Task :compileJava FAILED
+
+FAILURE: Build failed with an exception.
+
+* What went wrong:
+Execution failed for task ':compileJava'.
+> Compilation failed; see the compiler error output for details.
+
+* Try:
+> Run with --info option to get more log output.
+> Run with --scan to get full insights.
+
+BUILD FAILED in 11s
+2 actionable tasks: 2 executed

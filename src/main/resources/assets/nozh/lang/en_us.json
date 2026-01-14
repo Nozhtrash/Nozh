@@ -25,6 +25,8 @@
   "nozh.hud.scenario.loading": "Scenario: Loading",
   "nozh.hud.scenario": "Scenario: %s",
   "nozh.hud.metrics.fps": "FPS: %s",
+  "nozh.hud.metrics.p99": "P99 1% Lows: %s ms",
+  "nozh.hud.metrics.variance": "Variance: %s ms²",
   "nozh.hud.metrics.p95_spikes": "P95 frame time: %s ms | Spikes: %d",
   "nozh.hud.last_action": "Last action: %s",
   "nozh.hud.last_action.none": "None",

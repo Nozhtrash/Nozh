@@ -32,6 +32,13 @@ public final class PerformanceLearningEngine {
     }
 
     /**
+     * Reset the learning engine (clear Q-table).
+     */
+    public void reset() {
+        qTable.clear();
+    }
+
+    /**
      * Get action value (Q-value) for state-action pair.
      */
     public double getActionValue(GameState state, String actionId) {
@@ -113,7 +120,8 @@ public final class PerformanceLearningEngine {
     /**
      * Calculate reward from FPS change.
      */
-    public static double calculateReward(double fpsBefore, double fpsAfter, double visualImpact, double gameplayImpact) {
+    public static double calculateReward(double fpsBefore, double fpsAfter, double visualImpact,
+            double gameplayImpact) {
         double fpsDelta = fpsAfter - fpsBefore;
 
         // Reward proportional to FPS gain
@@ -153,7 +161,8 @@ public final class PerformanceLearningEngine {
 
         @Override
         public boolean equals(Object obj) {
-            if (!(obj instanceof StateActionPair other)) return false;
+            if (!(obj instanceof StateActionPair other))
+                return false;
             return state.equals(other.state) && actionId.equals(other.actionId);
         }
 
@@ -186,9 +195,12 @@ public final class PerformanceLearningEngine {
         }
 
         private static int bucketFps(double fps) {
-            if (fps < 30) return 0;
-            if (fps < 60) return 1;
-            if (fps < 120) return 2;
+            if (fps < 30)
+                return 0;
+            if (fps < 60)
+                return 1;
+            if (fps < 120)
+                return 2;
             return 3;
         }
 
@@ -200,7 +212,8 @@ public final class PerformanceLearningEngine {
 
         @Override
         public boolean equals(Object obj) {
-            if (!(obj instanceof GameState other)) return false;
+            if (!(obj instanceof GameState other))
+                return false;
             return matches(other);
         }
 

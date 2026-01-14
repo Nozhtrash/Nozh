@@ -313,7 +313,10 @@ public final class ChaosTestRunner {
                     200,
                     30,
                     1500,
-                    buffer.getDroppedCount()));
+                    buffer.getDroppedCount(), // droppedSamples
+                    0, // consecutiveSlowFrames
+                    0, // maxChunkEntityCount
+                    0)); // denseChunkCount
         }
 
         TelemetrySnapshot snapshot = buffer.snapshot();

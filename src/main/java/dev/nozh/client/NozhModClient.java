@@ -250,7 +250,12 @@ public class NozhModClient implements ClientModInitializer {
         HudRenderCallback.EVENT.register(new NozhHudRenderer(
                 stateStore,
                 providerRegistry,
-                () -> perfManager != null ? perfManager.getSnapshot() : dev.nozh.api.PerfSnapshot.empty(),
+                () -> {
+                    var gov = dev.nozh.NozhMod.getGovernor();
+                    return (gov != null && gov.getTelemetryService() != null)
+                            ? gov.getTelemetryService().getSnapshot()
+                            : dev.nozh.core.telemetry.TelemetrySnapshot.EMPTY;
+                },
                 perfManager,
                 NozhModClient::resolveExportKeyLabel));
 

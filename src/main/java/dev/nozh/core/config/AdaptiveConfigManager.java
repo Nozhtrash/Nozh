@@ -36,6 +36,17 @@ public final class AdaptiveConfigManager {
     }
 
     /**
+     * Get configuration value as boolean.
+     * Convention: 1.0 is true, anything else (including 0.0) is false.
+     */
+    public boolean getBoolean(String key, boolean defaultValue) {
+        ConfigValue value = config.get(key);
+        if (value == null)
+            return defaultValue;
+        return Math.abs(value.value - 1.0) < 0.001; // Treat 1.0 as true
+    }
+
+    /**
      * Set configuration value.
      */
     public void setValue(String key, double value) {

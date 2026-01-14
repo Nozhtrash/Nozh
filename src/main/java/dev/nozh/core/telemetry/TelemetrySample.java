@@ -19,45 +19,44 @@ public record TelemetrySample(
         int entities, // -1 if unavailable
         int chunks, // -1 if unavailable
         int drawCalls, // -1 if unavailable
-        int droppedSamples // Cumulative count of dropped samples
+        int droppedSamples, // Cumulative count of dropped samples
+        int consecutiveSlowFrames, // Layer 1: Frame Pacing
+        int maxChunkEntityCount, // Layer 2: Density
+        int denseChunkCount // Layer 2: Density
 ) {
     // Maximum age for timestamp validation (24 hours for test flexibility)
     private static final long MAX_TIMESTAMP_AGE_MS = 24L * 60L * 60L * 1000L;
     private static final long MAX_TIMESTAMP_FUTURE_MS = 1000L; // 1 second future tolerance
-    
+
     // Compact constructor with validation (AUDIT FIX #19)
     public TelemetrySample {
         // Validate timestamp (must be reasonable - not in future, not too old)
         long now = System.currentTimeMillis();
-        if (timestampMillis > now + MAX_TIMESTAMP_FUTURE_MS || 
-            timestampMillis < now - MAX_TIMESTAMP_AGE_MS) {
+        if (timestampMillis > now + MAX_TIMESTAMP_FUTURE_MS ||
+                timestampMillis < now - MAX_TIMESTAMP_AGE_MS) {
             throw new IllegalArgumentException(
-                String.format("Invalid timestamp: %d (now: %d, age: %dms)",
-                    timestampMillis, now, now - timestampMillis)
-            );
+                    String.format("Invalid timestamp: %d (now: %d, age: %dms)",
+                            timestampMillis, now, now - timestampMillis));
         }
-        
+
         // Validate frametimeMs (allow -1 sentinel, or valid positive value)
         if (frametimeMs != -1 && (!Double.isFinite(frametimeMs) || frametimeMs < 0 || frametimeMs > 10000)) {
             throw new IllegalArgumentException(
-                "Invalid frametime: " + frametimeMs + "ms (must be -1 or 0-10000)"
-            );
+                    "Invalid frametime: " + frametimeMs + "ms (must be -1 or 0-10000)");
         }
-        
+
         // Validate tickMs (allow -1 sentinel, or valid positive value)
         if (tickMs != -1 && (!Double.isFinite(tickMs) || tickMs < 0 || tickMs > 1000)) {
             throw new IllegalArgumentException(
-                "Invalid tick time: " + tickMs + "ms (must be -1 or 0-1000)"
-            );
+                    "Invalid tick time: " + tickMs + "ms (must be -1 or 0-1000)");
         }
-        
+
         // Validate fps (-1 sentinel or 0-1000 range)
         if (fps != -1 && (fps < 0 || fps > 1000)) {
             throw new IllegalArgumentException(
-                "Invalid FPS: " + fps + " (must be -1 or 0-1000)"
-            );
+                    "Invalid FPS: " + fps + " (must be -1 or 0-1000)");
         }
-        
+
         // Validate counts (allow -1 sentinel, or non-negative values)
         if (entities != -1 && entities < 0) {
             throw new IllegalArgumentException("Entities cannot be negative: " + entities);
@@ -71,6 +70,15 @@ public record TelemetrySample(
         if (droppedSamples < 0) {
             throw new IllegalArgumentException("Dropped samples cannot be negative: " + droppedSamples);
         }
+        if (consecutiveSlowFrames < 0) {
+            throw new IllegalArgumentException("Consecutive slow frames cannot be negative: " + consecutiveSlowFrames);
+        }
+        if (maxChunkEntityCount < 0) {
+            throw new IllegalArgumentException("Max chunk entity count cannot be negative: " + maxChunkEntityCount);
+        }
+        if (denseChunkCount < 0) {
+            throw new IllegalArgumentException("Dense chunk count cannot be negative: " + denseChunkCount);
+        }
     }
 
     /**
@@ -78,19 +86,29 @@ public record TelemetrySample(
      */
     public static final TelemetrySample UNAVAILABLE = new TelemetrySample(
             System.currentTimeMillis(),
-            -1, -1, -1, -1, -1, -1, 0);
+            -1, -1, -1, -1, -1, -1, 0, 0, 0, 0);
+
+    /**
+     * Check if this sample represents unavailable data.
+     */
+    public boolean isUnavailable() {
+        return frametimeMs == -1;
+    }
 
     /**
      * Factory method for creating test samples with current timestamp.
      * Use this in tests instead of manual timestamp values.
      * 
-     * @param frametimeMs frametime in milliseconds
-     * @param tickMs tick time in milliseconds
-     * @param fps frames per second
-     * @param entities entity count
-     * @param chunks chunk count
-     * @param drawCalls draw call count
-     * @param droppedSamples dropped sample count
+     * @param frametimeMs           frametime in milliseconds
+     * @param tickMs                tick time in milliseconds
+     * @param fps                   frames per second
+     * @param entities              entity count
+     * @param chunks                chunk count
+     * @param drawCalls             draw call count
+     * @param droppedSamples        dropped sample count
+     * @param consecutiveSlowFrames consecutive slow frames count
+     * @param maxChunkEntityCount   maximum entities in any single chunk
+     * @param denseChunkCount       number of chunks exceeding a density threshold
      * @return valid TelemetrySample for testing
      */
     public static TelemetrySample forTesting(
@@ -100,25 +118,29 @@ public record TelemetrySample(
             int entities,
             int chunks,
             int drawCalls,
-            int droppedSamples
-    ) {
+            int droppedSamples,
+            int consecutiveSlowFrames,
+            int maxChunkEntityCount,
+            int denseChunkCount) {
         return new TelemetrySample(
-            System.currentTimeMillis(),
-            frametimeMs,
-            tickMs,
-            fps,
-            entities,
-            chunks,
-            drawCalls,
-            droppedSamples
-        );
+                System.currentTimeMillis(),
+                frametimeMs,
+                tickMs,
+                fps,
+                entities,
+                chunks,
+                drawCalls,
+                droppedSamples,
+                consecutiveSlowFrames,
+                maxChunkEntityCount,
+                denseChunkCount);
     }
 
     /**
      * Simplified factory for common test cases.
      */
     public static TelemetrySample forTesting(double frametimeMs) {
-        return forTesting(frametimeMs, 16.0, 60, 100, 50, 1000, 0);
+        return forTesting(frametimeMs, 16.0, 60, 100, 50, 1000, 0, 0, 0, 0);
     }
 
     /**

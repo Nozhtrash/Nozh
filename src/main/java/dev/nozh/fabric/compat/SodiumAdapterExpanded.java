@@ -143,6 +143,89 @@ public final class SodiumAdapterExpanded {
         }
     }
 
+    // === READERS ===
+
+    public static GraphicsQuality getGraphicsQuality() {
+        if (!initialized && !initialize())
+            return GraphicsQuality.FANCY;
+        try {
+            Object val = getField(sodiumConfig, "graphicsQuality");
+            return GraphicsQuality.valueOf(getEnumName(val));
+        } catch (Exception e) {
+            return GraphicsQuality.FANCY;
+        }
+    }
+
+    public static CloudMode getClouds() {
+        if (!initialized && !initialize())
+            return CloudMode.FANCY;
+        try {
+            Object val = getField(sodiumConfig, "cloudQuality");
+            return CloudMode.valueOf(getEnumName(val));
+        } catch (Exception e) {
+            return CloudMode.FANCY;
+        }
+    }
+
+    public static boolean getSmoothLighting() {
+        if (!initialized && !initialize())
+            return true;
+        try {
+            Object val = getField(sodiumConfig, "smoothLighting");
+            return getBooleanValue(val);
+        } catch (Exception e) {
+            return true;
+        }
+    }
+
+    public static int getMipmapLevels() {
+        if (!initialized && !initialize())
+            return 4;
+        try {
+            Object val = getField(sodiumConfig, "mipmapLevels");
+            return getIntValue(val);
+        } catch (Exception e) {
+            return 4;
+        }
+    }
+
+    public static ParticleQuality getParticleQuality() {
+        if (!initialized && !initialize())
+            return ParticleQuality.ALL;
+        try {
+            Object val = getField(sodiumConfig, "particleQuality");
+            return ParticleQuality.valueOf(getEnumName(val));
+        } catch (Exception e) {
+            return ParticleQuality.ALL;
+        }
+    }
+
+    // === STATE MANAGEMENT ===
+
+    public record SodiumState(GraphicsQuality graphics, CloudMode clouds, boolean smoothLighting, int mipmap,
+            ParticleQuality particles) {
+    }
+
+    public static SodiumState capture() {
+        return new SodiumState(
+                getGraphicsQuality(),
+                getClouds(),
+                getSmoothLighting(),
+                getMipmapLevels(),
+                getParticleQuality());
+    }
+
+    public static void restore(SodiumState state) {
+        if (state == null)
+            return;
+        setGraphicsQuality(state.graphics());
+        setClouds(state.clouds());
+        setSmoothLighting(state.smoothLighting());
+        setMipmapLevels(state.mipmap());
+        setParticleQuality(state.particles());
+        NozhConstants.LOGGER.info("Restored Sodium state: {}", state);
+    }
+
     // === HELPERS ===
 
     private static Object getField(Object obj, String fieldName) throws Exception {
@@ -168,13 +251,29 @@ public final class SodiumAdapterExpanded {
         Class<?> enumClass = currentValue.getClass();
 
         // Find matching enum constant
-        @SuppressWarnings("unchecked")
-        Class<Enum> castEnumClass = (Class<Enum>) enumClass;
+        @SuppressWarnings({ "unchecked", "rawtypes" })
+        Class castEnumClass = (Class) enumClass;
         Object enumValue = Enum.valueOf(castEnumClass, enumName);
 
         // Set value
         Method setter = option.getClass().getMethod("setValue", enumClass);
         setter.invoke(option, enumValue);
+    }
+
+    private static String getEnumName(Object enumObj) throws Exception {
+        Method getter = enumObj.getClass().getMethod("getValue");
+        Object val = getter.invoke(enumObj);
+        return ((Enum<?>) val).name();
+    }
+
+    private static boolean getBooleanValue(Object option) throws Exception {
+        Method getter = option.getClass().getMethod("getValue");
+        return (boolean) getter.invoke(option);
+    }
+
+    private static int getIntValue(Object option) throws Exception {
+        Method getter = option.getClass().getMethod("getValue");
+        return (int) getter.invoke(option);
     }
 
     // === ENUMS ===

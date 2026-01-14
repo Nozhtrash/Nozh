@@ -2,10 +2,11 @@ package dev.nozh.core.governor;
 
 import dev.nozh.NozhConstants;
 import dev.nozh.core.capability.ActionResult;
-import dev.nozh.core.capability.StateSnapshot;
-import dev.nozh.core.capability.CapabilityProviderRegistry;
+
 import dev.nozh.core.telemetry.TelemetrySnapshot;
 import dev.nozh.core.telemetry.IntegratedRingTelemetryBuffer;
+import dev.nozh.fabric.compat.SodiumAdapterExpanded;
+import dev.nozh.fabric.compat.SodiumAdapterExpanded.SodiumState;
 
 import java.time.Duration;
 import java.util.Map;
@@ -41,22 +42,37 @@ public class TransactionalExecutor {
      * @param stabilizationPeriod time to wait before measuring results
      * @return future with transaction result
      */
-    @SuppressWarnings("deprecation")
+
     public CompletableFuture<TransactionResult> executeWithRollback(
             String actionId,
             Supplier<ActionResult> action,
             Duration stabilizationPeriod) {
 
         // Create transaction
-        ActionTransaction tx = new ActionTransaction(actionId);
+        // Create transaction placeholder
+        ActionTransaction tx = new ActionTransaction(null);
         activeTransactions.put(actionId, tx);
 
         return CompletableFuture.supplyAsync(() -> {
             try {
                 // 1. Capture state BEFORE
+                // 1. Capture state BEFORE
                 TelemetrySnapshot before = telemetryBuffer.snapshot();
-                // Removed: StateSnapshot stateBefore = StateSnapshot.captureAll();
-                // The snapshot will come from the ActionResult itself
+                SodiumState preActionState = SodiumAdapterExpanded.capture();
+
+                // Update transaction with captured state
+                // (We need to update the map entry since we created it early, or just create it
+                // here)
+                // Actually, let's just update the local tx object reference if we could,
+                // but simpler to just store it in the tx we created.
+                // Wait, we created 'tx' outside the async block.
+                // We should probably rely on the capture inside logic.
+
+                // Better approach:
+                // The tx object in the map is just a placeholder ID holder earlier.
+                // Let's rely on local capture for now, and only update the map if strictly
+                // needed for query.
+                // But for now, we just proceed with local 'preActionState'.
 
                 NozhConstants.LOGGER.info("[TX {}] Captured pre-action state", actionId);
 
@@ -88,15 +104,20 @@ public class TransactionalExecutor {
                     NozhConstants.LOGGER.warn("[TX {}] Action did not improve performance, rolling back", actionId);
 
                     if (result.canRollback()) {
-                        // Use CapabilityProviderRegistry.restore() instead of non-existent restoreAll()
-                        boolean restored = CapabilityProviderRegistry.restore(
-                                actionId,
-                                result.getSnapshot());
+                        // Rollback logic currently disabled pending ProviderRegistry support
+                        NozhConstants.LOGGER.warn(
+                                "[TX {}] Rollback requested but modern provider system does not yet support automatic rollback.",
+                                actionId);
+                        boolean restored = false;
+                        if (preActionState != null) {
+                            SodiumAdapterExpanded.restore(preActionState);
+                            restored = true;
+                        }
 
                         if (restored) {
                             NozhConstants.LOGGER.info("[TX {}] Rollback completed", actionId);
                         } else {
-                            NozhConstants.LOGGER.warn("[TX {}] Rollback failed", actionId);
+                            NozhConstants.LOGGER.warn("[TX {}] Rollback failed: No state captured", actionId);
                         }
                     } else {
                         NozhConstants.LOGGER.warn("[TX {}] Cannot rollback - no snapshot available", actionId);
@@ -203,17 +224,19 @@ public class TransactionalExecutor {
     // Inner classes
 
     private static class ActionTransaction {
-        final String actionId;
-        final long startTime;
-        boolean committed = false;
+        final SodiumState preState;
 
-        ActionTransaction(String actionId) {
-            this.actionId = actionId;
-            this.startTime = System.currentTimeMillis();
+        ActionTransaction(SodiumState preState) {
+            this.preState = preState;
         }
 
         void commit() {
-            this.committed = true;
+            // Placeholder for future transaction log commit
+            NozhConstants.LOGGER.debug("Transaction committed (State discarded)");
+        }
+
+        SodiumState getPreState() {
+            return preState;
         }
     }
 
@@ -268,6 +291,10 @@ public class TransactionalExecutor {
 
         public ImprovementEvaluation getEvaluation() {
             return evaluation;
+        }
+
+        public TelemetrySnapshot getAfterSnapshot() {
+            return afterSnapshot;
         }
     }
 

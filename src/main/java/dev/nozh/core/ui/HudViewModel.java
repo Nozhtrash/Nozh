@@ -30,6 +30,8 @@ public record HudViewModel(
                 // Performance metrics
                 double avgFrametimeMs,
                 double p95FrametimeMs,
+                double p99FrametimeMs,
+                double frametimeVariance,
                 int spikeCount,
                 int sampleCount,
                 int droppedSamples,
@@ -119,7 +121,7 @@ public record HudViewModel(
                         HardwareTier.MEDIUM,
                         0,
                         "UNKNOWN",
-                        0, 0, 0, 0, 0, false,
+                        0, 0, 0, 0, 0, 0, 0, false,
                         0.0,
                         0.0,
                         0,

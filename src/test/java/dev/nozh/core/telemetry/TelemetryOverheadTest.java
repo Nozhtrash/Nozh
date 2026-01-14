@@ -20,6 +20,9 @@ class TelemetryOverheadTest {
                 100,
                 50,
                 1000,
+                0,
+                0,
+                0,
                 0);
 
         int iterations = 10_000;

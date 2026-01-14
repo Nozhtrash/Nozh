@@ -297,5 +297,7 @@
   "nozh.config.button.reload_config": "Reload from Disk",
   "nozh.config.tooltip.reload_config": "Discard unsaved changes and reload file.",
   "nozh.config.button.reset_full": "Factory Reset",
-  "nozh.config.tooltip.reset_full": "Wipe all settings and data."
+  "nozh.config.tooltip.reset_full": "Wipe all settings and data.",
+  "nozh.hud.metrics.p99": "P99 1% Tiefs: %s ms",
+  "nozh.hud.metrics.variance": "Varianz: %s ms²"
 }
