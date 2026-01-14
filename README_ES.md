@@ -1,8 +1,8 @@
-# NOZH: Now Only Zen HUD (Edición Modo Dios) 🚀
+# NOZH: Now Only Zen HUD (Edición de Alto Rendimiento) 🚀
 
-> **El Optimizador de FPS Inteligente Definitivo & Motor de Ritmo de Fotogramas para Fabric 1.20.1**
+> **El Optimizador de FPS Inteligente & Motor de Ritmo de Fotogramas para Fabric 1.20.1**
 
-![NOZH Banner](https://via.placeholder.com/800x200.png?text=NOZH:+Modo+Dios+Activado)
+![NOZH Banner](https://via.placeholder.com/800x200.png?text=NOZH:+Alto+Rendimiento)
 
 ## 📌 Introducción
 

@@ -1,8 +1,8 @@
-# NOZH: Now Only Zen HUD (God Mode Edition) 🚀
+# NOZH: Now Only Zen HUD (Ultimate Performance Edition) 🚀
 
-> **The Ultimate Intelligent FPS Optimizer & Frame Pacing Engine for Fabric 1.20.1**
+> **The Intelligent FPS Optimizer & Frame Pacing Engine for Fabric 1.20.1**
 
-![NOZH Banner](https://via.placeholder.com/800x200.png?text=NOZH:+God+Mode+Activated)
+![NOZH Banner](https://via.placeholder.com/800x200.png?text=NOZH:+Ultimate+Performance)
 
 ## 📌 Introduction
 
