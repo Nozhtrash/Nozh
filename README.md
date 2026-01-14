@@ -1,246 +1,369 @@
 <div align="center">
-  <img src="https://via.placeholder.com/256/000000/FFFFFF/?text=NOZH+v2.0" width="256" height="256" alt="NOZH Logo" />
-  <h1>⚡ NOZH ⚡</h1>
-  <h3>The Intelligent Performance Orchestrator (Fabric 1.20.1)</h3>
+  <img src="https://via.placeholder.com/300/000000/FFFFFF/?text=NOZH+v2.0" width="300" height="300" alt="NOZH Logo" />
+  <h1>⚡ NOZH: The God Mode Update ⚡</h1>
+  <h3>The First "Behavioral Governor" for Minecraft (Fabric 1.20.1)</h3>
   
   <p>
     <a href="https://github.com/Nozhtrash/Nozh/releases"><img src="https://img.shields.io/badge/Version-2.0.0_God_Mode-00FF00?style=for-the-badge&logo=appveyor" alt="Version"></a>
     <a href="https://fabricmc.net/"><img src="https://img.shields.io/badge/Loader-FABRIC-00b8a3?style=for-the-badge&logo=fabric" alt="Fabric"></a>
-    <a href="#"><img src="https://img.shields.io/badge/Download-Modrinth-00AF5C?style=for-the-badge&logo=modrinth" alt="Modrinth"></a>
-    <a href="#"><img src="https://img.shields.io/badge/Download-CurseForge-F16436?style=for-the-badge&logo=curseforge" alt="CurseForge"></a>
+    <a href="#"><img src="https://img.shields.io/badge/Architecture-Neural_Network-FF0055?style=for-the-badge&logo=openai" alt="AI"></a>
+    <a href="#"><img src="https://img.shields.io/badge/Status-Production_Ready-007EC6?style=for-the-badge&logo=shield" alt="Status"></a>
   </p>
   
-  <big><b>🇬🇧 <a href="#-english-documentation">ENGLISH DOCUMENTATION</a> | 🇪🇸 <a href="#-documentación-en-español">DOCUMENTACIÓN EN ESPAÑOL</a></b></big>
+  <h2>
+    <a href="#-documentation-english">🇺🇸 DOCUMENTATION (ENGLISH)</a> |
+    <a href="#-documentación-español">🇪🇸 DOCUMENTACIÓN (ESPAÑOL)</a>
+  </h2>
 </div>
 
 <br><br>
 
 ---
 
-# 🇬🇧 ENGLISH DOCUMENTATION
+<a name="-documentation-english"></a>
 
-## 📖 Introduction: A New Paradigm
+# 🇺🇸 DOCUMENTATION (ENGLISH)
 
-**NOZH** (Novus Optima Zen HUD) challenges the traditional definition of an "Optimizer".
-Traditional mods like **Sodium** or **Lithium** are *Passive Optimizers*. They rewrite game code to be faster. They are essential foundation layers.
-**NOZH** is an *Active Orchestrator*. It sits on top of those mods and behaves like a "Director" or "Governor".
+## 📖 PREFACE: Beyond "Optimization"
 
-It asks a simple question every second:
-> *"Is the player suffering from lag right now?"*
+To understand **NOZH**, you must first understand why traditional optimizers fail to fix *lag spikes*.
 
-If the answer is **NO**: NOZH sleeps. It consumes 0 resources.
-If the answer is **YES**: NOZH wakes up and makes intelligent sacrifices to save your framerate.
+Mods like **Sodium**, **Lithium**, or **Starlight** are **Architectural Optimizers**. They rewrite the game's rendering or physics code to be mathematically vastly more efficient. They are brilliant, and NOZH relies on them. However, they are **Static**.
 
-This means NOZH is dynamic. It might reduce your render distance from 12 to 8 during a massive explosion, and then assume it back to 12 when the dust settles. It optimizes *gameplay flow*, not just code.
+* If you set your Render Distance to 32 chunks, Sodium renders 32 chunks.
+* It does this efficiently, but it *always* does it.
+* If you enter a jungle with 500 entities and your FPS drops to 10... Sodium keeps rendering 32 chunks. It doesn't "know" you are suffering.
 
----
+**NOZH** is a **Behavioral Governor**. It does not rewrite rendering code. Instead, it monitors your gameplay like a living thing.
 
-## 🧠 The Intelligence (How it Thinks)
+* It asks: *"Is the FPS acceptable right now?"*
+* If **YES**: It does nothing.
+* If **NO**: It intervenes. It might temporarily drop Render Distance to 12. It might hide particles.
+* Once performance recovers, it **restores your settings**.
 
-NOZH is powered by a **Behavioral Governor** that comes in three flavors found in `/nozh gui` -> **Advanced**:
-
-### 1. The Perceptron (Neural AI)
-
-This is a Single-Layer Feedforward Neural Network implemented in Java (`PerformancePredictor.java`).
-
-* **How it works**: It takes 4 Real-Time Inputs:
-    1. **Entity Pressure**: (dEntity/dt) Are mobs spawning rapidly?
-    2. **Chunk Pressure**: (dChunk/dt) Is the world generating faster than the CPU can handle?
-    3. **Frame Variance**: Are we seeing micro-stutters?
-    4. **Player Velocity**: Are we flying with Elytra?
-* **The Math**: It calculates a weighted sum: $P = \sum (Input_i \times Weight_i)$
-* **Online Learning**: If NOZH predicts lag, takes action, and FPS improves, it **increases the weight** of that cause. It learns *your* hardware's bottlenecks. A laptop user might have high weights for Rendering (GPU), while a server player might have high weights for Chunk Loading (CPU).
-
-### 2. Heuristics (Rule-Based)
-
-For users who prefer predictability.
-
-* **Logic**: A strict set of IF/THEN rules.
-* *Example*: `IF (FPS < 45 AND TimeInCombat > 5s) THEN { CullParticles(); }`
-* **Pros**: Instant reaction time (0ms warmup).
-* **Cons**: Can be jarring if rules trigger too aggressively.
-
-### 3. Hybrid (Recommended)
-
-Combines both. Uses **Heuristics** for emergency "Panic" situations (FPS < 20) and **Neural** for background fine-tuning to prevent stutters before they happen.
+**In short: Sodium builds a faster car. NOZH drives the car so you don't crash.**
 
 ---
 
-## 🥔 Potato Mode: Saving Low-End PCs
+## 🚀 SECTION 1: FOR BEGINNERS (The "TL;DR")
 
-A dedicated engine for hardware that barely meets Minecraft's minimum specs.
-**Auto-Detection**: On first launch, NOZH checks `Runtime.getRuntime().maxMemory()` and GPU Vendor strings.
+### What will this mod do for me?
 
-* If **RAM < 4GB** OR **GPU == Intel HD/UHD**: Auto-activates Potato Mode.
+1. **Eliminate Stutters**: Using a generic AI, it predicts when lag is about to happen and prevents it.
+2. **Save Old PCs**: "Potato Mode" (see below) makes unplayable laptops playable.
+3. **Automatic Tuning**: You don't need to watch YouTube tutorials on "Best Settings". NOZH finds them for you.
 
-### The Levels
+### Does it boost FPS?
 
-| Support Level | RAM | Cores | Actions Taken |
-|:---|:---|:---|:---|
-| **Level 1 (Mild)** | < 8GB | < 6 | Caps Particle Distance to 16m. Reduces Render Distance to 12. |
-| **Level 2 (Moderate)** | < 4GB | < 4 | Disables Clouds. Reduces Entity Distance. Caps Particles to 50%. |
-| **Level 3 (Aggressive)** | < 3GB | -- | Disables Texture Animations (Water/Lava). Reduces Render Distance to 6. |
-| **Level 4 (Extreme)** | < 2GB | < 2 | Disables ALL Particles. Minimal HUD. Render Distance locked to 4. |
+* **Peak FPS (Standing still)**: No. Sodium does that.
+* **Minimum FPS (Explosions/Combat)**: **YES, MASSIVELY.**
+  * Where you usually drop to 15 FPS, NOZH keeps you at 45-60 FPS by dynamically sacrificing visuals you wouldn't notice anyway in the chaos.
 
-> **Transparency Note**: Potato Mode makes the game look significantly worse. This is intentional. It prioritizes *playability* over *aesthetics*.
+### Potato Mode 🥔
 
----
+If your PC has less than 4GB of RAM or an Intel Integrated Graphics card, NOZH will detect this on the **First Launch** and activate **Potato Mode**.
 
-## 🛠️ System Tools & Resilience
-
-NOZH v2.0 introduces professional tools to manage your installation directly from the main menu.
-
-### 🏭 Factory Reset
-
-Located in the **System Tab**.
-
-* **Function**: Completely wipes `config/nozh.json` and re-initializes the configuration state in memory.
-* **Use Case**: You changed a setting that turned the screen black or broke rendering.
-
-### 💾 Config Backup & Export
-
-* **Backup**: Saves a timestamped copy of your settings.
-* **Clipboard Export**: Serializes your entire configuration path to a JSON string and copies it to the clipboard.
-  * *Why?* You can paste this to a friend or support dev to replicate your exact setup instantly.
-
-### 🔥 Hot Reload
-
-Allows editing the `config/nozh.json` file manually with a text editor while the game is running. Pressing "Hot Reload" ingests the file changes immediately without requiring a game restart.
+* This is a "Nuclear Option". It forces the game to look ugly (low distance, no shadows) to guarantee it is playable.
+* *You can disable this in the config settings if you prefer pretty slides.*
 
 ---
 
-## 🤝 Compatibility Stewardship
+## 🔬 SECTION 2: FOR EXPERTS (Deep Dive)
 
-NOZH follows a strict "Do No Harm" policy. It is aware of the Fabric ecosystem.
+### The Architecture: "The Feedback Loop"
 
-### The "Stewardship" Matrix
+NOZH operates on a **2000ms Decision Cycle** (configurable). It is an autonomous agent loop:
 
-| Mod Detected | NOZH Reaction | Reasoning |
+1. **Sense (Telemetry)**:
+    * `FabricFrameTickSampler` collects raw nanosecond timings.
+    * Metrics: `avg_frametime`, `p95_frametime` (1% lows), `spike_count` (>50% deviation), `GC_pressure`.
+    * **Anomaly Detector**: Uses Ping data to distinguish **Server Lag** (rubberbanding) from **Client Lag** (low FPS). If lag is network-related, NOZH **aborts optimization** (fixing graphics won't fix WiFi).
+
+2. **Think (Prediction & Logic)**:
+    * **Linear Regression**: Calculates the `slope` of the last 30 frames. If `slope > 0`, performance is degrading.
+    * **Neural Perceptron**: A weighted model inputs `dEntity/dt`, `dChunk/dt`, `PlayerVelocity`.
+        * Output is `P(lag)`. If `P > 0.8`, it triggers **Pre-emptive Action**.
+
+3. **Act (Execution)**:
+    * **Q-Learning**: The brain selects an action from the `ActionMatrix` (e.g., `reduce_render_distance`).
+    * **Director Mode Bias**: If **Sodium** is installed, GPU-heavy actions are de-prioritized (Sodium handles them). If **C2ME** is installed, CPU-heavy actions are de-prioritized.
+    * **Async Execution**: The configuration change is applied on a separate thread to ensure NOZH *never* causes a lag spike itself.
+
+4. **Learn (Reinforcement)**:
+    * After 1.5 seconds, NOZH measures `dFPS` (Change in FPS).
+    * **Reward**: If FPS improved, the weight for that action is increased.
+    * **Punish**: If FPS didn't change (or got worse), the action is blacklisted for 5 minutes.
+
+### The Algorithm: Performance Predictor
+
+NOZH uses **Online Least Squares Regression** and **Coefficient of Variation (CV)** for confidence.
+
+* **Formula**: $y = mx + b$ on the `frametimeHistory` buffer.
+* **Confidence**: $C = 1.0 - (StdDev / Mean)$.
+* NOZH only trusts its own prediction if `C > 0.6` (Data is stable).
+* **Input Vectors**:
+  * $x_1$: Normalized Entity Count (0.0 - 1.0)
+  * $x_2$: Chunk Update Delta
+  * $x_3$: Player Velocity Magnitude
+
+### Thread Safety
+
+* All state mutations happen via `AtomicReference` and `ConcurrentHashMap`.
+* The `Governor` runs off the Render Thread to prevent "Heisenbugs" (observing the lag causes more lag).
+
+---
+
+## 🥔 SECTION 3: POTATO MODE LEVELS (Detailed)
+
+Potato Mode isn't just a toggle. It's a granular engine (`PotatoModeEngine.java`) that applies specific tiers based on hardware triggers.
+
+| Level | Triggers (OR) | Specific Settings Applied |
 |:---|:---|:---|
-| **Sodium / Embeddium** | **Delegates Rendering** | Sodium is a better renderer. NOZH disables its own chunk optimization logic and becomes a high-level manager for Sodium settings. |
-| **Iris / Oculus** | **Protects Visuals** | Disabling Clouds/Shadows often breaks Shader packs. NOZH automatically locks these settings to "ON" when Iris is detected. |
-| **C2ME** | **Relaxes Threading** | C2ME handles chunk threading better. NOZH disables its chunk priority override. |
-| **ModMenu** | **Integrates** | Injects the settings button natively into the mod list. |
-| **Dynamic FPS** | **Yields** | Detects that FPS limiting is handled externally and disables its own background limiter. |
+| **LEVEL 1 (Mild)** | `< 8GB RAM` OR `< 6 Cores` | • Render Dist: **12**<br>• Entity Dist: **8**<br>• Particles: **75%** |
+| **LEVEL 2 (Moderate)** | `< 4GB RAM` OR `< 4 Cores` | • Render Dist: **8**<br>• Entity Dist: **6**<br>• Particles: **50%**<br>• Clouds: **OFF**<br>• Shadows: **OFF** |
+| **LEVEL 3 (Aggressive)**| `< 3GB RAM` | • Render Dist: **6**<br>• Entity Dist: **4**<br>• Particles: **25%**<br>• Animations: **OFF** (No Fire/Water anims) |
+| **LEVEL 4 (Extreme)** | `< 2GB RAM` OR `< 2 Cores` | • Render Dist: **4**<br>• Entity Dist: **3**<br>• Particles: **10%**<br>• **ALL FX OFF** |
+| **EXTREME** | Manual Only | • Render Dist: **2**<br>• Particles: **0%**<br>• **HUD Hidden** |
 
-*This list is updated live via the Cloud Config system (`compatibility.json`) every time you launch the game.*
-
----
-
-<br><br>
+> **Tech Note**: The RAM trigger uses `Runtime.getRuntime().maxMemory()`. This is the memory allocated to Java, not your total system RAM. Assigning more RAM in the launcher can move you from Level 3 to Level 1.
 
 ---
 
-# 🇪🇸 DOCUMENTACIÓN EN ESPAÑOL
+## 🤝 SECTION 4: COMPATIBILITY (Stewardship)
 
-## 📖 Introducción: Un Nuevo Paradigma
+NOZH follows a **Stewardship Model**. It knows it is a guest in your modpack. It actively scans for other mods and yields control to avoid conflicts.
 
-**NOZH** (Novus Optima Zen HUD) desafía la definición tradicional de un "Optimizador".
-Los mods tradicionales como **Sodium** o **Lithium** son *Optimizadores Pasivos*. Reescriben el código del juego para que sea más rápido. Son capas fundamentales esenciales.
-**NOZH** es un *Orquestador Activo*. Se sienta encima de esos mods y se comporta como un "Director" o "Gobernador".
+### The Mod Matrices
 
-Se hace una pregunta simple cada segundo:
-> *"¿Está sufriendo el jugador de lag en este momento?"*
+These rules are fetched from the cloud (`compatibility.json`) or hardcoded in `CompatRegistry.java`.
 
-Si la respuesta es **NO**: NOZH duerme. Consume 0 recursos.
-Si la respuesta es **SÍ**: NOZH despierta y hace sacrificios inteligentes para salvar tus cuadros por segundo.
+**1. Rendering Gods (Sodium/Embeddium)**
 
-Esto significa que NOZH es dinámico. Puede reducir tu distancia de renderizado de 12 a 8 durante una explosión masiva, y luego subirla de nuevo a 12 cuando el polvo se asienta. Optimiza el *flujo de juego*, no solo el código.
+* **Status**: `DELEGATED`
+* **Behavior**: NOZH disables its own chunk culling algorithms via Mixin cancellation. It delegates all Render Distance changes to Sodium's API.
+* **Why**: Sodium's culling is O(1). NOZH's java-side culling is O(n). Sodium wins.
 
----
+**2. Shader Engines (Iris/Oculus)**
 
-## 🧠 La Inteligencia (Cómo Piensa)
+* **Status**: `PROTECTED`
+* **Behavior**: NOZH **locks** Cloud Rendering and Shadow Rendering to "ON".
+* **Why**: Disabling vanilla clouds or shadows often breaks Shader pipeline composites, leading to black screens.
 
-NOZH está impulsado por un **Gobernador de Comportamiento** que viene en tres sabores encontrados en `/nozh gui` -> **Avanzado**:
+**3. Threading Engines (C2ME)**
 
-### 1. El Perceptrón (IA Neuronal)
+* **Status**: `COOPERATIVE`
+* **Behavior**: NOZH disables "Chunk Update Throttling".
+* **Why**: C2ME manages thread priority dynamically. NOZH interfering would cause thread starvation.
 
-Esta es una Red Neuronal de Alimentación Hacia Adelante de Capa Única implementada en Java (`PerformancePredictor.java`).
+**4. Utility Mods**
 
-* **Cómo funciona**: Toma 4 Entradas en Tiempo Real:
-    1. **Presión de Entidades**: (dEntity/dt) ¿Están apareciendo mobs rápidamente?
-    2. **Presión de Chunks**: (dChunk/dt) ¿Se está generando el mundo más rápido de lo que la CPU puede manejar?
-    3. **Varianza de Cuadros**: ¿Estamos viendo micro-tartamudeos?
-    4. **Velocidad del Jugador**: ¿Estamos volando con Elytras?
-* **La Matemática**: Calcula una suma ponderada: $P = \sum (Input_i \times Weight_i)$
-* **Aprendizaje en Línea**: Si NOZH predice lag, toma acción, y los FPS mejoran, **aumenta el peso** de esa causa. Aprende los cuellos de botella de *tu* hardware. Un usuario de laptop puede tener pesos altos para Renderizado (GPU), mientras que un jugador de servidor puede tener pesos altos para Carga de Chunks (CPU).
-
-### 2. Heurística (Basada en Reglas)
-
-Para usuarios que prefieren previsibilidad.
-
-* **Lógica**: Un conjunto estricto de reglas SI/ENTONCES.
-* *Ejemplo*: `SI (FPS < 45 Y TiempoEnCombate > 5s) ENTONCES { OcultarParticulas(); }`
-* **Pros**: Tiempo de reacción instantáneo (0ms de calentamiento).
-* **Contras**: Puede ser brusco si las reglas se activan demasiado agresivamente.
-
-### 3. Híbrido (Recomendado)
-
-Combina ambos. Usa **Heurística** para situaciones de emergencia "Pánico" (FPS < 20) y **Neuronal** para ajustes finos en segundo plano para prevenir tartamudeos antes de que ocurran.
+* **ModMenu**: NOZH injects a configuration button.
+* **DynamicFPS**: NOZH detects this and disables its own "Unfocused FPS Limiter".
+* **VulkanMod**: Fully supported (Legacy OpenGL calls are strictly avoided).
 
 ---
 
-## 🥔 Modo Patata: Salvando PCs de Gama Baja
+## ⚙️ SECTION 5: CONFIGURATION GUIDE
 
-Un motor dedicado para hardware que apenas cumple con los requisitos mínimos de Minecraft.
-**Auto-Detección**: En el primer lanzamiento, NOZH verifica `Runtime.getRuntime().maxMemory()` y las cadenas del Vendedor de GPU.
+Access via `/nozh gui` or ModMenu.
 
-* Si **RAM < 4GB** O **GPU == Intel HD/UHD**: Auto-activa el Modo Patata.
+### General Tab
 
-### Los Niveles
+* **Enabled**: Master switch.
+* **Governor Mode**:
+  * `NEURAL`: Full AI (Recommended for high-end PCs).
+  * `HEURISTIC`: Rule-based (Recommended for older PCs, 0% CPU overhead).
+  * `HYBRID`: Rules for Panic, AI for Idle.
 
-| Nivel de Soporte | RAM | Núcleos | Acciones Tomadas |
-|:---|:---|:---|:---|
-| **Nivel 1 (Leve)** | < 8GB | < 6 | Limita Distancia de Partículas a 16m. Reduce Distancia de Renderizado a 12. |
-| **Nivel 2 (Moderado)** | < 4GB | < 4 | Desactiva Nubes. Reduce Distancia de Entidades. Limita Partículas al 50%. |
-| **Nivel 3 (Agresivo)** | < 3GB | -- | Desactiva Animaciones de Texturas (Agua/Lava). Reduce Distancia de Renderizado a 6. |
-| **Nivel 4 (Extremo)** | < 2GB | < 2 | Desactiva TODAS las Partículas. HUD Mínimo. Distancia de Renderizado bloqueada a 4. |
+### System Tab
 
-> **Nota de Transparencia**: El Modo Patata hace que el juego se vea significativamente peor. Esto es intencional. Prioriza la *jugabilidad* sobre la *estética*.
+* **Factory Reset**: Deletes `config/nozh.json` and resets internal memory state. **Click this if your game renders weirdly.**
+* **Config Backup**: Creates a timestamped .json copy.
+* **Hot Reload**: Re-reads the config file from disk without restarting the game.
 
----
+### Advanced Tab (The Brain Settings)
 
-## 🛠️ Herramientas del Sistema y Resiliencia
-
-NOZH v2.0 introduce herramientas profesionales para gestionar tu instalación directamente desde el menú principal.
-
-### 🏭 Restablecimiento de Fábrica
-
-Ubicado en la **Pestaña Sistema**.
-
-* **Función**: Borra completamente `config/nozh.json` y reinicializa el estado de configuración en memoria.
-* **Caso de Uso**: Cambiaste una configuración que puso la pantalla negra o rompió el renderizado.
-
-### 💾 Backup y Exportación de Config
-
-* **Backup**: Guarda una copia con marca de tiempo de tus ajustes.
-* **Exportar al Portapapeles**: Serializa tu ruta de configuración entera a una cadena JSON y la copia al portapapeles.
-  * *¿Por qué?* Puedes pegar esto a un amigo o desarrollador de soporte para replicar tu configuración exacta al instante.
-
-### 🔥 Recarga en Caliente
-
-Permite editar el archivo `config/nozh.json` manualmente con un editor de texto mientras el juego se ejecuta. Presionar "Recarga en Caliente" ingiere los cambios del archivo inmediatamente sin requerir reiniciar el juego.
+* `targetFps` (Default: 60): The goal. NOZH won't optimize if you are above this.
+* `decisionInterval` (Default: 2000ms): How often the Governor checks for lag. Lower = More responsive but higher CPU usage.
+* `learningRate` (Default: 0.1): How fast the AI changes its mind.
+* `hysteresisTicks` (Default: 100): 5-second cooldown to prevent settings flickering (going back and forth).
 
 ---
 
-## 🤝 Mayordomía de Compatibilidad
+<br><br><br><br>
 
-NOZH sigue una estricta política de "No Hacer Daño". Es consciente del ecosistema Fabric.
+---
 
-### La Matriz de "Mayordomía"
+<a name="-documentación-español"></a>
 
-| Mod Detectado | Reacción de NOZH | Razonamiento |
+# 🇪🇸 DOCUMENTACIÓN (ESPAÑOL)
+
+## 📖 PREFACIO: Más allá de la "Optimización"
+
+Para entender **NOZH**, primero debes entender por qué los optimizadores tradicionales fallan al arreglar los *picos de lag*.
+
+Mods como **Sodium**, **Lithium** o **Starlight** son **Optimizadores Arquitectónicos**. Reescriben el código del juego para que sea matemáticamente más eficiente. Son brillantes, y NOZH depende de ellos. Sin embargo, son **Estáticos**.
+
+* Si pones tu Distancia de Renderizado en 32 chunks, Sodium renderiza 32 chunks.
+* Lo hace eficientemente, pero *siempre* lo hace.
+* Si entras a una jungla con 500 entidades y tus FPS bajan a 10... Sodium sigue renderizando 32 chunks. No "sabe" que estás sufriendo.
+
+**NOZH** es un **Gobernador de Comportamiento**. No reescribe código de renderizado. En su lugar, monitorea tu juego como un ser vivo.
+
+* Pregunta: *"¿Son aceptables los FPS ahora mismo?"*
+* Si **SÍ**: No hace nada.
+* Si **NO**: Interviene. Puede reducir temporalmente la distancia a 12. Puede ocultar partículas.
+* Una vez que el rendimiento se recupera, **restaura tu configuración**.
+
+**En resumen: Sodium construye un auto más rápido. NOZH conduce el auto para que no te estrelles.**
+
+---
+
+## 🚀 SECCIÓN 1: PARA PRINCIPIANTES (Resumen)
+
+### ¿Qué hará este mod por mí?
+
+1. **Eliminar Tartamudeos (Stutters)**: Usando una IA genérica, predice cuándo va a ocurrir el lag y lo previene.
+2. **Salvar PCs Viejas**: El "Modo Patata" (ver abajo) hace jugables laptops que antes no podían correr el juego.
+3. **Ajuste Automático**: No necesitas ver tutoriales de YouTube sobre "La Mejor Configuración". NOZH la encuentra por ti.
+
+### ¿Aumenta los FPS?
+
+* **FPS Máximos (Quedándose quieto)**: No. Sodium hace eso.
+* **FPS Mínimos (Explosiones/Combate)**: **SÍ, MASIVAMENTE.**
+  * Donde usualmente caerías a 15 FPS, NOZH te mantiene a 45-60 FPS sacrificando dinámicamente visuales que no notarías de todos modos en el caos.
+
+### Modo Patata 🥔
+
+Si tu PC tiene menos de 4GB de RAM o una tarjeta gráfica Intel Integrada, NOZH detectará esto en el **Primer Lanzamiento** y activará el **Modo Patata**.
+
+* Esta es una "Opción Nuclear". Fuerza al juego a verse feo (baja distancia, sin sombras) para garantizar que sea jugable.
+* *Puedes desactivar esto en la configuración si prefieres diapositivas bonitas.*
+
+---
+
+## 🔬 SECCIÓN 2: PARA EXPERTOS (Profundidad Técnica)
+
+### La Arquitectura: "El Bucle de Retroalimentación"
+
+NOZH opera en un **Ciclo de Decisión de 2000ms** (configurable). Es un bucle de agente autónomo:
+
+1. **Sentir (Telemetría)**:
+    * `FabricFrameTickSampler` recolecta tiempos crudos en nanosegundos.
+    * Métricas: `avg_frametime` (promedio), `p95_frametime` (bajos del 1%), `spike_count` (desviación >50%), `GC_pressure`.
+    * **Detector de Anomalías**: Usa datos de Ping para distinguir **Lag de Servidor** (rubberbanding) de **Lag de Cliente** (bajos FPS). Si el lag es de red, NOZH **aborta la optimización** (arreglar gráficos no arregla el WiFi).
+
+2. **Pensar (Predicción y Lógica)**:
+    * **Regresión Lineal**: Calcula la `pendiente` de los últimos 30 cuadros. Si `pendiente > 0`, el rendimiento se está degradando.
+    * **Perceptrón Neuronal**: Un modelo ponderado toma `dEntidad/dt`, `dChunk/dt`, `VelocidadJugador`.
+        * Salida es `P(lag)`. Si `P > 0.8`, dispara una **Acción Preventiva**.
+
+3. **Actuar (Ejecución)**:
+    * **Q-Learning**: El cerebro selecciona una acción de la `ActionMatrix` (ej. `reduce_render_distance`).
+    * **Sesgo de Director (Director Mode)**: Si **Sodium** está instalado, las acciones de GPU se des-priorizan (Sodium las maneja). Si **C2ME** está instalado, las acciones de CPU se des-priorizan.
+    * **Ejecución Asíncrona**: El cambio de configuración se aplica en un hilo separado para asegurar que NOZH *nunca* cause un pico de lag por sí mismo.
+
+4. **Aprender (Refuerzo)**:
+    * Después de 1.5 segundos, NOZH mide `dFPS` (Cambio en FPS).
+    * **Recompensa**: Si los FPS mejoraron, el peso para esa acción se incrementa.
+    * **Castigo**: Si los FPS no cambiaron (o empeoraron), la acción se pone en lista negra por 5 minutos.
+
+### El Algoritmo: Performance Predictor
+
+NOZH usa **Regresión de Mínimos Cuadrados en Línea** y **Coeficiente de Variación (CV)** para la confianza.
+
+* **Fórmula**: $y = mx + b$ en el buffer `frametimeHistory`.
+* **Confianza**: $C = 1.0 - (StdDev / Mean)$.
+* NOZH solo confía en su propia predicción si `C > 0.6` (Los datos son estables).
+* **Vectores de Entrada**:
+  * $x_1$: Conteo de Entidades Normalizado (0.0 - 1.0)
+  * $x_2$: Delta de Actualización de Chunks
+  * $x_3$: Magnitud de Velocidad del Jugador
+
+### Seguridad de Hilos
+
+* Todas las mutaciones de estado ocurren vía `AtomicReference` y `ConcurrentHashMap`.
+* El `Governor` corre fuera del Hilo de Renderizado para prevenir "Heisenbugs" (que observar el lag cause más lag).
+
+---
+
+## 🥔 SECCIÓN 3: NIVELES DEL MODO PATATA (Detallado)
+
+El Modo Patata no es solo un interruptor. Es un motor granular (`PotatoModeEngine.java`) que aplica niveles específicos basados en disparadores de hardware.
+
+| Nivel | Disparadores (O) | Ajustes Específicos Aplicados |
 |:---|:---|:---|
-| **Sodium / Embeddium** | **Delega Renderizado** | Sodium es un mejor renderizador. NOZH desactiva su propia lógica de optimización de chunks y se convierte en un gestor de alto nivel para los ajustes de Sodium. |
-| **Iris / Oculus** | **Protege Visuales** | Desactivar Nubes/Sombras a menudo rompe los paquetes de Shaders. NOZH bloquea automáticamente estos ajustes en "ENCENDIDO" cuando detecta Iris. |
-| **C2ME** | **Relaja Hilos** | C2ME maneja los hilos de chunks mejor. NOZH desactiva su anulación de prioridad de chunks. |
-| **ModMenu** | **Integra** | Inyecta el botón de ajustes nativamente en la lista de mods. |
-| **Dynamic FPS** | **Cede** | Detecta que el límite de FPS es manejado externamente y desactiva su propio limitador en segundo plano. |
+| **NIVEL 1 (Leve)** | `< 8GB RAM` O `< 6 Núcleos` | • Dist Render: **12**<br>• Dist Entidad: **8**<br>• Partículas: **75%** |
+| **NIVEL 2 (Moderado)** | `< 4GB RAM` O `< 4 Núcleos` | • Dist Render: **8**<br>• Dist Entidad: **6**<br>• Partículas: **50%**<br>• Nubes: **OFF**<br>• Sombras: **OFF** |
+| **NIVEL 3 (Agresivo)**| `< 3GB RAM` | • Dist Render: **6**<br>• Dist Entidad: **4**<br>• Partículas: **25%**<br>• Animaciones: **OFF** (No Fuego/Agua) |
+| **NIVEL 4 (Extremo)** | `< 2GB RAM` O `< 2 Núcleos` | • Dist Render: **4**<br>• Dist Entidad: **3**<br>• Partículas: **10%**<br>• **TODO FX OFF** |
+| **EXTREMO** | Solo Manual | • Dist Render: **2**<br>• Partículas: **0%**<br>• **HUD Oculto** |
 
-*Esta lista se actualiza en vivo vía el sistema de Cloud Config (`compatibility.json`) cada vez que lanzas el juego.*
+> **Nota Técnica**: El disparador de RAM usa `Runtime.getRuntime().maxMemory()`. Esta es la memoria asignada a Java, no tu RAM total del sistema. Asignar más RAM en el launcher puede moverte del Nivel 3 al Nivel 1.
+
+---
+
+## 🤝 SECCIÓN 4: COMPATIBILIDAD (Mayordomía)
+
+NOZH sigue un **Modelo de Mayordomía**. Sabe que es un invitado en tu modpack. Escanea activamente otros mods y cede el control para evitar conflictos.
+
+### Las Matrices de Mods
+
+Estas reglas se obtienen de la nube (`compatibility.json`) o están codificadas en `CompatRegistry.java`.
+
+**1. Dioses del Renderizado (Sodium/Embeddium)**
+
+* **Estado**: `DELEGADO`
+* **Comportamiento**: NOZH desactiva sus propios algoritmos de culling de chunks vía cancelación de Mixin. Delega todos los cambios de Distancia de Renderizado a la API de Sodium.
+* **Por qué**: El culling de Sodium es O(1). El de NOZH en Java es O(n). Sodium gana.
+
+**2. Motores de Shaders (Iris/Oculus)**
+
+* **Estado**: `PROTEGIDO`
+* **Comportamiento**: NOZH **bloquea** el Renderizado de Nubes y Sombras en "ENCENDIDO".
+* **Por qué**: Desactivar nubes o sombras vanilla a menudo rompe los compositores de los Shaders, llevando a pantallas negras.
+
+**3. Motores de Hilos (C2ME)**
+
+* **Estado**: `COOPERATIVO`
+* **Comportamiento**: NOZH desactiva el "Throttling de Actualización de Chunks".
+* **Por qué**: C2ME gestiona la prioridad de hilos dinámicamente. Que NOZH interfiera causaría inanición de hilos.
+
+**4. Mods de Utilidad**
+
+* **ModMenu**: NOZH inyecta un botón de configuración.
+* **DynamicFPS**: NOZH detecta esto y desactiva su propio "Limitador de FPS en Segundo Plano".
+* **VulkanMod**: Completamente soportado (Las llamadas Legacy OpenGL son estrictamente evitadas).
+
+---
+
+## ⚙️ SECCIÓN 5: GUÍA DE CONFIGURACIÓN
+
+Acceso vía `/nozh gui` o ModMenu.
+
+### Pestaña General
+
+* **Enabled (Activado)**: Interruptor maestro.
+* **Governor Mode (Modo Gobernador)**:
+  * `NEURAL`: IA completa (Recomendado para PCs potentes).
+  * `HEURISTIC`: Basado en reglas (Recomendado para PCs viejas, 0% uso CPU).
+  * `HYBRID`: Reglas para Pánico, IA para Reposo.
+
+### Pestaña Sistema
+
+* **Factory Reset**: Borra `config/nozh.json` y resetea el estado de memoria. **Haz clic si tu juego se ve raro.**
+* **Config Backup**: Crea una copia .json con fecha.
+* **Hot Reload**: Relee el archivo de configuración desde el disco sin reiniciar el juego.
+
+### Pestaña Avanzada (Ajustes del Cerebro)
+
+* `targetFps` (Defecto: 60): La meta. NOZH no optimizará si estás por encima.
+* `decisionInterval` (Defecto: 2000ms): Con qué frecuencia el Gobernador busca lag. Más bajo = Más responsivo pero mayor uso de CPU.
+* `learningRate` (Defecto: 0.1): Qué tan rápido cambia de opinión la IA.
+* `hysteresisTicks` (Defecto: 100): Enfriamiento de 5 segundos para prevenir parpadeo de configuraciones (ir y venir).
 
 ---
 
 <div align="center">
-  <p><i>Made with ❤️ by the Nozhtrash Team. Open Source. Transparent.</i></p>
+  <p><i>Made with ❤️ by the Nozhtrash Team. Open Source. Transparent. Honest.</i></p>
 </div>
