@@ -12,29 +12,32 @@ public final class ManualConfirmKeybind {
         void onConfirm();
     }
 
+    // Static registration ensures it's only registered once by the class loader
+    // interaction or static init
+    private static final KeyBinding KEY = KeyBindingHelper.registerKeyBinding(new KeyBinding(
+            "key.nozh.apply_suggestion",
+            GLFW.GLFW_KEY_K,
+            "category.nozh"));
+
     private final MinecraftClient client;
-    private final KeyBinding key;
     private final OnConfirm onConfirm;
 
     public ManualConfirmKeybind(MinecraftClient client, OnConfirm onConfirm) {
-        if (client == null) throw new NullPointerException("client");
-        if (onConfirm == null) throw new NullPointerException("onConfirm");
+        if (client == null)
+            throw new NullPointerException("client");
+        if (onConfirm == null)
+            throw new NullPointerException("onConfirm");
 
         this.client = client;
         this.onConfirm = onConfirm;
-
-        this.key = KeyBindingHelper.registerKeyBinding(new KeyBinding(
-                "key.nozh.apply_suggestion",
-                GLFW.GLFW_KEY_K,
-                "category.nozh"
-        ));
 
         ClientTickEvents.END_CLIENT_TICK.register(this::tick);
     }
 
     private void tick(MinecraftClient c) {
-        if (c != client) return;
-        while (key.wasPressed()) {
+        if (c != client)
+            return;
+        while (KEY.wasPressed()) {
             onConfirm.onConfirm();
         }
     }
