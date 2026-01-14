@@ -59,6 +59,9 @@ public class NozhConfig {
     public int adaptiveVisualQualityMinStep = 0; // Lower bound on adaptive quality steps.
     public int adaptiveVisualQualityMaxStep = 17; // Upper bound on adaptive quality steps.
 
+    // Potato Mode 2.0 (Phase 3)
+    public boolean potatoModeEnabled = false; // Enables deep culling and low-res hacks.
+
     // Limits & Cooldowns
     public int historyMaxEntries = 50; // Max telemetry/action history entries stored in-memory.
     public int historyCommandLimit = 10; // Max entries shown per history command request.

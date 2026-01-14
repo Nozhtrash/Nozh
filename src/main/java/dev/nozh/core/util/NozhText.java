@@ -89,8 +89,50 @@ public final class NozhText {
      * Label-value pair (neutral white value)
      * Usage: NozhText.labeled("Version", "0.1.0")
      */
+    /**
+     * Label-value pair (neutral white value)
+     * Usage: NozhText.labeled("Version", "0.1.0")
+     */
     public static MutableText labeled(String label, String value) {
         return Text.literal(label + ": ").formatted(LABEL)
                 .append(Text.literal(value).formatted(VALUE_NORMAL));
+    }
+
+    // === Phase 6: Multi-Language Support ===
+
+    /**
+     * Translatable info message.
+     * Key: nozh.info.{key}
+     */
+    public static MutableText translatableInfo(String key, Object... args) {
+        return Text.literal("NOZH: ").formatted(HEADER)
+                .append(Text.translatable(key, args).formatted(VALUE_NORMAL));
+    }
+
+    public static MutableText translatableSuccess(String key, Object... args) {
+        return Text.literal("NOZH: ").formatted(HEADER)
+                .append(Text.translatable(key, args).formatted(VALUE_GOOD));
+    }
+
+    public static MutableText translatableWarning(String key, Object... args) {
+        return Text.literal("NOZH: ").formatted(HEADER)
+                .append(Text.translatable(key, args).formatted(VALUE_WARN));
+    }
+
+    public static MutableText translatableError(String key, Object... args) {
+        return Text.literal("NOZH: ").formatted(HEADER)
+                .append(Text.translatable(key, args).formatted(VALUE_BAD));
+    }
+
+    public static MutableText translatableHeader(String key) {
+        return Text.translatable(key).formatted(HEADER);
+    }
+
+    /**
+     * Translatable label with value.
+     */
+    public static MutableText translatableLabeled(String labelKey, Object value) {
+        return Text.translatable(labelKey).append(": ").formatted(LABEL)
+                .append(Text.literal(String.valueOf(value)).formatted(VALUE_NORMAL));
     }
 }

@@ -25,7 +25,7 @@ public final class FabricFrameTickSampler {
 
     private final AtomicLong lastTickMsRaw = new AtomicLong(Double.doubleToRawLongBits(-1.0));
     private final AtomicLong lastRenderMsRaw = new AtomicLong(Double.doubleToRawLongBits(-1.0));
-    
+
     // Benchmark state
     private long lastFrameEndNs = 0;
 
@@ -100,7 +100,7 @@ public final class FabricFrameTickSampler {
         if (Double.isFinite(ms) && ms >= 0.0 && ms <= 10000.0) {
             lastRenderMsRaw.set(Double.doubleToRawLongBits(ms));
         }
-        
+
         // Calculate instantaneous FPS for benchmarking
         long end = System.nanoTime();
         if (lastFrameEndNs > 0) {
@@ -119,5 +119,39 @@ public final class FabricFrameTickSampler {
 
     public double getLastRenderMs() {
         return Double.longBitsToDouble(lastRenderMsRaw.get());
+    }
+
+    public int getParticleCount() {
+        if (client.particleManager == null)
+            return 0;
+        try {
+            String s = client.particleManager.getDebugString();
+            // Format: "Particles: 123"
+            if (s.startsWith("Particles: ")) {
+                return Integer.parseInt(s.substring(11).trim());
+            }
+            return 0;
+        } catch (Exception e) {
+            return 0;
+        }
+    }
+
+    public int getChunkUpdateCount() {
+        if (client.worldRenderer == null)
+            return 0;
+        try {
+            String s = client.worldRenderer.getChunksDebugString();
+            // Format example: "C: 13/1000 ... U: 5 ..."
+            int uIndex = s.indexOf("U: ");
+            if (uIndex != -1) {
+                int spaceAfter = s.indexOf(' ', uIndex + 3);
+                if (spaceAfter == -1)
+                    spaceAfter = s.length();
+                return Integer.parseInt(s.substring(uIndex + 3, spaceAfter).trim());
+            }
+            return 0;
+        } catch (Exception e) {
+            return 0;
+        }
     }
 }

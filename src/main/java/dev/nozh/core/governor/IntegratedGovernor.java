@@ -66,6 +66,14 @@ public final class IntegratedGovernor {
     // Intelligence
     private final PerformancePredictor perfPredictor;
     private final dev.nozh.core.intelligence.ScenarioPredictor scenarioPredictor;
+    private final dev.nozh.core.intelligence.NeuralLagPredictor neuralPredictor;
+
+    // Neural State
+    private int lastEntityCount = 0;
+    private int lastParticleCount = 0;
+    private int lastChunkUpdates = 0;
+    private double lastPlayerSpeed = 0.0;
+    private boolean lastFramePredictionReady = false;
 
     // Learning & Adaptation
     private final ActionEffectivenessTracker effectivenessTracker;
@@ -148,6 +156,7 @@ public final class IntegratedGovernor {
         }
         this.perfPredictor = new PerformancePredictor((int) targetFps);
         this.scenarioPredictor = new dev.nozh.core.intelligence.ScenarioPredictor();
+        this.neuralPredictor = new dev.nozh.core.intelligence.NeuralLagPredictor();
 
         // Initialize learning
         this.effectivenessTracker = new ActionEffectivenessTracker();
@@ -252,6 +261,18 @@ public final class IntegratedGovernor {
                 if (vitalsRecorder != null) {
                     vitalsRecorder.recordFrame((float) sample.frametimeMs());
                 }
+
+                // AI Training (Neural Lag Predictor)
+                // Train only every 5 ticks to save CPU
+                if (neuralPredictor != null && lastFramePredictionReady && tickCounter.get() % 5 == 0) {
+                    boolean actuallyLagged = sample.frametimeMs() > 30.0; // >33ms is <30FPS. Strict threshold.
+                    try {
+                        neuralPredictor.train(actuallyLagged, lastEntityCount, lastParticleCount, lastChunkUpdates,
+                                lastPlayerSpeed);
+                    } catch (Exception e) {
+                        // Ignore training errors
+                    }
+                }
             }
 
             if (telemetryBuffer == null) {
@@ -324,6 +345,33 @@ public final class IntegratedGovernor {
             try {
                 dev.nozh.core.intelligence.ScenarioPredictor.ScenarioPrediction prediction = scenarioPredictor
                         .predictNextScenario();
+
+                // Neural Lag Prediction
+                if (neuralPredictor != null && client.player != null && client.world != null) {
+                    try {
+                        int entityCount = client.world.getRegularEntityCount();
+                        int particleCount = frameTickSampler != null ? frameTickSampler.getParticleCount() : 0;
+                        int chunkUpdates = frameTickSampler != null ? frameTickSampler.getChunkUpdateCount() : 0;
+                        double speed = client.player.getVelocity().length();
+
+                        var neuralResult = neuralPredictor.predict(entityCount, particleCount, chunkUpdates, speed);
+
+                        // Store for next training step
+                        lastEntityCount = entityCount;
+                        lastParticleCount = particleCount;
+                        lastChunkUpdates = chunkUpdates;
+                        lastPlayerSpeed = speed;
+                        lastFramePredictionReady = true;
+
+                        if (neuralResult.isSpikePredicted()) {
+                            NozhConstants.LOGGER.debug("Neural AI predicts lag spike! (Prob: {})",
+                                    String.format("%.2f", neuralResult.probability()));
+                            // In future: Trigger preventive culling here
+                        }
+                    } catch (Exception e) {
+                        // Squelch errors to prevent spam
+                    }
+                }
 
                 if (prediction.confidence() > 0.8
                         && scenarioPredictor.preWarmForScenario(prediction.predictedScenario())) {

@@ -9,6 +9,7 @@ import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 @Mixin(MinecraftClient.class)
 public class MixinMinecraftClient {
@@ -21,6 +22,19 @@ public class MixinMinecraftClient {
         FabricScenarioDetector detector = NozhModClient.getScenarioDetector();
         if (detector != null) {
             detector.recordInventoryOpen();
+        }
+    }
+
+    /**
+     * Dynamic FPS Limiter (Background Saver).
+     * Reduces FPS to 5 when the window is not focused to save system resources.
+     */
+    @Inject(method = "getFramerateLimit", at = @At("HEAD"), cancellable = true)
+    private void nozh$getFramerateLimit(CallbackInfoReturnable<Integer> circles) {
+        MinecraftClient client = (MinecraftClient) (Object) this;
+        if (!client.isWindowFocused()) {
+            // Background FPS limit: 5 FPS
+            circles.setReturnValue(5);
         }
     }
 }

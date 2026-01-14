@@ -37,6 +37,8 @@ It watches your gameplay in real-time. If it detects lag, it intelligently sacri
 | **Premium Dashboard** | A AAA-quality in-game menu (`/nozh gui`) with real-time telemetry graphs. |
 | **Neural AI** | Learns from your gameplay. If `Action A` fixed lag last time, it prioritizes it next time. |
 | **Potato Mode** | A special `EXTREME` profile for PCs with 2GB RAM / Intel HD Graphics. |
+| **System Tools** | Built-in **Factory Reset**, **Config Backup**, and **One-Click Repair** tools. |
+| **Hybrid AI** | Configurable decision engine: Choose between **Neural**, **Heuristic**, or **Hybrid** logic. |
 | **Cloud Rules** | Fetches live compatibility updates from the cloud to prevent conflicts with new mods. |
 | **CrashGuard** | Detects boot loops and automatically isolates the problem to let you launch the game. |
 
@@ -48,12 +50,12 @@ It watches your gameplay in real-time. If it detects lag, it intelligently sacri
 
 NOZH acts as a **Supervisor** for your Minecraft client.
 
-1.  **Monitor**: `VitalsRecorder` measures Frame Times (ms) and Network Latency (Ping).
-2.  **Analyze**: `AnomalyDetector` determines if a lag spike is caused by **Graphics** (GPU) or **Server** (Network).
-3.  **Decide**: The `Governor` (Brain) checks the **Action Matrix** to find the best solution for the current **Scenario**.
-    *   *Example: "Player is in COMPAT. FPS is low. Disable PARTICLES."*
-4.  **Execute**: Applies the change instantly.
-5.  **Verify**: If FPS doesn't improve within 45 seconds, the **Rollback System** undoes the change.
+1. **Monitor**: `VitalsRecorder` measures Frame Times (ms) and Network Latency (Ping).
+2. **Analyze**: `AnomalyDetector` determines if a lag spike is caused by **Graphics** (GPU) or **Server** (Network).
+3. **Decide**: The `Governor` (Brain) checks the **Action Matrix** to find the best solution for the current **Scenario**.
+    - *Example: "Player is in COMPAT. FPS is low. Disable PARTICLES."*
+4. **Execute**: Applies the change instantly.
+5. **Verify**: If FPS doesn't improve within 45 seconds, the **Rollback System** undoes the change.
 
 👉 **[Technical Deep Dive (Architecture)](docs/ARCHITECTURE.md)**
 
@@ -62,17 +64,21 @@ NOZH acts as a **Supervisor** for your Minecraft client.
 # 🚀 Getting Started
 
 ### Installation
-1.  Install **Fabric Loader** (1.20.1).
-2.  Install **Fabric API**.
-3.  Drop `nozh-2.0.0.jar` into your `mods` folder.
-4.  Launch the game!
+
+1. Install **Fabric Loader** (1.20.1).
+2. Install **Fabric API**.
+3. Drop `nozh-2.0.0.jar` into your `mods` folder.
+4. Launch the game!
 
 ### First Run
+
 On your first launch, NOZH will open the **Setup Wizard**.
+
 - Choose **"Potato Mode"** if you have a slow PC.
 - Choose **"High Fidelity"** if you have a strong GPU.
 
 ### Commands
+
 - `/nozh gui` - Open the Main Dashboard.
 - `/nozh hud <mode>` - Change the onscreen info (Minimal/Compact/Expert).
 - `/nozh status` - Check what the AI is thinking.

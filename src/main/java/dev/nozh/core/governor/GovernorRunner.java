@@ -146,8 +146,25 @@ public final class GovernorRunner {
             // Ignore update failure
         }
         tickCounter++;
-        int pollInterval = Math.max(20, ConfigManager.getConfig().evalPeriodTicks);
-        if (tickCounter < pollInterval) {
+        // Dynamic Sampling (Phase 5)
+        // Adjust poll interval based on scene chaos (standard deviation)
+        int minInterval = Math.max(5, ConfigManager.getConfig().evalPeriodTicks / 2);
+        int maxInterval = Math.max(20, ConfigManager.getConfig().evalPeriodTicks * 2);
+
+        // Default to configured period
+        int targetInterval = ConfigManager.getConfig().evalPeriodTicks;
+
+        // If we have recent frame data, calculate variance to adjust agility
+        if (stateStore.snapshotSafe().avgFrametimeMs() > 0) {
+            // Heuristic: Spike count correlates to needing faster reaction
+            int recentSpikes = stateStore.snapshotSafe().spikeCount();
+            double urgency = dev.nozh.core.util.MathOptimizer.clamp(recentSpikes / 5.0, 0.0, 1.0);
+            // Lerp between slow (stable) and fast (chaos)
+            targetInterval = (int) dev.nozh.core.util.MathOptimizer.lerp((double) maxInterval, (double) minInterval,
+                    urgency);
+        }
+
+        if (tickCounter < targetInterval) {
             return;
         }
         tickCounter = 0;
@@ -512,7 +529,8 @@ public final class GovernorRunner {
         String bound = applyCausalityBound(detectBound(state), spikeCausality);
         long lastActionTimestamp = state.governorLastActionTimestamp();
         boolean benchmarkMode = config.benchmarkModeEnabled;
-        if (!governor.canAct(state, lastActionTimestamp, nowMillis, benchmarkMode, config.benchmarkMicroIntervalMillis)) {
+        if (!governor.canAct(state, lastActionTimestamp, nowMillis, benchmarkMode,
+                config.benchmarkMicroIntervalMillis)) {
             return false;
         }
 
@@ -567,7 +585,8 @@ public final class GovernorRunner {
                 }
             }
             PerfSnapshot baselineSnapshot = captureSnapshot();
-            Optional<dev.nozh.core.bus.CapabilityValue> previousValue = providerRegistry.get(preventiveDecision.capabilityId())
+            Optional<dev.nozh.core.bus.CapabilityValue> previousValue = providerRegistry
+                    .get(preventiveDecision.capabilityId())
                     .flatMap(provider -> provider.getCurrentValueSafe());
             Command cmd = new Command.ApplyCapability(
                     preventiveDecision.capabilityId(),
@@ -595,7 +614,8 @@ public final class GovernorRunner {
 
         PerfSnapshot baselineSnapshot = captureSnapshot();
         int observationWindowSeconds = resolveObservationWindowSeconds(config, baselineSnapshot);
-        Optional<dev.nozh.core.bus.CapabilityValue> previousValue = providerRegistry.get(preventiveDecision.capabilityId())
+        Optional<dev.nozh.core.bus.CapabilityValue> previousValue = providerRegistry
+                .get(preventiveDecision.capabilityId())
                 .flatMap(provider -> provider.getCurrentValueSafe());
         Command cmd = new Command.ApplyCapability(
                 preventiveDecision.capabilityId(),
@@ -840,7 +860,8 @@ public final class GovernorRunner {
         dev.nozh.core.context.ScenarioConfidence confidence = state.scenarioConfidenceInfo();
         if (confidence.band() == dev.nozh.core.context.ScenarioConfidence.Band.LOW
                 || confidence.stability() < 0.45) {
-            return baseMode == GovernorMode.AUTO_AGGRESSIVE ? GovernorMode.AUTO_CONSERVATIVE : GovernorMode.MANUAL_ASSIST;
+            return baseMode == GovernorMode.AUTO_AGGRESSIVE ? GovernorMode.AUTO_CONSERVATIVE
+                    : GovernorMode.MANUAL_ASSIST;
         }
         if (confidence.band() == dev.nozh.core.context.ScenarioConfidence.Band.MEDIUM
                 && baseMode == GovernorMode.AUTO_AGGRESSIVE) {
@@ -863,7 +884,8 @@ public final class GovernorRunner {
                             logger.warn("Safe fallback rollback failed");
                         }
                     }), () -> logger.warn("Safe fallback rollback unavailable"));
-            sessionLearning.recordOutcome(pending.capability(), pending.scenario(), ActionOutcome.NEGATIVE, 0.0, 0.0, 0);
+            sessionLearning.recordOutcome(pending.capability(), pending.scenario(), ActionOutcome.NEGATIVE, 0.0, 0.0,
+                    0);
             successTracker.recordFailure(pending.capability());
             try {
                 stateStore.update(RuntimeState::withPendingActionCleared);
@@ -916,8 +938,10 @@ public final class GovernorRunner {
                     p95Delta, spikeDelta);
             successTracker.recordFailure(pending.capability());
         } else if (outcome == ActionOutcome.POSITIVE) {
-            double gainAvg = resolveGain(pending.baselineAvgMs(), currentSnapshot != null ? currentSnapshot.avgFrametimeMs() : Double.NaN);
-            double gainP95 = resolveGain(pending.baselineP95Ms(), currentSnapshot != null ? currentSnapshot.p95FrametimeMs() : Double.NaN);
+            double gainAvg = resolveGain(pending.baselineAvgMs(),
+                    currentSnapshot != null ? currentSnapshot.avgFrametimeMs() : Double.NaN);
+            double gainP95 = resolveGain(pending.baselineP95Ms(),
+                    currentSnapshot != null ? currentSnapshot.p95FrametimeMs() : Double.NaN);
             sessionLearning.recordOutcome(pending.capability(), pending.scenario(), ActionOutcome.POSITIVE,
                     Math.max(gainAvg, gainP95), p95Delta, spikeDelta);
             successTracker.recordSuccess(pending.capability());
@@ -1164,7 +1188,6 @@ public final class GovernorRunner {
             logger.warn("Failed to update rollback outcome state");
         }
     }
-
 
     private int resolveObservationWindowSeconds(NozhConfig config, PerfSnapshot snapshot) {
         if (config != null && config.observationWindowSeconds > 0) {

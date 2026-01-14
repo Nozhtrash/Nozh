@@ -76,22 +76,26 @@ public final class NozhCommands {
                                     .then(ClientCommandManager.literal("export")
                                             .then(ClientCommandManager.literal("csv")
                                                     .executes(context -> {
-                                                        runTelemetryExport(context.getSource(), TelemetryExportFormat.CSV);
+                                                        runTelemetryExport(context.getSource(),
+                                                                TelemetryExportFormat.CSV);
                                                         return 1;
                                                     }))
                                             .then(ClientCommandManager.literal("json")
                                                     .executes(context -> {
-                                                        runTelemetryExport(context.getSource(), TelemetryExportFormat.JSON);
+                                                        runTelemetryExport(context.getSource(),
+                                                                TelemetryExportFormat.JSON);
                                                         return 1;
                                                     }))
                                             .then(ClientCommandManager.literal("compact-csv")
                                                     .executes(context -> {
-                                                        runTelemetryExport(context.getSource(), TelemetryExportFormat.COMPACT_CSV);
+                                                        runTelemetryExport(context.getSource(),
+                                                                TelemetryExportFormat.COMPACT_CSV);
                                                         return 1;
                                                     }))
                                             .then(ClientCommandManager.literal("compact-json")
                                                     .executes(context -> {
-                                                        runTelemetryExport(context.getSource(), TelemetryExportFormat.COMPACT_JSON);
+                                                        runTelemetryExport(context.getSource(),
+                                                                TelemetryExportFormat.COMPACT_JSON);
                                                         return 1;
                                                     }))))
                             .then(ClientCommandManager.literal("enable")
@@ -102,6 +106,11 @@ public final class NozhCommands {
                             .then(ClientCommandManager.literal("disable")
                                     .executes(context -> {
                                         runDisable(context.getSource());
+                                        return 1;
+                                    }))
+                            .then(ClientCommandManager.literal("spy")
+                                    .executes(context -> {
+                                        runSpy(context.getSource());
                                         return 1;
                                     }))
                             .then(ClientCommandManager.literal("safemode")
@@ -132,10 +141,10 @@ public final class NozhCommands {
         int failures = 0;
 
         // Header
-        source.sendFeedback(NozhText.header("=== NOZH Self-Check ==="));
+        source.sendFeedback(NozhText.translatableHeader("nozh.selfcheck.header"));
 
         // Environment
-        source.sendFeedback(NozhText.header("--- Environment ---"));
+        source.sendFeedback(NozhText.translatableHeader("nozh.selfcheck.env.header"));
         String mcVersion = SharedConstants.getGameVersion().getName();
         String fabricVersion = FabricLoader.getInstance().getModContainer("fabricloader")
                 .map(mod -> mod.getMetadata().getVersion().getFriendlyString())
@@ -149,54 +158,68 @@ public final class NozhCommands {
                 .styled(s -> s.withColor(0xAAAAAA)));
 
         // Facts
-        source.sendFeedback(NozhText.header("--- Facts ---"));
+        source.sendFeedback(NozhText.translatableHeader("nozh.selfcheck.facts.header"));
 
         NozhConfig config = ConfigManager.getConfig();
         if (config != null) {
-            source.sendFeedback(NozhText.labeled("Config", "Loaded OK", true));
+            source.sendFeedback(NozhText.translatableLabeled("nozh.selfcheck.config",
+                    Text.translatable("nozh.selfcheck.status.ok").getString())); // HACK: reusing labeled for now which
+                                                                                 // takes String value, but ideally we'd
+                                                                                 // pass Text
             if (config.wasCorrected()) {
-                source.sendFeedback(NozhText.warning("  Config auto-corrected"));
+                source.sendFeedback(NozhText.translatableWarning("nozh.command.selfcheck.config.corrected"));
                 warnings++;
             }
         } else {
-            source.sendFeedback(NozhText.labeled("Config", "FAILED", false));
+            source.sendFeedback(NozhText.translatableLabeled("nozh.selfcheck.config", "FAILED")); // Fallback for failed
             failures++;
         }
 
         NozhState state = StateManager.getState();
         if (state != null) {
-            source.sendFeedback(NozhText.labeled("State", "Loaded OK", true));
+            source.sendFeedback(NozhText.translatableLabeled("nozh.selfcheck.state",
+                    Text.translatable("nozh.selfcheck.status.ok").getString()));
         } else {
-            source.sendFeedback(NozhText.labeled("State", "FAILED", false));
+            source.sendFeedback(NozhText.translatableLabeled("nozh.selfcheck.state", "FAILED"));
             failures++;
         }
 
         boolean inSafeMode = CrashLoopGuard.isInSafeMode();
         String smReason = CrashLoopGuard.getSafeModeReason();
-        source.sendFeedback(
-                NozhText.labeled("Safe Mode", inSafeMode ? "ACTIVE (" + smReason + ")" : "Off", !inSafeMode));
+        String smStatus = inSafeMode
+                ? Text.translatable("nozh.selfcheck.status.active").getString() + " (" + smReason + ")"
+                : Text.translatable("nozh.command.selfcheck.safemode.off").getString();
+        // Manually constructing labeled here because NozhText.labeled expects explicit
+        // isGood boolean logic which we want to keep
+        source.sendFeedback(NozhText.translatableLabeled("nozh.selfcheck.safemode", smStatus));
 
         // God Mode Modules
-        source.sendFeedback(NozhText.header("--- God Mode Modules ---"));
-        source.sendFeedback(NozhText.labeled("Orchestration", "DIRECTOR", true));
-        source.sendFeedback(NozhText.labeled("Entity Control", "ACTIVE", true));
-        source.sendFeedback(NozhText.labeled("True Sight", "ACTIVE", true));
+        source.sendFeedback(NozhText.translatableHeader("nozh.selfcheck.modules.header"));
+        source.sendFeedback(NozhText.translatableLabeled("nozh.selfcheck.title.orchestration",
+                Text.translatable("nozh.selfcheck.value.director").getString()));
+        source.sendFeedback(NozhText.translatableLabeled("nozh.selfcheck.title.entity_control",
+                Text.translatable("nozh.selfcheck.status.active").getString()));
+        source.sendFeedback(NozhText.translatableLabeled("nozh.selfcheck.title.true_sight",
+                Text.translatable("nozh.selfcheck.status.active").getString()));
 
         // Compat Report (Phase 9)
         CompatService.CompatReport report = CompatService.generateReport();
         if (!report.performanceMods().isEmpty()) {
-            source.sendFeedback(Text.literal("  Perf Mods: " + String.join(", ", report.performanceMods()))
+            source.sendFeedback(Text
+                    .translatable("nozh.command.selfcheck.compat.perf_mods",
+                            String.join(", ", report.performanceMods()))
                     .styled(s -> s.withColor(0x55FF55)));
         }
         if (!report.shaderMods().isEmpty()) {
-            source.sendFeedback(Text.literal("  Shader Mods: " + String.join(", ", report.shaderMods()))
+            source.sendFeedback(Text
+                    .translatable("nozh.command.selfcheck.compat.shader_mods", String.join(", ", report.shaderMods()))
                     .styled(s -> s.withColor(0x55FFFF)));
         }
         for (net.minecraft.text.Text hint : report.hints()) {
             source.sendFeedback(hint.copy().styled(s -> s.withColor(0xAAAAAA)));
         }
 
-        source.sendFeedback(NozhText.header("--- Capability Stewards ---"));
+        source.sendFeedback(NozhText.translatableHeader("nozh.selfcheck.stewards.header"));
         for (CompatService.CapabilitySteward steward : CompatService.generateStewardReport()) {
             int color = steward.conflict() ? 0xFFAA00 : 0x55FF55;
             source.sendFeedback(Text.literal("  " + steward.capabilityId().name() + " → " + steward.steward())
@@ -204,13 +227,13 @@ public final class NozhCommands {
         }
 
         // Verdict
-        source.sendFeedback(NozhText.header("--- Verdict ---"));
+        source.sendFeedback(NozhText.translatableHeader("nozh.selfcheck.verdict.header"));
         if (failures > 0) {
-            source.sendFeedback(NozhText.error("FAIL (" + failures + " failures)"));
+            source.sendFeedback(NozhText.translatableError("nozh.selfcheck.verdict.fail", failures));
         } else if (warnings > 0) {
-            source.sendFeedback(NozhText.warning("WARN (" + warnings + " warnings)"));
+            source.sendFeedback(NozhText.translatableWarning("nozh.selfcheck.verdict.warn", warnings));
         } else {
-            source.sendFeedback(NozhText.success("HEALTHY"));
+            source.sendFeedback(NozhText.translatableSuccess("nozh.selfcheck.verdict.healthy"));
         }
     }
 
@@ -323,6 +346,37 @@ public final class NozhCommands {
         StateStore.getInstance().update(state -> state.withConfig(config));
 
         source.sendFeedback(Text.translatable("nozh.disable.success"));
+    }
+
+    private static void runSpy(FabricClientCommandSource source) {
+        MinecraftClient client = MinecraftClient.getInstance();
+        if (client.world == null) {
+            source.sendFeedback(Text.translatable("nozh.spy.no_world").styled(s -> s.withColor(0xFFAA00)));
+            return;
+        }
+
+        java.util.Map<String, Integer> counts = new java.util.HashMap<>();
+        int total = 0;
+
+        for (net.minecraft.entity.Entity entity : client.world.getEntities()) {
+            String name = entity.getType().getUntranslatedName();
+            counts.put(name, counts.getOrDefault(name, 0) + 1);
+            total++;
+        }
+
+        source.sendFeedback(NozhText.translatableHeader("nozh.spy.header"));
+        source.sendFeedback(NozhText.translatableLabeled("nozh.spy.total", String.valueOf(total)));
+
+        counts.entrySet().stream()
+                .sorted((e1, e2) -> e2.getValue().compareTo(e1.getValue()))
+                .limit(5)
+                .forEach(entry -> {
+                    String name = Text.translatable(entry.getKey()).getString();
+                    int count = entry.getValue();
+                    int color = count > 50 ? 0xFF5555 : (count > 20 ? 0xFFAA00 : 0x55FF55);
+                    source.sendFeedback(Text.literal(String.format("  %dx %s", count, name))
+                            .styled(s -> s.withColor(color)));
+                });
     }
 
     private static void runApplySuggestion(FabricClientCommandSource source) {

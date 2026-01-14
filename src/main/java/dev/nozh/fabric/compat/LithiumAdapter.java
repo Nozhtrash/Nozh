@@ -2,9 +2,6 @@ package dev.nozh.fabric.compat;
 
 import dev.nozh.NozhConstants;
 
-import java.lang.reflect.Field;
-import java.lang.reflect.Method;
-
 /**
  * Lithium adapter for optimization detection.
  * 

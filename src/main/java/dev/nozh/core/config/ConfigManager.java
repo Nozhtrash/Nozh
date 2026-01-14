@@ -239,6 +239,19 @@ public final class ConfigManager {
         notifyListeners(snapshot);
     }
 
+    /**
+     * Serialize current config to JSON string.
+     * Useful for export/clipboard.
+     */
+    public static String serialize() {
+        synchronized (LOCK) {
+            if (config == null) {
+                return "{}";
+            }
+            return JsonMini.toJson(config);
+        }
+    }
+
     private static void ensureConfigDirExists() throws IOException {
         Path dir = NozhConstants.CONFIG_DIR;
         if (!Files.exists(dir)) {
@@ -273,4 +286,5 @@ public final class ConfigManager {
     private static void saveNowSilently() {
         saveInternal(false, false, true);
     }
+
 }

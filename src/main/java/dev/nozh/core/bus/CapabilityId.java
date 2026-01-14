@@ -39,5 +39,8 @@ public enum CapabilityId {
     ARMOR_STANDS,
     ITEM_FRAMES,
     BLOCK_ENTITIES,
-    ANIMATIONS
+    ANIMATIONS,
+
+    // Phase 3: Beyond God Mode
+    SHADERS
 }

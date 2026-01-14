@@ -11,7 +11,7 @@ import dev.nozh.core.capability.ProviderRegistry;
 import dev.nozh.core.governor.GovernorRunner;
 import dev.nozh.core.matrix.ActionSuccessTracker;
 import dev.nozh.core.safety.CrashLoopGuard;
-import dev.nozh.core.state.RuntimeState;
+
 import dev.nozh.core.state.StateStore;
 import dev.nozh.core.benchmark.InitialBenchmarkRunner;
 import dev.nozh.core.benchmark.BenchmarkEnvironment;
@@ -165,10 +165,17 @@ public class NozhModClient implements ClientModInitializer {
 
         resourceAllocator = new dev.nozh.core.optimization.ResourceBudgetAllocator();
         memoryOptimizer = new dev.nozh.core.potato.MemoryOptimizer();
-        potatoModeEngine = new dev.nozh.core.potato.PotatoModeEngine(new dev.nozh.core.config.HardwareProfiler());
+        dev.nozh.core.potato.PotatoConfigApplicator applicator = new dev.nozh.fabric.potato.FabricPotatoConfigApplicator(
+                optionsAdapter);
+        potatoModeEngine = new dev.nozh.core.potato.PotatoModeEngine(applicator);
 
         // Initial Potato Check
         potatoModeEngine.autoConfigure(ConfigManager.getConfig());
+        ConfigManager.addListener(config -> {
+            if (potatoModeEngine != null) {
+                potatoModeEngine.autoConfigure(config);
+            }
+        });
 
         // 8. Create ActionProcessor bridge
         StandardActionProcessor actionProcessor = new StandardActionProcessor(

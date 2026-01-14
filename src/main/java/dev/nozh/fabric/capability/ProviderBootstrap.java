@@ -48,5 +48,8 @@ public final class ProviderBootstrap {
         registry.register(new ItemFrameProvider(options));
         registry.register(new BlockEntityProvider(options));
         registry.register(new AnimationProvider(options));
+
+        // Phase 3: Beyond God Mode
+        registry.register(new dev.nozh.fabric.compat.iris.IrisOrchestrator());
     }
 }

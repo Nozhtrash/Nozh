@@ -44,6 +44,18 @@ public class MixinEntityRenderDispatcher {
             ci.cancel();
             return;
         }
+
+        // Native Occlusion Culling (New in v1.1.0)
+        // If external "EntityCulling" mod is NOT present, we handle it natively.
+        if (!dev.nozh.fabric.compat.EntityCullingAdapter.shouldDeferCulling()) {
+            if (dev.nozh.core.render.EntityOcclusionCuller.shouldSkipRender(entity)) {
+                if (perfManager != null) {
+                    perfManager.onRenderPhaseEnd(RenderPhase.ENTITIES);
+                }
+                ci.cancel();
+                return;
+            }
+        }
     }
 
     @Inject(method = "render", at = @At("RETURN"))

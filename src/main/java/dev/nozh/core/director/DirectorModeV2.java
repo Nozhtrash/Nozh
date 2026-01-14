@@ -11,16 +11,13 @@ public final class DirectorModeV2 {
             "sodium",
             "sodium-extra",
             "reeses-sodium-options",
-            "indium"
-    );
+            "indium");
 
     private static final Set<String> IRIS_STACK = Set.of(
-            "iris"
-    );
+            "iris");
 
     private static final Set<String> LITHIUM_STACK = Set.of(
-            "lithium"
-    );
+            "lithium");
 
     private final FabricLoader loader;
 
@@ -29,7 +26,8 @@ public final class DirectorModeV2 {
     }
 
     public DirectorModeV2(FabricLoader loader) {
-        if (loader == null) throw new NullPointerException("loader");
+        if (loader == null)
+            throw new NullPointerException("loader");
         this.loader = loader;
     }
 
@@ -58,6 +56,32 @@ public final class DirectorModeV2 {
         }
 
         return new DirectorBiasHints(bias, eco);
+    }
+
+    public DirectorSummary getDirectorSummary() {
+        boolean hasSodium = anyLoaded(SODIUM_STACK);
+        boolean hasIris = anyLoaded(IRIS_STACK);
+        boolean hasLithium = anyLoaded(LITHIUM_STACK);
+
+        DirectorBiasHints hints = computeBiasHints();
+        String mainPartner = "Vanilla";
+        String message = "Solo";
+
+        if (hasIris) {
+            mainPartner = "Iris+Sodium";
+            message = "Co-op: Visuals Delegated";
+        } else if (hasSodium) {
+            mainPartner = "Sodium";
+            message = "Co-op: Rendering Delegated";
+        } else if (hasLithium) {
+            mainPartner = "Lithium";
+            message = "Co-op: Physics Delegated";
+        }
+
+        return new DirectorSummary(mainPartner, message, hints.cpuGpuBias);
+    }
+
+    public record DirectorSummary(String partner, String message, double bias) {
     }
 
     private boolean anyLoaded(Set<String> ids) {

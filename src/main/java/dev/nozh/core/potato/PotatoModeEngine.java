@@ -174,7 +174,7 @@ public final class PotatoModeEngine {
     private PotatoConfig currentConfig;
 
     // Hardware info
-    private final HardwareProfiler hardwareProfiler;
+    private final PotatoConfigApplicator applicator;
     private long totalRamMb;
     private int cpuCores;
     private boolean integratedGpu;
@@ -183,16 +183,17 @@ public final class PotatoModeEngine {
      * Constructs a new PotatoModeEngine with default profiler.
      */
     public PotatoModeEngine() {
-        this(new HardwareProfiler());
+        this(null);
     }
 
     /**
      * Constructs a new PotatoModeEngine.
      * 
      * @param hardwareProfiler hardware profiler for detection
+     * @param applicator       configuration applicator (optional, can be null)
      */
-    public PotatoModeEngine(HardwareProfiler hardwareProfiler) {
-        this.hardwareProfiler = hardwareProfiler;
+    public PotatoModeEngine(PotatoConfigApplicator applicator) {
+        this.applicator = applicator;
         this.active = false;
         this.currentLevel = PotatoLevel.LEVEL_1;
         this.currentConfig = PotatoConfig.fromLevel(currentLevel);
@@ -372,6 +373,18 @@ public final class PotatoModeEngine {
                 currentConfig.renderDistance,
                 currentConfig.entityDistance,
                 (int) (currentConfig.particleMultiplier * 100));
+
+        if (applicator != null && applicator.isAvailable()) {
+            try {
+                applicator.apply(currentConfig);
+                NozhConstants.LOGGER.info("Applied Potato Mode settings via applicator.");
+            } catch (Exception e) {
+                NozhConstants.LOGGER.error("Failed to apply Potato Mode settings", e);
+            }
+        } else {
+            NozhConstants.LOGGER
+                    .warn("Potato Mode activated but no applicator available - settings NOT applied to game options.");
+        }
 
         globalActive = true;
     }
