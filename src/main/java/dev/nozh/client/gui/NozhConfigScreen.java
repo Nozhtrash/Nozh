@@ -61,9 +61,16 @@ public class NozhConfigScreen extends Screen {
         // Initialize widgets
         int graphHeight = 60;
         IntegratedGovernor governor = NozhMod.getGovernor();
-        // Graph widget is disabled until VitalsRecorder getter is added
-        // TODO: Add getVitalsRecorder() to IntegratedGovernor
-        this.graphWidget = null;
+        if (governor != null) {
+            this.graphWidget = new VitalsGraphWidget(
+                    SIDEBAR_WIDTH + 10,
+                    HEADER_HEIGHT + 10,
+                    this.width - SIDEBAR_WIDTH - 20,
+                    graphHeight,
+                    governor.getVitalsRecorder());
+        } else {
+            this.graphWidget = null;
+        }
 
         // Navigation Buttons (Sidebar)
         int y = HEADER_HEIGHT + 20;

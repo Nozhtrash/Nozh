@@ -91,7 +91,8 @@ public final class IntegratedGovernor {
     // State
     private volatile Scenario currentScenario = Scenario.STANDARD;
     private volatile DecisionReasoning lastDecisionReasoning = null;
-    private final PerformancePredictor predictor; // Re-using variable name from error log, assumed same as perfPredictor but let's just use perfPredictor correctly
+    private final PerformancePredictor predictor; // Re-using variable name from error log, assumed same as
+                                                  // perfPredictor but let's just use perfPredictor correctly
 
     // Thread-safe atomic variables
     private final AtomicLong lastDecisionTimeRaw = new AtomicLong(Double.doubleToRawLongBits(0.0));
@@ -99,7 +100,7 @@ public final class IntegratedGovernor {
 
     private volatile boolean initialized = false;
     private final ConcurrentHashMap<String, CompletableFuture<ActionResult>> pendingActions = new ConcurrentHashMap<>();
-    
+
     // Professional Core Components
     private final NetworkLatencyTracker latencyTracker;
     private final dev.nozh.core.intelligence.AnomalyDetector anomalyDetector;
@@ -157,15 +158,16 @@ public final class IntegratedGovernor {
         this.healthMonitor = new SystemHealthMonitor();
         this.eventLogger = new PerformanceEventLogger(logPath);
         this.metricsCollector = new MetricsCollector();
-        
+
         // Initialize Professional Core
         this.latencyTracker = new NetworkLatencyTracker();
         this.anomalyDetector = new dev.nozh.core.intelligence.AnomalyDetector(this.latencyTracker);
         this.vitalsRecorder = new VitalsRecorder();
-        
+
         if (forceSafeMode) {
             NozhConstants.LOGGER.warn("Applying Safe Mode overrides...");
-            // In a real implementation, this would reset config values or set a flag in configManager
+            // In a real implementation, this would reset config values or set a flag in
+            // configManager
             // For now, we log it and potentially disable learning to prevent bad state
         }
 
@@ -214,7 +216,7 @@ public final class IntegratedGovernor {
             if (cameraTracker != null) {
                 cameraTracker.tick();
             }
-            
+
             // Intelligence: Feed Scenario Predictor
             if (scenarioPredictor != null && client.player != null) {
                 double velocity = client.player.getVelocity().length();
@@ -229,7 +231,7 @@ public final class IntegratedGovernor {
                 if (sample.hasFrametimeData() && perfPredictor != null) {
                     perfPredictor.addSample(sample.frametimeMs());
                 }
-                
+
                 // Vitals Recording
                 if (vitalsRecorder != null) {
                     vitalsRecorder.recordFrame((float) sample.frametimeMs());
@@ -300,16 +302,18 @@ public final class IntegratedGovernor {
             NozhConstants.LOGGER.warn("Cannot make decision with null snapshot");
             return;
         }
-        
+
         // Intelligence: Check Scenario Prediction
         if (scenarioPredictor != null) {
             try {
-                dev.nozh.core.intelligence.ScenarioPredictor.ScenarioPrediction prediction = 
-                    scenarioPredictor.predictNextScenario();
-                
-                if (prediction.confidence() > 0.8 && scenarioPredictor.preWarmForScenario(prediction.predictedScenario())) {
-                    NozhConstants.LOGGER.info("Intelligence: Predicting transition to {} (confidence: {}). Pre-warming engines.", 
-                        prediction.predictedScenario(), String.format("%.2f", prediction.confidence()));
+                dev.nozh.core.intelligence.ScenarioPredictor.ScenarioPrediction prediction = scenarioPredictor
+                        .predictNextScenario();
+
+                if (prediction.confidence() > 0.8
+                        && scenarioPredictor.preWarmForScenario(prediction.predictedScenario())) {
+                    NozhConstants.LOGGER.info(
+                            "Intelligence: Predicting transition to {} (confidence: {}). Pre-warming engines.",
+                            prediction.predictedScenario(), String.format("%.2f", prediction.confidence()));
                     // Potential extension: loosen/tighten thresholds based on prediction
                 }
             } catch (Exception e) {
@@ -331,13 +335,14 @@ public final class IntegratedGovernor {
                 NozhConstants.LOGGER.warn("Invalid FPS calculated: " + currentFps);
                 return;
             }
-            
+
             // Check for Anomalies (Network Lag vs True Lag)
-            dev.nozh.core.intelligence.AnomalyDetector.LagType anomaly = anomalyDetector.analyze(snapshot.avgFrametimeMs());
+            dev.nozh.core.intelligence.AnomalyDetector.LagType anomaly = anomalyDetector
+                    .analyze(snapshot.avgFrametimeMs());
             if (anomaly == dev.nozh.core.intelligence.AnomalyDetector.LagType.NETWORK_LAG) {
                 // If it's network lag, DON'T OPTIMIZE aggressively
                 if (tickCounter.get() % 100 == 0) {
-                     NozhConstants.LOGGER.info("Detected NETWORK LAG (Ping blocked). Optimization suspended.");
+                    NozhConstants.LOGGER.info("Detected NETWORK LAG (Ping blocked). Optimization suspended.");
                 }
                 return;
             }
@@ -486,11 +491,12 @@ public final class IntegratedGovernor {
 
     private String determineHardwareProfile(double fps) {
         // 1. Check actual hardware limitations first
-        // If the system has <= 4GB RAM or <= 2 cores, it is low-end regardless of current FPS
+        // If the system has <= 4GB RAM or <= 2 cores, it is low-end regardless of
+        // current FPS
         // (e.g. looking at the floor might give 60fps but logic will choke)
         long maxMemory = Runtime.getRuntime().maxMemory();
         int processors = Runtime.getRuntime().availableProcessors();
-        
+
         if (maxMemory < 3L * 1024 * 1024 * 1024 || processors <= 2) { // < 3GB heap or dual-core
             return "low";
         }
@@ -511,11 +517,9 @@ public final class IntegratedGovernor {
 
     // Pre-computed action bias types to avoid string switching in hot paths
     private static final java.util.Set<String> GPU_ACTIONS = java.util.Set.of(
-        "disable_clouds", "reduce_shadows", "lower_particles", "reduce_render_distance", "graphics_mode"
-    );
+            "disable_clouds", "reduce_shadows", "lower_particles", "reduce_render_distance", "graphics_mode");
     private static final java.util.Set<String> CPU_ACTIONS = java.util.Set.of(
-        "lower_entity_distance"
-    );
+            "lower_entity_distance");
 
     private double getActionBiasMultiplier(String actionId) {
         if (actionId == null) {
@@ -626,14 +630,13 @@ public final class IntegratedGovernor {
 
         // CRITICAL: Actually execute the action using ProviderExecutor
         NozhConstants.LOGGER.info("Executing action via ProviderExecutor: {}", actionId);
-        
-        CompletableFuture<ProviderExecutor.ExecutionResult> executionFuture = 
-            providerExecutor.executeAction(actionId);
-        
+
+        CompletableFuture<ProviderExecutor.ExecutionResult> executionFuture = providerExecutor.executeAction(actionId);
+
         // Wrap the result for our internal tracking
         CompletableFuture<ActionResult> future = executionFuture.thenApply(result -> {
-            NozhConstants.LOGGER.info("Action '{}' execution result: success={}, message={}, duration={}ms", 
-                actionId, result.isSuccess(), result.getMessage(), result.getExecutionTimeMs());
+            NozhConstants.LOGGER.info("Action '{}' execution result: success={}, message={}, duration={}ms",
+                    actionId, result.isSuccess(), result.getMessage(), result.getExecutionTimeMs());
             return new ActionResult(result.isSuccess(), startTime);
         }).exceptionally(ex -> {
             NozhConstants.LOGGER.error("Action execution failed: " + actionId, ex);
@@ -951,6 +954,16 @@ public final class IntegratedGovernor {
         return pendingActions.size();
     }
 
+    /**
+     * Get the VitalsRecorder instance for frame time visualization.
+     * Used by NozhConfigScreen to display the realtime graph.
+     * 
+     * @return the VitalsRecorder instance, never null
+     */
+    public VitalsRecorder getVitalsRecorder() {
+        return vitalsRecorder;
+    }
+
     public void shutdown() {
         NozhConstants.LOGGER.info("Starting IntegratedGovernor shutdown...");
 
@@ -1023,14 +1036,19 @@ public final class IntegratedGovernor {
     }
 
     private dev.nozh.api.Scenario toApiScenario(Scenario contextScenario) {
-        if (contextScenario == null) return dev.nozh.api.Scenario.UNKNOWN;
+        if (contextScenario == null)
+            return dev.nozh.api.Scenario.UNKNOWN;
         try {
             // Try explicit mapping for mismatched names, otherwise valueOf
             switch (contextScenario) {
-                case STANDARD: return dev.nozh.api.Scenario.EXPLORATION;
-                case EXPLORING: return dev.nozh.api.Scenario.EXPLORATION;
-                case LOADING: return dev.nozh.api.Scenario.WORLD_LOADING;
-                default: return dev.nozh.api.Scenario.valueOf(contextScenario.name());
+                case STANDARD:
+                    return dev.nozh.api.Scenario.EXPLORATION;
+                case EXPLORING:
+                    return dev.nozh.api.Scenario.EXPLORATION;
+                case LOADING:
+                    return dev.nozh.api.Scenario.WORLD_LOADING;
+                default:
+                    return dev.nozh.api.Scenario.valueOf(contextScenario.name());
             }
         } catch (IllegalArgumentException e) {
             return dev.nozh.api.Scenario.UNKNOWN;
