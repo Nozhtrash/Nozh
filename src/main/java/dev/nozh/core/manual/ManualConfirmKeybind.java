@@ -14,7 +14,7 @@ public final class ManualConfirmKeybind {
 
     // Static registration ensures it's only registered once by the class loader
     // interaction or static init
-    private static final KeyBinding KEY = KeyBindingHelper.registerKeyBinding(new KeyBinding(
+    public static final KeyBinding KEY = KeyBindingHelper.registerKeyBinding(new KeyBinding(
             "key.nozh.apply_suggestion",
             GLFW.GLFW_KEY_K,
             "category.nozh"));

@@ -212,11 +212,7 @@ public class NozhModClient implements ClientModInitializer {
                 GLFW.GLFW_KEY_UNKNOWN,
                 "category.nozh"));
 
-        applySuggestionKey = KeyBindingHelper.registerKeyBinding(new KeyBinding(
-                "key.nozh.apply_suggestion",
-                InputUtil.Type.KEYSYM,
-                GLFW.GLFW_KEY_K,
-                "category.nozh"));
+        applySuggestionKey = dev.nozh.core.manual.ManualConfirmKeybind.KEY;
 
         exportReportKey = KeyBindingHelper.registerKeyBinding(new KeyBinding(
                 "key.nozh.export_report",
