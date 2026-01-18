@@ -257,6 +257,8 @@
   "nozh.config.tab.cloud": "Sistema",
   "nozh.config.tab.system": "Sistema",
   "nozh.config.tab.advanced": "Avanzado",
+  "nozh.config.button.save": "Guardar",
+  "nozh.config.button.saved": "Guardado!",
   "nozh.config.button.save_close": "Guardar y Salir",
   "nozh.config.profile.low": "Aplicar: Modo Patata",
   "nozh.config.profile.mid": "Aplicar: Equilibrado",

@@ -259,6 +259,8 @@
   "nozh.config.tab.cloud": "System",
   "nozh.config.tab.system": "System",
   "nozh.config.tab.advanced": "Advanced",
+  "nozh.config.button.save": "Save",
+  "nozh.config.button.saved": "Saved!",
   "nozh.config.button.save_close": "Save & Close",
   "nozh.config.profile.low": "Apply: Potato Mode",
   "nozh.config.profile.mid": "Apply: Balanced",

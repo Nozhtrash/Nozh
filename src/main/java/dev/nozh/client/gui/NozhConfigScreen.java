@@ -95,6 +95,14 @@ public class NozhConfigScreen extends Screen {
                         initSystem(contentX, contentY);
                 }
 
+                // Save Button (just save, don't close)
+                addDrawableChild(ButtonWidget.builder(Text.translatable("nozh.config.button.save"), button -> {
+                        ConfigManager.saveAndNotify();
+                        button.setMessage(Text.translatable("nozh.config.button.saved"));
+                })
+                                .dimensions(this.width - 220, this.height - 30, 100, 20)
+                                .build());
+
                 // Close Button
                 addDrawableChild(ButtonWidget.builder(Text.translatable("nozh.config.button.save_close"), button -> {
                         ConfigManager.saveAndNotify();
