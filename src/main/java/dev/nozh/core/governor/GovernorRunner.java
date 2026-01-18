@@ -14,7 +14,6 @@ import dev.nozh.core.matrix.ActionMatrix;
 import dev.nozh.core.matrix.ActionSuccessTracker;
 import dev.nozh.core.matrix.ConfidenceCalculator;
 import dev.nozh.core.matrix.ActionMatrixTuning;
-import dev.nozh.core.governor.OptimizationProfile;
 import dev.nozh.core.compat.IrisCompat;
 import dev.nozh.core.compatibility.CompatibilityMatrix;
 import dev.nozh.core.profiler.PerfManager;
@@ -26,7 +25,6 @@ import dev.nozh.core.state.ActionHistoryEntry;
 import dev.nozh.core.state.BaselineSnapshot;
 import dev.nozh.core.bus.CapabilityValue;
 import dev.nozh.api.PerfSnapshot;
-import dev.nozh.core.governor.ActionOutcome;
 import dev.nozh.core.preset.HardwareProfile;
 import dev.nozh.core.preset.ModpackProfile;
 import dev.nozh.core.preset.ModpackRegistry;
@@ -1030,15 +1028,6 @@ public final class GovernorRunner {
             }
         }
         successTracker.clearDecisionSnapshot(pending.capability());
-    }
-
-    private double resolvePreP95(PendingAction pending) {
-        return successTracker.getDecisionSnapshot(pending.capability())
-                .map(snapshot -> snapshot.preSnapshot())
-                .filter(snapshot -> snapshot != null)
-                .map(snapshot -> snapshot.p95FrametimeMs())
-                .filter(this::isValidPerfValue)
-                .orElse(pending.baselineP95Ms());
     }
 
     private ActionOutcome evaluateOutcomeFallback(PerfSnapshot baselineSnapshot, PerfSnapshot currentSnapshot) {

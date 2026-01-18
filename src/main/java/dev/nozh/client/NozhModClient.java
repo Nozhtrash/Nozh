@@ -56,9 +56,7 @@ public class NozhModClient implements ClientModInitializer {
     private static GovernorRunner governorRunner;
     private static ActionBus actionBus;
     private static StateStore stateStore;
-    private static ConfigSyncService configSyncService;
     private static dev.nozh.core.intelligence.SessionLearning sessionLearning;
-    private static dev.nozh.core.potato.StartupOptimizer startupOptimizer;
     private static dev.nozh.core.potato.MemoryOptimizer memoryOptimizer;
     private static dev.nozh.core.potato.PotatoModeEngine potatoModeEngine;
     private static dev.nozh.core.optimization.ResourceBudgetAllocator resourceAllocator;
@@ -115,7 +113,7 @@ public class NozhModClient implements ClientModInitializer {
 
         // 2. Get StateStore singleton
         stateStore = StateStore.getInstance();
-        configSyncService = ConfigSyncService.start(stateStore);
+        ConfigSyncService.start(stateStore);
 
         // 3. Create MinecraftOptionsAdapter
         MinecraftOptionsAdapter optionsAdapter = new CompatAwareMinecraftOptionsAdapter(
