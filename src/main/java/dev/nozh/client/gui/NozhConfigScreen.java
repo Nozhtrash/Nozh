@@ -95,6 +95,14 @@ public class NozhConfigScreen extends Screen {
                         initSystem(contentX, contentY);
                 }
 
+                // Save Button (just save, don't close)
+                addDrawableChild(ButtonWidget.builder(Text.translatable("nozh.config.button.save"), button -> {
+                        ConfigManager.saveAndNotify();
+                        button.setMessage(Text.translatable("nozh.config.button.saved"));
+                })
+                                .dimensions(this.width - 220, this.height - 30, 100, 20)
+                                .build());
+
                 // Close Button
                 addDrawableChild(ButtonWidget.builder(Text.translatable("nozh.config.button.save_close"), button -> {
                         ConfigManager.saveAndNotify();
@@ -108,17 +116,20 @@ public class NozhConfigScreen extends Screen {
                 // Quick Profiles
                 addDrawableChild(ButtonWidget.builder(Text.translatable("nozh.config.profile.low"), btn -> {
                         ConfigPresets.applyLowEnd();
-                        ConfigManager.saveAndNotify();
+                        this.config = ConfigManager.getConfig();
+                        this.clearAndInit();
                 }).dimensions(x, y, 150, 20).build());
 
                 addDrawableChild(ButtonWidget.builder(Text.translatable("nozh.config.profile.mid"), btn -> {
                         ConfigPresets.applyMidRange();
-                        ConfigManager.saveAndNotify();
+                        this.config = ConfigManager.getConfig();
+                        this.clearAndInit();
                 }).dimensions(x + 160, y, 150, 20).build());
 
                 addDrawableChild(ButtonWidget.builder(Text.translatable("nozh.config.profile.high"), btn -> {
                         ConfigPresets.applyHighEnd();
-                        ConfigManager.saveAndNotify();
+                        this.config = ConfigManager.getConfig();
+                        this.clearAndInit();
                 }).dimensions(x + 320, y, 150, 20).build());
 
                 // EXTREME Mode
@@ -126,7 +137,8 @@ public class NozhConfigScreen extends Screen {
                 addDrawableChild(ButtonWidget.builder(Text.translatable("nozh.config.profile.extreme"), btn -> {
                         // Manually set config to EXTREME profile
                         ConfigPresets.applyExtreme();
-                        ConfigManager.saveAndNotify();
+                        this.config = ConfigManager.getConfig();
+                        this.clearAndInit();
                 }).dimensions(x, y, 310, 20).build());
         }
 
@@ -294,6 +306,21 @@ public class NozhConfigScreen extends Screen {
                                                 config.showHudSuggestions = !config.showHudSuggestions;
                                                 btn.setMessage(Text.translatable("nozh.config.hud.suggestions",
                                                                 config.showHudSuggestions
+                                                                                ? Text.translatable("options.on")
+                                                                                : Text.translatable("options.off")));
+                                        }));
+                        y += 25;
+
+                        // HUD: Debug Overlay Toggle
+                        addDrawableChild(new TooltipButton(x, y, 200, 20,
+                                        Text.translatable("nozh.config.hud.debug_overlay",
+                                                        config.showDebugOverlay ? Text.translatable("options.on")
+                                                                        : Text.translatable("options.off")),
+                                        Text.translatable("nozh.config.hud.debug_overlay.tooltip"),
+                                        btn -> {
+                                                config.showDebugOverlay = !config.showDebugOverlay;
+                                                btn.setMessage(Text.translatable("nozh.config.hud.debug_overlay",
+                                                                config.showDebugOverlay
                                                                                 ? Text.translatable("options.on")
                                                                                 : Text.translatable("options.off")));
                                         }));
@@ -501,7 +528,10 @@ public class NozhConfigScreen extends Screen {
 
                 public TooltipButton(int x, int y, int width, int height, Text message, Text tooltip,
                                 PressAction onPress) {
-                        super(x, y, width, height, message, onPress, DEFAULT_NARRATION_SUPPLIER);
+                        super(x, y, width, height, message, button -> {
+                                onPress.onPress(button);
+                                dev.nozh.core.config.ConfigManager.saveAndNotify();
+                        }, DEFAULT_NARRATION_SUPPLIER);
                         this.tooltip = tooltip;
                 }
 
@@ -544,6 +574,7 @@ public class NozhConfigScreen extends Screen {
                 protected void applyValue() {
                         double val = min + value * (max - min);
                         onSet.accept(val);
+                        dev.nozh.core.config.ConfigManager.saveAndNotify();
                 }
 
                 @Override

@@ -56,9 +56,7 @@ public class NozhModClient implements ClientModInitializer {
     private static GovernorRunner governorRunner;
     private static ActionBus actionBus;
     private static StateStore stateStore;
-    private static ConfigSyncService configSyncService;
     private static dev.nozh.core.intelligence.SessionLearning sessionLearning;
-    private static dev.nozh.core.potato.StartupOptimizer startupOptimizer;
     private static dev.nozh.core.potato.MemoryOptimizer memoryOptimizer;
     private static dev.nozh.core.potato.PotatoModeEngine potatoModeEngine;
     private static dev.nozh.core.optimization.ResourceBudgetAllocator resourceAllocator;
@@ -69,6 +67,7 @@ public class NozhModClient implements ClientModInitializer {
     private static KeyBinding toggleHudKey;
     private static KeyBinding applySuggestionKey;
     private static KeyBinding exportReportKey;
+    private static KeyBinding openConfigKey;
     private static ManualConfirmationHandler manualConfirmationHandler;
     private static TelemetryManager telemetryManager;
     private static boolean safeModeNotified = false;
@@ -114,7 +113,7 @@ public class NozhModClient implements ClientModInitializer {
 
         // 2. Get StateStore singleton
         stateStore = StateStore.getInstance();
-        configSyncService = ConfigSyncService.start(stateStore);
+        ConfigSyncService.start(stateStore);
 
         // 3. Create MinecraftOptionsAdapter
         MinecraftOptionsAdapter optionsAdapter = new CompatAwareMinecraftOptionsAdapter(
@@ -185,6 +184,18 @@ public class NozhModClient implements ClientModInitializer {
             }
         });
 
+        // Register Emergency Callback (Active Potato Mode)
+        potatoModeEngine.setEmergencyTriggerCallback(() -> {
+            MinecraftClient mc = MinecraftClient.getInstance();
+            if (mc != null && mc.getToastManager() != null) {
+                mc.getToastManager().add(new dev.nozh.client.gui.toast.PotatoModeSuggestionToast());
+                // Also play a sound for attention
+                if (mc.player != null) {
+                    mc.player.playSound(net.minecraft.sound.SoundEvents.BLOCK_NOTE_BLOCK_PLING.value(), 1.0f, 0.5f);
+                }
+            }
+        });
+
         // 8. Create ActionProcessor bridge
         StandardActionProcessor actionProcessor = new StandardActionProcessor(
                 capabilityExecutor,
@@ -226,6 +237,12 @@ public class NozhModClient implements ClientModInitializer {
                 "key.nozh.export_report",
                 InputUtil.Type.KEYSYM,
                 GLFW.GLFW_KEY_P,
+                "category.nozh"));
+
+        openConfigKey = KeyBindingHelper.registerKeyBinding(new KeyBinding(
+                "key.nozh.quick_menu",
+                InputUtil.Type.KEYSYM,
+                GLFW.GLFW_KEY_K,
                 "category.nozh"));
 
         manualConfirmationHandler = new ManualConfirmationHandler(
@@ -319,6 +336,22 @@ public class NozhModClient implements ClientModInitializer {
                 }
             }
 
+            if (openConfigKey != null) {
+                while (openConfigKey.wasPressed()) {
+                    // Open Quick Menu with action callbacks
+                    clientInstance.setScreen(new dev.nozh.client.gui.NozhQuickMenu(
+                            clientInstance.currentScreen,
+                            stateStore,
+                            () -> {
+                                if (manualConfirmationHandler != null)
+                                    manualConfirmationHandler.requestApply();
+                            },
+                            () -> {
+                                /* dismiss handled inside QuickMenu */ },
+                            () -> exportHudReport(clientInstance)));
+                }
+            }
+
             if (!safeModeNotified && CrashLoopGuard.isInSafeMode()) {
                 safeModeNotified = true;
                 notifyClient(clientInstance,
@@ -357,7 +390,10 @@ public class NozhModClient implements ClientModInitializer {
 
             // High frequency updates
             if (memoryOptimizer != null) {
-                memoryOptimizer.tick();
+                dev.nozh.core.context.Scenario currentScenario = stateStore != null
+                        ? stateStore.snapshotSafe().currentScenario()
+                        : dev.nozh.core.context.Scenario.STANDARD;
+                memoryOptimizer.tick(currentScenario);
                 // Feed memory pressure to resource allocator
                 if (resourceAllocator != null) {
                     resourceAllocator.setMemoryPressure(memoryOptimizer.getMemoryPressure());
@@ -441,6 +477,7 @@ public class NozhModClient implements ClientModInitializer {
             var frameSnapshot = perfManager.getSnapshot();
             var tickSnapshot = tickTimeSampler.getSnapshot();
             if (frameSnapshot.sufficientData() || tickSnapshot.sufficientData()) {
+                int visibleEntities = resolveVisibleEntityCount();
                 stateStore.update(state -> state.withTelemetry(
                         frameSnapshot.sufficientData() ? frameSnapshot.avgFrametimeMs() : state.avgFrametimeMs(),
                         frameSnapshot.sufficientData() ? frameSnapshot.p95FrametimeMs() : state.p95FrametimeMs(),
@@ -449,7 +486,8 @@ public class NozhModClient implements ClientModInitializer {
                                 : state.frametimeStddevMs(),
                         frameSnapshot.sufficientData() ? frameSnapshot.spikeCount() : state.spikeCount(),
                         tickSnapshot.sufficientData() ? tickSnapshot.avgFrametimeMs() : state.tickTimeAvg(),
-                        tickSnapshot.sufficientData() ? tickSnapshot.p95FrametimeMs() : state.tickTimeP95()));
+                        tickSnapshot.sufficientData() ? tickSnapshot.p95FrametimeMs() : state.tickTimeP95(),
+                        visibleEntities));
             }
         } catch (Exception e) {
             // Never crash telemetry update
@@ -625,6 +663,14 @@ public class NozhModClient implements ClientModInitializer {
             return "remote:" + handler.getConnection().getAddress().toString();
         }
         return "unknown";
+    }
+
+    private int resolveVisibleEntityCount() {
+        MinecraftClient client = MinecraftClient.getInstance();
+        if (client == null || client.worldRenderer == null) {
+            return 0;
+        }
+        return ((dev.nozh.mixin.WorldRendererAccessor) client.worldRenderer).getRegularEntityCount();
     }
 
 }

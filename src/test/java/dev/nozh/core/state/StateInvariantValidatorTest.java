@@ -73,6 +73,7 @@ class StateInvariantValidatorTest {
                                 state.stateVersion(),
                                 state.currentScenario(),
                                 state.scenarioConfidence(),
+                                state.visibleEntityCount(), // Added
                                 state.lastScenarioChangeTimestamp(),
                                 state.scenarioChangeCount(),
                                 state.rapidScenarioChangeCount(),
@@ -125,6 +126,7 @@ class StateInvariantValidatorTest {
                                 state.stateVersion(),
                                 state.currentScenario(),
                                 state.scenarioConfidence(),
+                                state.visibleEntityCount(), // Added
                                 state.lastScenarioChangeTimestamp(),
                                 state.scenarioChangeCount(),
                                 state.rapidScenarioChangeCount(),
@@ -178,6 +180,7 @@ class StateInvariantValidatorTest {
                                 base.stateVersion(),
                                 base.currentScenario(),
                                 base.scenarioConfidence(),
+                                base.visibleEntityCount(),
                                 base.lastScenarioChangeTimestamp(),
                                 base.scenarioChangeCount(),
                                 base.rapidScenarioChangeCount(),
@@ -230,6 +233,7 @@ class StateInvariantValidatorTest {
                                 state.stateVersion(),
                                 state.currentScenario(),
                                 state.scenarioConfidence(),
+                                state.visibleEntityCount(), // Added
                                 state.lastScenarioChangeTimestamp(),
                                 state.scenarioChangeCount(),
                                 state.rapidScenarioChangeCount(),
@@ -279,6 +283,7 @@ class StateInvariantValidatorTest {
                                 state.stateVersion(),
                                 state.currentScenario(),
                                 state.scenarioConfidence(),
+                                state.visibleEntityCount(), // Added
                                 state.lastScenarioChangeTimestamp(),
                                 state.scenarioChangeCount(),
                                 state.rapidScenarioChangeCount(),
@@ -331,6 +336,7 @@ class StateInvariantValidatorTest {
                                 state.stateVersion(),
                                 state.currentScenario(),
                                 state.scenarioConfidence(),
+                                state.visibleEntityCount(), // Added
                                 state.lastScenarioChangeTimestamp(),
                                 state.scenarioChangeCount(),
                                 state.rapidScenarioChangeCount(),
@@ -382,6 +388,7 @@ class StateInvariantValidatorTest {
                                 state.stateVersion(),
                                 state.currentScenario(),
                                 state.scenarioConfidence(),
+                                state.visibleEntityCount(), // Added
                                 state.lastScenarioChangeTimestamp(),
                                 state.scenarioChangeCount(),
                                 state.rapidScenarioChangeCount(),
@@ -436,6 +443,7 @@ class StateInvariantValidatorTest {
                                 state.stateVersion(),
                                 state.currentScenario(),
                                 state.scenarioConfidence(),
+                                state.visibleEntityCount(), // Added
                                 state.lastScenarioChangeTimestamp(),
                                 state.scenarioChangeCount(),
                                 state.rapidScenarioChangeCount(),
@@ -488,6 +496,7 @@ class StateInvariantValidatorTest {
                                 state.stateVersion(),
                                 state.currentScenario(),
                                 state.scenarioConfidence(),
+                                state.visibleEntityCount(), // Added
                                 state.lastScenarioChangeTimestamp(),
                                 state.scenarioChangeCount(),
                                 state.rapidScenarioChangeCount(),
@@ -553,6 +562,7 @@ class StateInvariantValidatorTest {
                                 base.stateVersion(),
                                 base.currentScenario(),
                                 base.scenarioConfidence(),
+                                base.visibleEntityCount(),
                                 base.lastScenarioChangeTimestamp(),
                                 base.scenarioChangeCount(),
                                 base.rapidScenarioChangeCount(),

@@ -21,36 +21,19 @@ import java.util.Optional;
  * - Version 5 (adds baseline/current settings): Migrator adds settings maps
  * - Version 6 (adds suggested action queue): Migrator adds suggestion list
  * - Version 7 (adds scenario change metrics): Migrator adds scenario counters
- * - Version 8 (adds outcome traceability): Migrator adds outcome tracking fields
+ * - Version 8 (adds outcome traceability): Migrator adds outcome tracking
+ * fields
  * - Version 9 (adds scenario history): Migrator adds scenario history list
  * - Version 10 (adds stability stats): Migrator adds stability tracking fields
  */
 public final class StateMigrationRegistry {
 
-    private static final int CURRENT_VERSION = 10; // Current state version
+    private static final int CURRENT_VERSION = 11; // Current state version
 
     private final Map<Integer, StateMigrator> migrators = new HashMap<>();
 
     public StateMigrationRegistry() {
         registerMigrator(2, oldState -> {
-            String validity = oldState.benchmarkValidity() != null ? oldState.benchmarkValidity() : "NONE";
-            // The original migrator for version 2 was adding benchmarkRunning=false and
-            // handling validity.
-            // This new version 2 migrator needs to provide defaults for all fields
-            // introduced up to version 3
-            // that are not present in version 1 or 2, and ensure the constructor matches
-            // the latest RuntimeState.
-            // The instruction implies a migration from an older state (likely v1 or v2) to
-            // a v3-compatible state.
-            // The original code was migrating from v1 to v2, adding benchmarkRunning and
-            // handling validity.
-            // The instruction provides a full list of parameters for a RuntimeState
-            // constructor that has 26 fields.
-            // This means the migrator for version 2 should now produce a state compatible
-            // with the *current* RuntimeState
-            // constructor, filling in defaults for fields that didn't exist in the oldState
-            // (which is effectively v2 here).
-
             return new RuntimeState(
                     oldState.enabled(),
                     oldState.safeMode(),
@@ -76,15 +59,16 @@ public final class StateMigrationRegistry {
                     oldState.tickTimeAvg(),
                     oldState.tickTimeP95(),
                     oldState.spikeCount(),
-                resolveStabilityStats(oldState),
+                    resolveStabilityStats(oldState),
                     "", 0L, // lastDecisionReason, lastDecisionTimestamp default
                     0.0,
                     ActionOutcome.NEUTRAL,
                     true,
                     oldState.sessionStartTime(),
-                    10, // Target version is 10
+                    11, // Target version is 11
                     dev.nozh.core.context.Scenario.STANDARD,
                     0.5,
+                    0, // visibleEntityCount
                     0L,
                     0,
                     0,
@@ -126,9 +110,10 @@ public final class StateMigrationRegistry {
                 ActionOutcome.NEUTRAL,
                 true,
                 oldState.sessionStartTime(),
-                10,
+                11,
                 oldState.currentScenario(),
                 oldState.scenarioConfidence(),
+                0, // visibleEntityCount
                 0L,
                 0,
                 0,
@@ -169,9 +154,10 @@ public final class StateMigrationRegistry {
                 ActionOutcome.NEUTRAL,
                 true,
                 oldState.sessionStartTime(),
-                10,
+                11,
                 oldState.currentScenario(),
                 oldState.scenarioConfidence(),
+                0, // visibleEntityCount
                 0L,
                 0,
                 0,
@@ -212,9 +198,10 @@ public final class StateMigrationRegistry {
                 ActionOutcome.NEUTRAL,
                 true,
                 oldState.sessionStartTime(),
-                10,
+                11,
                 oldState.currentScenario(),
                 oldState.scenarioConfidence(),
+                0, // visibleEntityCount
                 0L,
                 0,
                 0,
@@ -255,9 +242,10 @@ public final class StateMigrationRegistry {
                 ActionOutcome.NEUTRAL,
                 true,
                 oldState.sessionStartTime(),
-                10,
+                11,
                 oldState.currentScenario(),
                 oldState.scenarioConfidence(),
+                0, // visibleEntityCount
                 0L,
                 0,
                 0,
@@ -298,9 +286,10 @@ public final class StateMigrationRegistry {
                 ActionOutcome.NEUTRAL,
                 true,
                 oldState.sessionStartTime(),
-                10,
+                11,
                 oldState.currentScenario(),
                 oldState.scenarioConfidence(),
+                0, // visibleEntityCount
                 oldState.lastScenarioChangeTimestamp(),
                 oldState.scenarioChangeCount(),
                 oldState.rapidScenarioChangeCount(),
@@ -341,9 +330,10 @@ public final class StateMigrationRegistry {
                 oldState.lastOutcome(),
                 oldState.lastDecisionAccepted(),
                 oldState.sessionStartTime(),
-                10,
+                11,
                 oldState.currentScenario(),
                 oldState.scenarioConfidence(),
+                0, // visibleEntityCount
                 oldState.lastScenarioChangeTimestamp(),
                 oldState.scenarioChangeCount(),
                 oldState.rapidScenarioChangeCount(),
@@ -384,9 +374,54 @@ public final class StateMigrationRegistry {
                 oldState.lastOutcome(),
                 oldState.lastDecisionAccepted(),
                 oldState.sessionStartTime(),
-                10,
+                11,
                 oldState.currentScenario(),
                 oldState.scenarioConfidence(),
+                0, // visibleEntityCount
+                oldState.lastScenarioChangeTimestamp(),
+                oldState.scenarioChangeCount(),
+                oldState.rapidScenarioChangeCount(),
+                oldState.combatAfkFlipCount(),
+                oldState.scenarioHistory(),
+                oldState.baselineSettings(),
+                oldState.currentSettings()));
+
+        registerMigrator(10, oldState -> new RuntimeState(
+                oldState.enabled(),
+                oldState.safeMode(),
+                oldState.autoTuning(),
+                oldState.debugLogs(),
+                oldState.governorDisabled(),
+                oldState.governorCooldownActive(),
+                oldState.governorLastActionTimestamp(),
+                oldState.benchmarkRunning(),
+                oldState.benchmarkValidity(),
+                oldState.benchmarkStartTimestamp(),
+                oldState.pendingAction(),
+                oldState.suggestedActions(),
+                oldState.pendingActionsCount(),
+                oldState.executionHistorySize(),
+                oldState.lastSnapshotHistorySize(),
+                oldState.actionHistory(),
+                oldState.sessionChangesCount(),
+                oldState.avgFrametimeMs(),
+                oldState.p95FrametimeMs(),
+                oldState.p99FrametimeMs(),
+                oldState.frametimeStddevMs(),
+                oldState.tickTimeAvg(),
+                oldState.tickTimeP95(),
+                oldState.spikeCount(),
+                resolveStabilityStats(oldState),
+                oldState.lastDecisionReason(),
+                oldState.lastDecisionTimestamp(),
+                oldState.lastImpactMs(),
+                oldState.lastOutcome(),
+                oldState.lastDecisionAccepted(),
+                oldState.sessionStartTime(),
+                11,
+                oldState.currentScenario(),
+                oldState.scenarioConfidence(),
+                0, // visibleEntityCount
                 oldState.lastScenarioChangeTimestamp(),
                 oldState.scenarioChangeCount(),
                 oldState.rapidScenarioChangeCount(),

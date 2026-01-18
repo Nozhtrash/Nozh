@@ -1,4 +1,4 @@
-{
+﻿{
   "nozh.hud.title": "NOZH HUD (%s)",
   "nozh.hud.mode": "Режим: %s",
   "nozh.hud.mode.auto": "Авто",
@@ -43,7 +43,7 @@
   "nozh.hud.hud_time.ok": "ОК",
   "nozh.hud.hud_time.slow": "Медленно",
   "nozh.hud.hud_time.unknown": "Неизвестно",
-  "nozh.hud.suggestion": "⚡ Предложение: %s (Нажми K)",
+  "nozh.hud.suggestion": "[!] Предложение: %s (Нажми K)",
   "nozh.hud.suggestion.none": "Нет",
   "nozh.hud.suggestion.apply_hint": "Применить: %s",
   "nozh.hud.suggestion.apply_hint_many": "Применить: %s (+%d еще)",
@@ -90,7 +90,7 @@
   "nozh.command.safemode.enabled": "Безопасный режим включен",
   "nozh.command.safemode.reset_success": "Безопасный режим сброшен",
   
-  "nozh.enable.success": "✓ NOZH включен. Автонастройка активна.",
+  "nozh.enable.success": "[OK] NOZH включен. Автонастройка активна.",
   "nozh.disable.success": "NOZH отключен.",
   "nozh.status.header": "Статус NOZH: ",
   "nozh.status.mode.active": "АКТИВЕН",

@@ -14,7 +14,6 @@ import dev.nozh.core.matrix.ActionMatrix;
 import dev.nozh.core.matrix.ActionSuccessTracker;
 import dev.nozh.core.matrix.ConfidenceCalculator;
 import dev.nozh.core.matrix.ActionMatrixTuning;
-import dev.nozh.core.governor.OptimizationProfile;
 import dev.nozh.core.compat.IrisCompat;
 import dev.nozh.core.compatibility.CompatibilityMatrix;
 import dev.nozh.core.profiler.PerfManager;
@@ -26,7 +25,6 @@ import dev.nozh.core.state.ActionHistoryEntry;
 import dev.nozh.core.state.BaselineSnapshot;
 import dev.nozh.core.bus.CapabilityValue;
 import dev.nozh.api.PerfSnapshot;
-import dev.nozh.core.governor.ActionOutcome;
 import dev.nozh.core.preset.HardwareProfile;
 import dev.nozh.core.preset.ModpackProfile;
 import dev.nozh.core.preset.ModpackRegistry;
@@ -54,6 +52,7 @@ public final class GovernorRunner {
     private static final int REVERSE_IMPROVEMENT_STREAK = 3;
     private static final long SPIKE_PREDICTION_MIN_WINDOW_MS = 5_000L;
     private static final int DECISION_LATENCY_TARGET_MS = 2;
+    private static final int CROWD_CONTROL_THRESHOLD = 300;
 
     private final HybridGovernor governor;
     private final ActionMatrix actionMatrix;
@@ -135,15 +134,22 @@ public final class GovernorRunner {
         totalTicks++;
         dev.nozh.core.context.ScenarioSnapshot scenarioSnapshot = scenarioDetector.detect();
         long nowMillis = nowMillis();
-        try {
-            stateStore.update(state -> {
-                return state.withScenarioUpdate(
-                        scenarioSnapshot.scenario(),
-                        scenarioSnapshot.confidence(),
-                        nowMillis);
-            });
-        } catch (Exception e) {
-            // Ignore update failure
+
+        // OPTIMIZATION: Dirty check to avoid unnecessary Write Locks on StateStore
+        // logic
+        RuntimeState currentState = stateStore.snapshotSafe();
+        if (currentState.currentScenario() != scenarioSnapshot.scenario() ||
+                Math.abs(currentState.scenarioConfidence() - scenarioSnapshot.confidence()) > 0.01) {
+            try {
+                stateStore.update(state -> {
+                    return state.withScenarioUpdate(
+                            scenarioSnapshot.scenario(),
+                            scenarioSnapshot.confidence(),
+                            nowMillis);
+                });
+            } catch (Exception e) {
+                // Ignore update failure
+            }
         }
         tickCounter++;
         // Dynamic Sampling (Phase 5)
@@ -227,6 +233,10 @@ public final class GovernorRunner {
 
         if (systemMonitor.isMemoryCritical()) {
             logger.warn("Skipping governor decision - memory critical");
+            return;
+        }
+
+        if (manageCrowdControl(state, config, now)) {
             return;
         }
 
@@ -502,6 +512,119 @@ public final class GovernorRunner {
         return true;
     }
 
+    private boolean manageCrowdControl(RuntimeState state, NozhConfig config, long now) {
+        if (!config.enabled) {
+            return false;
+        }
+
+        int visible = state.visibleEntityCount();
+        if (visible <= 0) {
+            return false;
+        }
+
+        Optional<dev.nozh.core.capability.CapabilityProvider> providerOpt = providerRegistry
+                .get(CapabilityId.ENTITY_DISTANCE);
+        if (providerOpt.isEmpty()) {
+            return false;
+        }
+        dev.nozh.core.capability.CapabilityProvider provider = providerOpt.get();
+
+        Optional<CapabilityValue> currentOpt = provider.getCurrentValueSafe();
+        if (currentOpt.isEmpty() || !(currentOpt.get() instanceof CapabilityValue.IntValue)) {
+            return false;
+        }
+        int currentDist = ((CapabilityValue.IntValue) currentOpt.get()).value();
+
+        // Rule 1: High density -> Reduce distance
+        if (visible > CROWD_CONTROL_THRESHOLD) {
+            if (currentDist > 50) {
+                // Apply 50%
+                return dispatchCrowdControlAction(state, config, now, 50,
+                        "crowd_control_high_density (visible=" + visible + ")");
+            }
+        }
+        // Rule 2: Low density -> Restore distance
+        else if (visible < (CROWD_CONTROL_THRESHOLD / 2)) {
+            if (currentDist < 100) {
+                // Restore to 100%
+                return dispatchCrowdControlAction(state, config, now, 100,
+                        "crowd_control_restore (visible=" + visible + ")");
+            }
+        }
+        return false;
+    }
+
+    private boolean dispatchCrowdControlAction(RuntimeState state, NozhConfig config, long now, int targetVal,
+            String reason) {
+        CapabilityValue targetValue = new CapabilityValue.IntValue(targetVal);
+        CapabilityId capId = CapabilityId.ENTITY_DISTANCE;
+
+        PerfSnapshot baselineSnapshot = captureSnapshot();
+        int observationWindowSeconds = resolveObservationWindowSeconds(config, baselineSnapshot);
+        Optional<CapabilityValue> previousValue = providerRegistry.get(capId)
+                .flatMap(provider -> provider.getCurrentValueSafe());
+
+        Command cmd = new Command.ApplyCapability(capId, targetValue);
+
+        PendingAction pending = new PendingAction(
+                now,
+                totalTicks,
+                capId,
+                cmd,
+                previousValue,
+                targetValue,
+                state.avgFrametimeMs(),
+                state.p95FrametimeMs(),
+                state.currentScenario(),
+                state.scenarioConfidence(),
+                baselineSnapshot);
+
+        ActionHistoryEntry actionEntry = new ActionHistoryEntry(
+                now,
+                reason,
+                state.currentScenario(),
+                state.scenarioConfidence(),
+                baselineSnapshot,
+                PerfSnapshot.empty(),
+                0.0,
+                0,
+                observationWindowSeconds,
+                ActionOutcome.NEUTRAL,
+                false);
+
+        try {
+            stateStore.update(currentState -> currentState.withDecision(reason, now));
+        } catch (Exception e) {
+            logger.warn("Failed to update state decision: " + e.getMessage());
+        }
+
+        actionBus.dispatch(cmd, report -> {
+            if (report.succeeded()) {
+                logger.info("Crowd control action succeeded: " + reason);
+                predictiveAnalyzer.reset();
+                refreshCurrentSettings();
+            } else {
+                logger.warn("Crowd control action failed: " + report.error().orElse("unknown"));
+                try {
+                    stateStore.update(RuntimeState::withPendingActionCleared);
+                } catch (Exception e) {
+                    logger.error("Failed to clear pending action after crowd control failure");
+                }
+            }
+        });
+
+        try {
+            stateStore.update(currentState -> currentState.withGovernorAction(
+                    now,
+                    pending,
+                    actionEntry,
+                    config.historyMaxEntries));
+        } catch (Exception e) {
+            logger.warn("Failed to update state after crowd control action: " + e.getMessage());
+        }
+        return true;
+    }
+
     private boolean attemptPreventiveAction(RuntimeState state, NozhConfig config, long nowMillis) {
         if (state == null || config == null) {
             return false;
@@ -696,13 +819,46 @@ public final class GovernorRunner {
     }
 
     private void refreshCurrentSettings() {
-        java.util.Map<dev.nozh.core.bus.CapabilityId, dev.nozh.core.bus.CapabilityValue> current = new java.util.EnumMap<>(
-                dev.nozh.core.bus.CapabilityId.class);
-        for (var provider : providerRegistry.getAllProviders()) {
-            provider.getCurrentValueSafe().ifPresent(value -> current.put(provider.id(), value));
+        // OPTIMIZATION: Check for changes before allocating map or acquiring write lock
+        RuntimeState state = stateStore.snapshotSafe();
+        Map<dev.nozh.core.bus.CapabilityId, dev.nozh.core.bus.CapabilityValue> currentMap = state.currentSettings();
+        boolean dirty = false;
+
+        // 1. Check if known providers match stored state
+        java.util.Collection<dev.nozh.core.capability.CapabilityProvider> providers = providerRegistry
+                .getAllProviders();
+        if (currentMap.size() != providers.size()) {
+            dirty = true;
+        } else {
+            for (dev.nozh.core.capability.CapabilityProvider provider : providers) {
+                Optional<dev.nozh.core.bus.CapabilityValue> currentValOpt = provider.getCurrentValueSafe();
+                if (currentValOpt.isPresent()) {
+                    dev.nozh.core.bus.CapabilityValue val = currentValOpt.get();
+                    if (!val.equals(currentMap.get(provider.id()))) {
+                        dirty = true;
+                        break;
+                    }
+                } else if (currentMap.containsKey(provider.id())) {
+                    // Provider returned empty but we have a value stored -> dirty
+                    dirty = true;
+                    break;
+                }
+            }
         }
+
+        if (!dirty) {
+            return;
+        }
+
+        // 2. Only if dirty, build new map and update
+        java.util.Map<dev.nozh.core.bus.CapabilityId, dev.nozh.core.bus.CapabilityValue> newSettings = new java.util.EnumMap<>(
+                dev.nozh.core.bus.CapabilityId.class);
+        for (dev.nozh.core.capability.CapabilityProvider provider : providers) {
+            provider.getCurrentValueSafe().ifPresent(value -> newSettings.put(provider.id(), value));
+        }
+
         try {
-            stateStore.update(state -> state.withCurrentSettings(current));
+            stateStore.update(s -> s.withCurrentSettings(newSettings));
         } catch (Exception e) {
             logger.warn("Failed to store current settings: " + e.getMessage());
         }
@@ -990,15 +1146,6 @@ public final class GovernorRunner {
             }
         }
         successTracker.clearDecisionSnapshot(pending.capability());
-    }
-
-    private double resolvePreP95(PendingAction pending) {
-        return successTracker.getDecisionSnapshot(pending.capability())
-                .map(snapshot -> snapshot.preSnapshot())
-                .filter(snapshot -> snapshot != null)
-                .map(snapshot -> snapshot.p95FrametimeMs())
-                .filter(this::isValidPerfValue)
-                .orElse(pending.baselineP95Ms());
     }
 
     private ActionOutcome evaluateOutcomeFallback(PerfSnapshot baselineSnapshot, PerfSnapshot currentSnapshot) {

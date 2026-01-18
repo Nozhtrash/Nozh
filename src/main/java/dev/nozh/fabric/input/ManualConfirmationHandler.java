@@ -51,29 +51,27 @@ public final class ManualConfirmationHandler {
             NozhHudRenderer hudRenderer,
             KeyBinding confirmKey,
             KeyBinding dismissKey) {
-        
+
         this.stateStore = stateStore;
         this.actionBus = actionBus;
         this.hudRenderer = hudRenderer;
 
         // Register keybinds
         this.confirmKey = confirmKey != null
-            ? confirmKey
-            : KeyBindingHelper.registerKeyBinding(new KeyBinding(
-                "key.nozh.confirm_suggestion",
-                InputUtil.Type.KEYSYM,
-                GLFW.GLFW_KEY_K,
-                "category.nozh"
-            ));
+                ? confirmKey
+                : KeyBindingHelper.registerKeyBinding(new KeyBinding(
+                        "key.nozh.confirm_suggestion",
+                        InputUtil.Type.KEYSYM,
+                        GLFW.GLFW_KEY_UNKNOWN, // Unbound - use QuickMenu (K) instead
+                        "category.nozh"));
 
         this.dismissKey = dismissKey != null
-            ? dismissKey
-            : KeyBindingHelper.registerKeyBinding(new KeyBinding(
-                "key.nozh.dismiss_suggestion",
-                InputUtil.Type.KEYSYM,
-                GLFW.GLFW_KEY_N,
-                "category.nozh"
-            ));
+                ? dismissKey
+                : KeyBindingHelper.registerKeyBinding(new KeyBinding(
+                        "key.nozh.dismiss_suggestion",
+                        InputUtil.Type.KEYSYM,
+                        GLFW.GLFW_KEY_UNKNOWN, // Unbound - use QuickMenu (K) instead
+                        "category.nozh"));
 
         // Register tick handler
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
@@ -104,8 +102,8 @@ public final class ManualConfirmationHandler {
 
         if (suggestions == null || suggestions.isEmpty()) {
             notifyClient(client,
-                Text.translatable("nozh.suggestion.apply.none"),
-                Text.translatable("nozh.suggestion.apply.none_detail"));
+                    Text.translatable("nozh.suggestion.apply.none"),
+                    Text.translatable("nozh.suggestion.apply.none_detail"));
             return;
         }
 
@@ -178,55 +176,54 @@ public final class ManualConfirmationHandler {
      */
     private RuntimeState createStateWithUpdatedSuggestions(RuntimeState currentState, List<PendingAction> suggestions) {
         return new RuntimeState(
-            currentState.enabled(),
-            currentState.safeMode(),
-            currentState.autoTuning(),
-            currentState.debugLogs(),
-            currentState.governorDisabled(),
-            currentState.governorCooldownActive(),
-            currentState.governorLastActionTimestamp(),
-            currentState.benchmarkRunning(),
-            currentState.benchmarkValidity(),
-            currentState.benchmarkStartTimestamp(),
-            currentState.pendingAction(),
-            suggestions, // Updated suggestions list
-            currentState.pendingActionsCount(),
-            currentState.executionHistorySize(),
-            currentState.lastSnapshotHistorySize(),
-            currentState.actionHistory(),
-            currentState.sessionChangesCount(),
-            currentState.avgFrametimeMs(),
-            currentState.p95FrametimeMs(),
-            currentState.p99FrametimeMs(),
-            currentState.frametimeStddevMs(),
-            currentState.tickTimeAvg(),
-            currentState.tickTimeP95(),
-            currentState.spikeCount(),
-            currentState.stabilityStats(),
-            currentState.lastDecisionReason(),
-            currentState.lastDecisionTimestamp(),
-            currentState.lastImpactMs(),
-            currentState.lastOutcome(),
-            currentState.lastDecisionAccepted(),
-            currentState.sessionStartTime(),
-            currentState.stateVersion(),
-            currentState.currentScenario(),
-            currentState.scenarioConfidence(),
-            currentState.lastScenarioChangeTimestamp(),
-            currentState.scenarioChangeCount(),
-            currentState.rapidScenarioChangeCount(),
-            currentState.combatAfkFlipCount(),
-            currentState.scenarioHistory(),
-            currentState.baselineSettings(),
-            currentState.currentSettings()
-        );
+                currentState.enabled(),
+                currentState.safeMode(),
+                currentState.autoTuning(),
+                currentState.debugLogs(),
+                currentState.governorDisabled(),
+                currentState.governorCooldownActive(),
+                currentState.governorLastActionTimestamp(),
+                currentState.benchmarkRunning(),
+                currentState.benchmarkValidity(),
+                currentState.benchmarkStartTimestamp(),
+                currentState.pendingAction(),
+                suggestions, // Updated suggestions list
+                currentState.pendingActionsCount(),
+                currentState.executionHistorySize(),
+                currentState.lastSnapshotHistorySize(),
+                currentState.actionHistory(),
+                currentState.sessionChangesCount(),
+                currentState.avgFrametimeMs(),
+                currentState.p95FrametimeMs(),
+                currentState.p99FrametimeMs(),
+                currentState.frametimeStddevMs(),
+                currentState.tickTimeAvg(),
+                currentState.tickTimeP95(),
+                currentState.spikeCount(),
+                currentState.stabilityStats(),
+                currentState.lastDecisionReason(),
+                currentState.lastDecisionTimestamp(),
+                currentState.lastImpactMs(),
+                currentState.lastOutcome(),
+                currentState.lastDecisionAccepted(),
+                currentState.sessionStartTime(),
+                currentState.stateVersion(),
+                currentState.currentScenario(),
+                currentState.scenarioConfidence(),
+                currentState.visibleEntityCount(), // Added
+                currentState.lastScenarioChangeTimestamp(),
+                currentState.scenarioChangeCount(),
+                currentState.rapidScenarioChangeCount(),
+                currentState.combatAfkFlipCount(),
+                currentState.scenarioHistory(),
+                currentState.baselineSettings(),
+                currentState.currentSettings());
     }
 
     private void showMessage(Text message, boolean error) {
         try {
-            net.minecraft.client.MinecraftClient client = 
-                net.minecraft.client.MinecraftClient.getInstance();
-            
+            net.minecraft.client.MinecraftClient client = net.minecraft.client.MinecraftClient.getInstance();
+
             if (client.player != null) {
                 Text prefix = Text.literal("[NOZH] ").formatted(Formatting.GRAY);
                 Text styledMessage = message.copy().formatted(error ? Formatting.RED : Formatting.YELLOW);
@@ -281,9 +278,7 @@ public final class ManualConfirmationHandler {
      */
     public void clearAll() {
         try {
-            stateStore.update(currentState -> 
-                createStateWithUpdatedSuggestions(currentState, List.of())
-            );
+            stateStore.update(currentState -> createStateWithUpdatedSuggestions(currentState, List.of()));
             showMessage(Text.translatable("nozh.suggestion.clear.success"), false);
         } catch (Exception e) {
             showMessage(Text.translatable("nozh.suggestion.clear.failed"), true);
@@ -314,49 +309,48 @@ public final class ManualConfirmationHandler {
     private void applySuggestion(MinecraftClient client, PendingAction pending) {
         if (actionBus == null) {
             notifyClient(client,
-                Text.translatable("nozh.suggestion.apply.failed"),
-                Text.translatable("nozh.suggestion.apply.unavailable"));
+                    Text.translatable("nozh.suggestion.apply.failed"),
+                    Text.translatable("nozh.suggestion.apply.unavailable"));
             return;
         }
 
         long now = System.currentTimeMillis();
         int maxHistoryEntries = ConfigManager.getConfig() != null ? ConfigManager.getConfig().historyMaxEntries : 50;
         ActionHistoryEntry actionEntry = new ActionHistoryEntry(
-            now,
-            pending.capability().name() + "=" + pending.newValue(),
-            pending.scenario(),
-            pending.scenarioConfidence(),
-            pending.baselineSnapshot(),
-            dev.nozh.api.PerfSnapshot.empty(),
-            0.0,
-            0,
-            0,
-            ActionOutcome.NEUTRAL,
-            false);
+                now,
+                pending.capability().name() + "=" + pending.newValue(),
+                pending.scenario(),
+                pending.scenarioConfidence(),
+                pending.baselineSnapshot(),
+                dev.nozh.api.PerfSnapshot.empty(),
+                0.0,
+                0,
+                0,
+                ActionOutcome.NEUTRAL,
+                false);
 
         actionBus.dispatch(pending.command(), report -> {
             if (report.succeeded()) {
                 notifyClient(client,
-                    Text.translatable("nozh.suggestion.apply.success"),
-                    Text.translatable("nozh.suggestion.apply.success_detail",
-                        pending.capability().name(), pending.newValue().toString()));
+                        Text.translatable("nozh.suggestion.apply.success"),
+                        Text.translatable("nozh.suggestion.apply.success_detail",
+                                pending.capability().name(), pending.newValue().toString()));
                 if (hudRenderer != null) {
                     hudRenderer.notifyActionApplied(
-                        pending.capability().name(),
-                        0.0
-                    );
+                            pending.capability().name(),
+                            0.0);
                 }
             } else {
                 String reason = report.error().orElse("unknown");
                 notifyClient(client,
-                    Text.translatable("nozh.suggestion.apply.failed"),
-                    Text.translatable("nozh.suggestion.apply.failed_detail", reason));
+                        Text.translatable("nozh.suggestion.apply.failed"),
+                        Text.translatable("nozh.suggestion.apply.failed_detail", reason));
                 stateStore.update(RuntimeState::withPendingActionCleared);
             }
         });
 
         stateStore.update(currentState -> currentState
-            .withAppliedSuggestion(now, pending, actionEntry, maxHistoryEntries));
+                .withAppliedSuggestion(now, pending, actionEntry, maxHistoryEntries));
     }
 
     private void notifyClient(MinecraftClient client, Text title, Text message) {
@@ -369,5 +363,8 @@ public final class ManualConfirmationHandler {
         if (client.inGameHud != null) {
             client.inGameHud.getChatHud().addMessage(title.copy().append(Text.literal(" ")).append(message));
         }
+        // Play sound for feedback
+        client.getSoundManager().play(net.minecraft.client.sound.PositionedSoundInstance.master(
+                net.minecraft.sound.SoundEvents.UI_BUTTON_CLICK, 1.0f));
     }
 }

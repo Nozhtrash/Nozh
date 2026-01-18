@@ -17,7 +17,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
-import dev.nozh.core.state.ActionHistoryEntry;
 import dev.nozh.core.governor.ActionOutcome;
 
 /**
@@ -65,6 +64,7 @@ public record RuntimeState(
         int stateVersion,
         dev.nozh.core.context.Scenario currentScenario,
         double scenarioConfidence,
+        int visibleEntityCount, // Added for Dynamic Entity Distance
         long lastScenarioChangeTimestamp,
         int scenarioChangeCount,
         int rapidScenarioChangeCount,
@@ -72,7 +72,7 @@ public record RuntimeState(
         List<ScenarioHistoryEntry> scenarioHistory,
         Map<CapabilityId, CapabilityValue> baselineSettings,
         Map<CapabilityId, CapabilityValue> currentSettings) {
-    private static final int CURRENT_VERSION = 10; // Bump version
+    private static final int CURRENT_VERSION = 11; // Bump version
     private static final long SCENARIO_HISTORY_WINDOW_MS = 20_000L;
     private static final double SCENARIO_DOMINANCE_THRESHOLD = 0.55;
     private static final long RAPID_SCENARIO_CHANGE_WINDOW_MS = 5_000L;
@@ -113,6 +113,7 @@ public record RuntimeState(
                 true, // lastDecisionAccepted
                 System.currentTimeMillis(), CURRENT_VERSION,
                 dev.nozh.core.context.Scenario.STANDARD, 0.5,
+                0, // visibleEntityCount
                 0L,
                 0,
                 0,
@@ -148,7 +149,7 @@ public record RuntimeState(
                 lastDecisionReason, lastDecisionTimestamp,
                 lastImpactMs, lastOutcome, lastDecisionAccepted,
                 sessionStartTime, stateVersion,
-                currentScenario, scenarioConfidence,
+                currentScenario, scenarioConfidence, visibleEntityCount,
                 lastScenarioChangeTimestamp, scenarioChangeCount, rapidScenarioChangeCount, combatAfkFlipCount,
                 scenarioHistory,
                 baselineSettings, currentSettings);
@@ -157,7 +158,8 @@ public record RuntimeState(
     public RuntimeState withAppliedSuggestion(long timestamp, PendingAction pending, ActionHistoryEntry actionEntry,
             int maxHistoryEntries) {
         List<ActionHistoryEntry> updatedHistory = mergeHistory(actionHistory, actionEntry, maxHistoryEntries);
-        List<PendingAction> updatedSuggestions = new ArrayList<>(suggestedActions != null ? suggestedActions : List.of());
+        List<PendingAction> updatedSuggestions = new ArrayList<>(
+                suggestedActions != null ? suggestedActions : List.of());
         if (pending != null && updatedSuggestions.contains(pending)) {
             updatedSuggestions.remove(pending);
         } else if (!updatedSuggestions.isEmpty()) {
@@ -183,6 +185,7 @@ public record RuntimeState(
                 lastImpactMs, lastOutcome, lastDecisionAccepted,
                 sessionStartTime, stateVersion,
                 currentScenario, scenarioConfidence,
+                visibleEntityCount,
                 lastScenarioChangeTimestamp, scenarioChangeCount, rapidScenarioChangeCount, combatAfkFlipCount,
                 scenarioHistory,
                 baselineSettings, currentSettings);
@@ -212,6 +215,7 @@ public record RuntimeState(
                 lastImpactMs, lastOutcome, lastDecisionAccepted,
                 sessionStartTime, stateVersion,
                 currentScenario, scenarioConfidence,
+                visibleEntityCount, // propagate
                 lastScenarioChangeTimestamp, scenarioChangeCount, rapidScenarioChangeCount, combatAfkFlipCount,
                 scenarioHistory,
                 baselineSettings, currentSettings);
@@ -221,7 +225,8 @@ public record RuntimeState(
      * Update suggested action (manual assist).
      */
     public RuntimeState withSuggestedAction(PendingAction pending) {
-        List<PendingAction> updatedSuggestions = new ArrayList<>(suggestedActions != null ? suggestedActions : List.of());
+        List<PendingAction> updatedSuggestions = new ArrayList<>(
+                suggestedActions != null ? suggestedActions : List.of());
         if (pending != null) {
             updatedSuggestions.add(pending);
         }
@@ -245,6 +250,7 @@ public record RuntimeState(
                 lastImpactMs, lastOutcome, lastDecisionAccepted,
                 sessionStartTime, stateVersion,
                 currentScenario, scenarioConfidence,
+                visibleEntityCount,
                 lastScenarioChangeTimestamp, scenarioChangeCount, rapidScenarioChangeCount, combatAfkFlipCount,
                 scenarioHistory,
                 baselineSettings, currentSettings);
@@ -274,6 +280,7 @@ public record RuntimeState(
                 lastImpactMs, lastOutcome, lastDecisionAccepted,
                 sessionStartTime, stateVersion,
                 currentScenario, scenarioConfidence,
+                visibleEntityCount,
                 lastScenarioChangeTimestamp, scenarioChangeCount, rapidScenarioChangeCount, combatAfkFlipCount,
                 scenarioHistory,
                 baselineSettings, currentSettings);
@@ -305,6 +312,7 @@ public record RuntimeState(
                 lastImpactMs, lastOutcome, lastDecisionAccepted,
                 sessionStartTime, stateVersion,
                 currentScenario, scenarioConfidence,
+                visibleEntityCount,
                 lastScenarioChangeTimestamp, scenarioChangeCount, rapidScenarioChangeCount, combatAfkFlipCount,
                 scenarioHistory,
                 baselineSettings, currentSettings);
@@ -314,7 +322,7 @@ public record RuntimeState(
      * Update telemetry metrics (immutable).
      */
     public RuntimeState withTelemetry(double avg, double p95, double p99, double stddev, int spikes, double tickAvg,
-            double tickP95) {
+            double tickP95, int visibleEntities) {
         StabilityStats updatedStability = stabilityStats != null ? stabilityStats : StabilityStats.defaults();
         updatedStability = updatedStability.update(
                 avg,
@@ -335,7 +343,7 @@ public record RuntimeState(
                 lastDecisionReason, lastDecisionTimestamp,
                 lastImpactMs, lastOutcome, lastDecisionAccepted,
                 sessionStartTime, stateVersion,
-                currentScenario, scenarioConfidence,
+                currentScenario, scenarioConfidence, visibleEntities,
                 lastScenarioChangeTimestamp, scenarioChangeCount, rapidScenarioChangeCount, combatAfkFlipCount,
                 scenarioHistory,
                 baselineSettings, currentSettings);
@@ -361,6 +369,7 @@ public record RuntimeState(
                 lastImpactMs, lastOutcome, lastDecisionAccepted,
                 sessionStartTime, stateVersion,
                 currentScenario, scenarioConfidence,
+                visibleEntityCount,
                 lastScenarioChangeTimestamp, scenarioChangeCount, rapidScenarioChangeCount, combatAfkFlipCount,
                 scenarioHistory,
                 baselineSettings, currentSettings);
@@ -384,6 +393,7 @@ public record RuntimeState(
                 lastImpactMs, lastOutcome, lastDecisionAccepted,
                 sessionStartTime, stateVersion,
                 scenario, confidence,
+                visibleEntityCount,
                 lastScenarioChangeTimestamp, scenarioChangeCount, rapidScenarioChangeCount, combatAfkFlipCount,
                 scenarioHistory,
                 baselineSettings, currentSettings);
@@ -418,6 +428,7 @@ public record RuntimeState(
                 lastImpactMs, lastOutcome, lastDecisionAccepted,
                 sessionStartTime, stateVersion,
                 resolvedScenario, resolvedConfidence,
+                visibleEntityCount,
                 changeTimestamp, changeCount, rapidCount, flipCount,
                 updatedHistory,
                 baselineSettings, currentSettings);
@@ -452,6 +463,7 @@ public record RuntimeState(
                 lastImpactMs, lastOutcome, lastDecisionAccepted,
                 sessionStartTime, stateVersion,
                 currentScenario, scenarioConfidence,
+                visibleEntityCount,
                 lastScenarioChangeTimestamp, scenarioChangeCount, rapidScenarioChangeCount, combatAfkFlipCount,
                 scenarioHistory,
                 baselineSettings, currentSettings);
@@ -478,13 +490,15 @@ public record RuntimeState(
                 lastImpactMs, lastOutcome, lastDecisionAccepted,
                 sessionStartTime, stateVersion,
                 currentScenario, scenarioConfidence,
+                visibleEntityCount,
                 lastScenarioChangeTimestamp, scenarioChangeCount, rapidScenarioChangeCount, combatAfkFlipCount,
                 scenarioHistory,
                 baselineSettings, currentSettings);
     }
 
     public RuntimeState withPendingSuggestion(PendingAction suggestion) {
-        List<PendingAction> updatedSuggestions = new ArrayList<>(suggestedActions != null ? suggestedActions : List.of());
+        List<PendingAction> updatedSuggestions = new ArrayList<>(
+                suggestedActions != null ? suggestedActions : List.of());
         if (suggestion != null) {
             updatedSuggestions.add(suggestion);
         }
@@ -504,6 +518,7 @@ public record RuntimeState(
                 lastImpactMs, lastOutcome, lastDecisionAccepted,
                 sessionStartTime, stateVersion,
                 currentScenario, scenarioConfidence,
+                visibleEntityCount,
                 lastScenarioChangeTimestamp, scenarioChangeCount, rapidScenarioChangeCount, combatAfkFlipCount,
                 scenarioHistory,
                 baselineSettings, currentSettings);
@@ -526,6 +541,7 @@ public record RuntimeState(
                 lastImpactMs, lastOutcome, lastDecisionAccepted,
                 sessionStartTime, stateVersion,
                 currentScenario, scenarioConfidence,
+                visibleEntityCount,
                 lastScenarioChangeTimestamp, scenarioChangeCount, rapidScenarioChangeCount, combatAfkFlipCount,
                 scenarioHistory,
                 baselineSettings, currentSettings);
@@ -569,10 +585,11 @@ public record RuntimeState(
                 CURRENT_VERSION,
                 dev.nozh.core.context.Scenario.STANDARD,
                 0.5,
-                0L,
-                0,
-                0,
-                0,
+                0, // visibleEntityCount
+                0L, // lastScenarioChangeTimestamp
+                0, // scenarioChangeCount
+                0, // rapidScenarioChangeCount
+                0, // combatAfkFlipCount
                 List.of(),
                 Map.of(),
                 Map.of());
@@ -593,6 +610,7 @@ public record RuntimeState(
                 lastImpactMs, lastOutcome, lastDecisionAccepted,
                 sessionStartTime, stateVersion,
                 currentScenario, scenarioConfidence,
+                visibleEntityCount,
                 lastScenarioChangeTimestamp, scenarioChangeCount, rapidScenarioChangeCount, combatAfkFlipCount,
                 scenarioHistory,
                 baseline,
@@ -621,6 +639,7 @@ public record RuntimeState(
                 lastImpactMs, lastOutcome, lastDecisionAccepted,
                 sessionStartTime, stateVersion,
                 currentScenario, scenarioConfidence,
+                visibleEntityCount,
                 lastScenarioChangeTimestamp, scenarioChangeCount, rapidScenarioChangeCount, combatAfkFlipCount,
                 scenarioHistory,
                 baselineSettings,
@@ -655,6 +674,7 @@ public record RuntimeState(
                 !updatedEntry.rollbackApplied(),
                 sessionStartTime, stateVersion,
                 currentScenario, scenarioConfidence,
+                visibleEntityCount,
                 lastScenarioChangeTimestamp, scenarioChangeCount, rapidScenarioChangeCount, combatAfkFlipCount,
                 scenarioHistory,
                 baselineSettings, currentSettings);

@@ -216,13 +216,31 @@ public final class FabricScenarioDetector implements ScenarioDetector {
         return Scenario.STANDARD;
     }
 
+    // Cached hostile count to reduce entity search overhead (10x reduction)
+    private int cachedHostileCount = 0;
+    private long lastHostileCheckTick = -1;
+
     private int countNearbyHostileMobs(ClientPlayerEntity player, World world) {
+        // Optimization: Don't check if we are in a GUI (Menu scenario dominates anyway)
+        if (client.currentScreen != null) {
+            return 0;
+        }
+
+        long currentTick = world.getTime();
+        // Update only every 10 ticks (0.5s)
+        if (lastHostileCheckTick != -1 && currentTick - lastHostileCheckTick < 10) {
+            return cachedHostileCount;
+        }
+
         Box searchBox = player.getBoundingBox().expand(HOSTILE_MOB_RANGE);
         List<HostileEntity> hostiles = world.getEntitiesByClass(
                 HostileEntity.class,
                 searchBox,
                 entity -> entity.isAlive());
-        return hostiles.size();
+
+        cachedHostileCount = hostiles.size();
+        lastHostileCheckTick = currentTick;
+        return cachedHostileCount;
     }
 
     private double calculateConfidence(Scenario scenario, double stability) {

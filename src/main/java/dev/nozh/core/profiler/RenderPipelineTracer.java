@@ -1,15 +1,17 @@
 package dev.nozh.core.profiler;
 
 import java.util.ArrayList;
-import java.util.EnumMap;
+
 import java.util.List;
 
 public class RenderPipelineTracer {
 
     private static final long WINDOW_MS = 1000L;
 
-    private final EnumMap<RenderPhase, PhaseAccumulator> accumulators = new EnumMap<>(RenderPhase.class);
-    private final EnumMap<RenderPhase, Long> phaseStartNanos = new EnumMap<>(RenderPhase.class);
+    // OPTIMIZATION: Use arrays instead of EnumMap to avoid caching/lookup overhead
+    // and boxing
+    private final PhaseAccumulator[] accumulators; // Indexed by phase.ordinal()
+    private final long[] phaseStartNanos; // Indexed by phase.ordinal()
 
     private long windowStartMillis = System.currentTimeMillis();
     private RenderPipelineSnapshot lastSnapshot = RenderPipelineSnapshot.empty();
@@ -17,8 +19,12 @@ public class RenderPipelineTracer {
     private long frameStartNanos = 0L;
 
     public RenderPipelineTracer() {
+        int phaseCount = RenderPhase.values().length;
+        this.accumulators = new PhaseAccumulator[phaseCount];
+        this.phaseStartNanos = new long[phaseCount];
+
         for (RenderPhase phase : RenderPhase.values()) {
-            accumulators.put(phase, new PhaseAccumulator());
+            this.accumulators[phase.ordinal()] = new PhaseAccumulator();
         }
     }
 
@@ -26,22 +32,25 @@ public class RenderPipelineTracer {
         if (phase == null) {
             return;
         }
-        phaseStartNanos.put(phase, System.nanoTime());
+        // Zero-allocation primitive array store
+        phaseStartNanos[phase.ordinal()] = System.nanoTime();
     }
 
     public synchronized long endPhase(RenderPhase phase) {
         if (phase == null) {
             return 0L;
         }
-        Long start = phaseStartNanos.remove(phase);
-        if (start == null) {
+        int idx = phase.ordinal();
+        long start = phaseStartNanos[idx];
+
+        if (start == 0L) {
             return 0L;
         }
+
         long duration = System.nanoTime() - start;
-        PhaseAccumulator accumulator = accumulators.get(phase);
-        if (accumulator != null) {
-            accumulator.addSample(duration);
-        }
+        phaseStartNanos[idx] = 0L; // Reset
+
+        accumulators[idx].addSample(duration);
         rollWindowIfNeeded(System.currentTimeMillis());
         return duration;
     }
@@ -64,7 +73,7 @@ public class RenderPipelineTracer {
     public synchronized RenderPipelineSnapshot snapshot() {
         rollWindowIfNeeded(System.currentTimeMillis());
         if (lastSnapshot.phases().isEmpty()) {
-            return buildSnapshot(windowStartMillis, System.currentTimeMillis(), accumulators);
+            return buildSnapshot(windowStartMillis, System.currentTimeMillis());
         }
         return lastSnapshot;
     }
@@ -73,20 +82,21 @@ public class RenderPipelineTracer {
         if (nowMillis - windowStartMillis < WINDOW_MS) {
             return;
         }
-        lastSnapshot = buildSnapshot(windowStartMillis, nowMillis, accumulators);
+        lastSnapshot = buildSnapshot(windowStartMillis, nowMillis);
         windowStartMillis = nowMillis;
-        for (PhaseAccumulator accumulator : accumulators.values()) {
+        for (PhaseAccumulator accumulator : accumulators) {
             accumulator.reset();
         }
     }
 
-    private RenderPipelineSnapshot buildSnapshot(long startMillis, long endMillis,
-            EnumMap<RenderPhase, PhaseAccumulator> data) {
+    private RenderPipelineSnapshot buildSnapshot(long startMillis, long endMillis) {
         List<RenderPhaseMetrics> metrics = new ArrayList<>();
         RenderPhaseMetrics hottest = RenderPhaseMetrics.empty(RenderPhase.UNKNOWN);
-        for (var entry : data.entrySet()) {
-            RenderPhase phase = entry.getKey();
-            PhaseAccumulator accumulator = entry.getValue();
+
+        RenderPhase[] phases = RenderPhase.values();
+        for (int i = 0; i < phases.length; i++) {
+            RenderPhase phase = phases[i];
+            PhaseAccumulator accumulator = accumulators[i];
             RenderPhaseMetrics phaseMetrics = accumulator.toMetrics(phase);
             metrics.add(phaseMetrics);
             if (phaseMetrics.maxMs() > hottest.maxMs()) {

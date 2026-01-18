@@ -28,10 +28,7 @@ public class FrameTimeSampler {
      * Called once per frame into render loop.
      * Captures delta and pushes to stats.
      */
-    /**
-     * Called once per frame into render loop.
-     * Captures delta and pushes to stats.
-     */
+
     public void onFrame() {
         try {
             long now = System.nanoTime();

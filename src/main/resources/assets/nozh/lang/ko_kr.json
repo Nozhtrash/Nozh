@@ -1,4 +1,4 @@
-{
+﻿{
   "nozh.hud.title": "NOZH HUD (%s)",
   "nozh.hud.mode": "모드: %s",
   "nozh.hud.mode.auto": "자동",
@@ -43,7 +43,7 @@
   "nozh.hud.hud_time.ok": "정상",
   "nozh.hud.hud_time.slow": "느림",
   "nozh.hud.hud_time.unknown": "알 수 없음",
-  "nozh.hud.suggestion": "⚡ 제안: %s (K 누르기)",
+  "nozh.hud.suggestion": "[!] 제안: %s (K 누르기)",
   "nozh.hud.suggestion.none": "없음",
   "nozh.hud.suggestion.apply_hint": "적용: %s",
   "nozh.hud.suggestion.apply_hint_many": "적용: %s (+%d개 더)",
@@ -90,7 +90,7 @@
   "nozh.command.safemode.enabled": "안전 모드 활성화됨",
   "nozh.command.safemode.reset_success": "안전 모드 재설정됨",
   
-  "nozh.enable.success": "✓ NOZH 활성화됨. 자동 튜닝이 활성화되었습니다.",
+  "nozh.enable.success": "[OK] NOZH 활성화됨. 자동 튜닝이 활성화되었습니다.",
   "nozh.disable.success": "NOZH 비활성화됨.",
   "nozh.status.header": "NOZH 상태: ",
   "nozh.status.mode.active": "활성",

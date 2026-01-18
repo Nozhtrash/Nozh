@@ -42,6 +42,7 @@ public final class TestStates {
                 state.stateVersion(),
                 state.currentScenario(),
                 state.scenarioConfidence(),
+                0, // visibleEntityCount
                 state.lastScenarioChangeTimestamp(),
                 state.scenarioChangeCount(),
                 state.rapidScenarioChangeCount(),
