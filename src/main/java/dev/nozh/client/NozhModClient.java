@@ -230,9 +230,9 @@ public class NozhModClient implements ClientModInitializer {
                 "category.nozh"));
 
         openConfigKey = KeyBindingHelper.registerKeyBinding(new KeyBinding(
-                "key.nozh.open_config",
+                "key.nozh.quick_menu",
                 InputUtil.Type.KEYSYM,
-                GLFW.GLFW_KEY_O,
+                GLFW.GLFW_KEY_K,
                 "category.nozh"));
 
         manualConfirmationHandler = new ManualConfirmationHandler(
@@ -328,7 +328,17 @@ public class NozhModClient implements ClientModInitializer {
 
             if (openConfigKey != null) {
                 while (openConfigKey.wasPressed()) {
-                    clientInstance.setScreen(new dev.nozh.client.gui.NozhConfigScreen(clientInstance.currentScreen));
+                    // Open Quick Menu with action callbacks
+                    clientInstance.setScreen(new dev.nozh.client.gui.NozhQuickMenu(
+                            clientInstance.currentScreen,
+                            stateStore,
+                            () -> {
+                                if (manualConfirmationHandler != null)
+                                    manualConfirmationHandler.requestApply();
+                            },
+                            () -> {
+                                /* dismiss handled inside QuickMenu */ },
+                            () -> exportHudReport(clientInstance)));
                 }
             }
 
