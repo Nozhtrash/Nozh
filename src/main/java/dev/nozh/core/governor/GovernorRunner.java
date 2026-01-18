@@ -135,15 +135,22 @@ public final class GovernorRunner {
         totalTicks++;
         dev.nozh.core.context.ScenarioSnapshot scenarioSnapshot = scenarioDetector.detect();
         long nowMillis = nowMillis();
-        try {
-            stateStore.update(state -> {
-                return state.withScenarioUpdate(
-                        scenarioSnapshot.scenario(),
-                        scenarioSnapshot.confidence(),
-                        nowMillis);
-            });
-        } catch (Exception e) {
-            // Ignore update failure
+
+        // OPTIMIZATION: Dirty check to avoid unnecessary Write Locks on StateStore
+        // logic
+        RuntimeState currentState = stateStore.snapshotSafe();
+        if (currentState.currentScenario() != scenarioSnapshot.scenario() ||
+                Math.abs(currentState.scenarioConfidence() - scenarioSnapshot.confidence()) > 0.01) {
+            try {
+                stateStore.update(state -> {
+                    return state.withScenarioUpdate(
+                            scenarioSnapshot.scenario(),
+                            scenarioSnapshot.confidence(),
+                            nowMillis);
+                });
+            } catch (Exception e) {
+                // Ignore update failure
+            }
         }
         tickCounter++;
         // Dynamic Sampling (Phase 5)
@@ -696,13 +703,46 @@ public final class GovernorRunner {
     }
 
     private void refreshCurrentSettings() {
-        java.util.Map<dev.nozh.core.bus.CapabilityId, dev.nozh.core.bus.CapabilityValue> current = new java.util.EnumMap<>(
-                dev.nozh.core.bus.CapabilityId.class);
-        for (var provider : providerRegistry.getAllProviders()) {
-            provider.getCurrentValueSafe().ifPresent(value -> current.put(provider.id(), value));
+        // OPTIMIZATION: Check for changes before allocating map or acquiring write lock
+        RuntimeState state = stateStore.snapshotSafe();
+        Map<dev.nozh.core.bus.CapabilityId, dev.nozh.core.bus.CapabilityValue> currentMap = state.currentSettings();
+        boolean dirty = false;
+
+        // 1. Check if known providers match stored state
+        java.util.Collection<dev.nozh.core.capability.CapabilityProvider> providers = providerRegistry
+                .getAllProviders();
+        if (currentMap.size() != providers.size()) {
+            dirty = true;
+        } else {
+            for (dev.nozh.core.capability.CapabilityProvider provider : providers) {
+                Optional<dev.nozh.core.bus.CapabilityValue> currentValOpt = provider.getCurrentValueSafe();
+                if (currentValOpt.isPresent()) {
+                    dev.nozh.core.bus.CapabilityValue val = currentValOpt.get();
+                    if (!val.equals(currentMap.get(provider.id()))) {
+                        dirty = true;
+                        break;
+                    }
+                } else if (currentMap.containsKey(provider.id())) {
+                    // Provider returned empty but we have a value stored -> dirty
+                    dirty = true;
+                    break;
+                }
+            }
         }
+
+        if (!dirty) {
+            return;
+        }
+
+        // 2. Only if dirty, build new map and update
+        java.util.Map<dev.nozh.core.bus.CapabilityId, dev.nozh.core.bus.CapabilityValue> newSettings = new java.util.EnumMap<>(
+                dev.nozh.core.bus.CapabilityId.class);
+        for (dev.nozh.core.capability.CapabilityProvider provider : providers) {
+            provider.getCurrentValueSafe().ifPresent(value -> newSettings.put(provider.id(), value));
+        }
+
         try {
-            stateStore.update(state -> state.withCurrentSettings(current));
+            stateStore.update(s -> s.withCurrentSettings(newSettings));
         } catch (Exception e) {
             logger.warn("Failed to store current settings: " + e.getMessage());
         }
