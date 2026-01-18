@@ -1,6 +1,5 @@
 package dev.nozh.client.hud;
 
-import dev.nozh.api.PerfSnapshot;
 import dev.nozh.core.capability.ProviderRegistry;
 import dev.nozh.core.config.ConfigManager;
 import dev.nozh.core.config.NozhConfig;
@@ -39,6 +38,11 @@ public class NozhHudRenderer implements HudRenderCallback {
     private final FrametimeGraphRenderer graphRenderer;
     private double lastHudRenderMs = 0.0;
     private long lastRenderTime = 0;
+
+    // Caching fields
+    private long lastTextUpdateMs = 0;
+    private final List<Text> cachedLines = new java.util.ArrayList<>();
+    private int cachedMaxWidth = 0;
 
     public NozhHudRenderer(StateStore stateStore, ProviderRegistry providerRegistry,
             Supplier<TelemetrySnapshot> telemetrySupplier, PerfManager perfManager,
@@ -88,37 +92,50 @@ public class NozhHudRenderer implements HudRenderCallback {
             perfManager.onRenderPhaseStart(RenderPhase.HUD);
         }
 
-        RuntimeState state = stateStore != null ? stateStore.snapshotSafe() : RuntimeState.defaults();
-        TelemetrySnapshot telemetry = buildTelemetry();
-        PerfDiagnosticsSnapshot diagnostics = buildDiagnostics();
-        HudViewModel viewModel = HudViewModelBuilder.build(
-                state,
-                telemetry,
-                diagnostics,
-                List.of(),
-                HardwareTier.MEDIUM,
-                providerRegistry);
+        // --- OPTIMIZATION: Update text data at 20Hz (50ms) ---
+        long now = System.currentTimeMillis();
+        if (now - lastTextUpdateMs >= 50) {
+            lastTextUpdateMs = now;
+
+            RuntimeState state = stateStore != null ? stateStore.snapshotSafe() : RuntimeState.defaults();
+            TelemetrySnapshot telemetry = buildTelemetry();
+            PerfDiagnosticsSnapshot diagnostics = buildDiagnostics();
+            HudViewModel viewModel = HudViewModelBuilder.build(
+                    state,
+                    telemetry,
+                    diagnostics,
+                    List.of(),
+                    HardwareTier.MEDIUM,
+                    providerRegistry);
+
+            HudMode hudMode = HudMode.fromConfig(config.hudMode);
+            cachedLines.clear();
+            buildHudLines(cachedLines, viewModel, state, hudMode);
+
+            // Calculate max width only when text changes
+            cachedMaxWidth = 0;
+            TextRenderer textRenderer = client.textRenderer;
+            for (Text line : cachedLines) {
+                cachedMaxWidth = Math.max(cachedMaxWidth, textRenderer.getWidth(line));
+            }
+        }
+        // -----------------------------------------------------
 
         TextRenderer textRenderer = client.textRenderer;
         int lineHeight = textRenderer.fontHeight + 2;
         HudMode hudMode = HudMode.fromConfig(config.hudMode);
-        List<Text> lines = buildHudLines(viewModel, state, hudMode);
-        int maxWidth = 0;
-        for (Text line : lines) {
-            maxWidth = Math.max(maxWidth, textRenderer.getWidth(line));
-        }
 
         // Add extra space for graph if needed
         int graphHeight = (hudMode == HudMode.EXPERT || hudMode == HudMode.ANALYST) ? 65 : 0;
 
         float scale = (float) config.hudScale;
-        int scaledMaxWidth = Math.round(maxWidth * scale);
+        int scaledMaxWidth = Math.round(cachedMaxWidth * scale);
         // Graph is typically wider, check graph width
         if (graphHeight > 0) {
             scaledMaxWidth = Math.max(scaledMaxWidth, Math.round(200 * scale));
         }
 
-        int totalContentHeight = (lines.size() * lineHeight) + graphHeight;
+        int totalContentHeight = (cachedLines.size() * lineHeight) + graphHeight;
         int scaledContentHeight = Math.round(totalContentHeight * scale);
 
         int x = resolveAnchorX(config, scaledMaxWidth, client.getWindow().getScaledWidth());
@@ -143,9 +160,9 @@ public class NozhHudRenderer implements HudRenderCallback {
         int drawX = Math.round(x / scale);
         int drawY = Math.round(y / scale);
 
-        // Draw Text
-        for (int i = 0; i < lines.size(); i++) {
-            Text line = lines.get(i);
+        // Draw Cached Text
+        for (int i = 0; i < cachedLines.size(); i++) {
+            Text line = cachedLines.get(i);
             int color = i == 0 ? 0xFFFFFF : 0xE0E0E0;
 
             context.drawTextWithShadow(textRenderer, line, drawX, drawY, color);
@@ -184,8 +201,8 @@ public class NozhHudRenderer implements HudRenderCallback {
         return snapshot != null ? snapshot : PerfDiagnosticsSnapshot.empty();
     }
 
-    private List<Text> buildHudLines(HudViewModel viewModel, RuntimeState state, HudMode hudMode) {
-        List<Text> lines = new java.util.ArrayList<>();
+    private void buildHudLines(List<Text> lines, HudViewModel viewModel, RuntimeState state, HudMode hudMode) {
+        // lines.clear() is handled by caller
         lines.add(Text.translatable("nozh.hud.title", Text.translatable(hudMode.translationKey())));
         lines.add(Text.translatable("nozh.hud.mode", resolveMode(state)));
         if (hudMode != HudMode.COMPACT) {
@@ -239,7 +256,6 @@ public class NozhHudRenderer implements HudRenderCallback {
                     resolveHudBudgetStatus(lastHudRenderMs)));
             lines.add(Text.translatable("nozh.hud.export_hint", resolveExportKeyLabel()));
         }
-        return lines;
     }
 
     private void appendSuggestedActions(List<Text> lines, RuntimeState state) {

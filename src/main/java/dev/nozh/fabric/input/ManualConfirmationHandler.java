@@ -362,5 +362,8 @@ public final class ManualConfirmationHandler {
         if (client.inGameHud != null) {
             client.inGameHud.getChatHud().addMessage(title.copy().append(Text.literal(" ")).append(message));
         }
+        // Play sound for feedback
+        client.getSoundManager().play(net.minecraft.client.sound.PositionedSoundInstance.master(
+                net.minecraft.sound.SoundEvents.UI_BUTTON_CLICK, 1.0f));
     }
 }

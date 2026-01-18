@@ -19,6 +19,17 @@ public final class Priority2HudOverlay implements HudRenderCallback {
     private final MinecraftClient client;
     private final PendingSuggestionQueue pending;
 
+    // Cache fields
+    private long lastUpdateMillis = 0;
+    private static final long UPDATE_INTERVAL_MS = 200; // Update 5 times per second
+
+    // Cached strings
+    private String cachedBottleneck = "";
+    private String cachedScenario = "";
+    private String cachedBlocks = "";
+    private String cachedPendingTitle = "";
+    private String cachedReason = "";
+
     public Priority2HudOverlay(MinecraftClient client, PendingSuggestionQueue pending) {
         if (client == null)
             throw new NullPointerException("client");
@@ -45,44 +56,67 @@ public final class Priority2HudOverlay implements HudRenderCallback {
         if (client.player == null)
             return;
 
+        updateCacheIfNeeded();
+
         int x = 6;
         int y = 6;
         int dy = 10;
 
-        DeepScenarioSnapshot s = Priority2Signals.deepScenario.get();
-        CpuGpuBottleneckClassifier.Result b = Priority2Signals.bottleneck.get();
-
-        String bottleneckLine = "NOZH v0.2: bottleneck=unknown";
-        if (b != null) {
-            bottleneckLine = "NOZH v0.2: bottleneck=" + b.kind + " (conf="
-                    + String.format(java.util.Locale.ROOT, "%.2f", b.confidence01) + ")";
-        }
-
-        ctx.drawTextWithShadow(client.textRenderer, bottleneckLine, x, y, 0xE6FFFFFF);
+        ctx.drawTextWithShadow(client.textRenderer, cachedBottleneck, x, y, 0xE6FFFFFF);
         y += dy;
 
-        if (s != null) {
-            ctx.drawTextWithShadow(client.textRenderer,
-                    "Scenario: dim=" + s.dimensionKey + " hostiles=" + s.hostileMobsNearby,
-                    x, y, 0xE6FFFFFF);
+        if (!cachedScenario.isEmpty()) {
+            ctx.drawTextWithShadow(client.textRenderer, cachedScenario, x, y, 0xE6FFFFFF);
             y += dy;
-            ctx.drawTextWithShadow(client.textRenderer,
-                    "Blocks/min: place=" + String.format(java.util.Locale.ROOT, "%.1f", s.blocksPlacedPerMin)
-                            + " break=" + String.format(java.util.Locale.ROOT, "%.1f", s.blocksBrokenPerMin),
-                    x, y, 0xE6FFFFFF);
+            ctx.drawTextWithShadow(client.textRenderer, cachedBlocks, x, y, 0xE6FFFFFF);
             y += dy;
         }
 
+        if (!cachedPendingTitle.isEmpty()) {
+            ctx.drawTextWithShadow(client.textRenderer, cachedPendingTitle, x, y, 0xFFFFE08A);
+            y += dy;
+            if (!cachedReason.isEmpty()) {
+                ctx.drawTextWithShadow(client.textRenderer, cachedReason, x, y, 0xFFD7D7D7);
+            }
+        }
+    }
+
+    private void updateCacheIfNeeded() {
+        long now = System.currentTimeMillis();
+        if (now - lastUpdateMillis < UPDATE_INTERVAL_MS) {
+            return;
+        }
+        lastUpdateMillis = now;
+
+        // 1. Bottleneck
+        CpuGpuBottleneckClassifier.Result b = Priority2Signals.bottleneck.get();
+        if (b != null) {
+            cachedBottleneck = "NOZH v0.2: bottleneck=" + b.kind + " (conf="
+                    + String.format(java.util.Locale.ROOT, "%.2f", b.confidence01) + ")";
+        } else {
+            cachedBottleneck = "NOZH v0.2: bottleneck=unknown";
+        }
+
+        // 2. Scenario
+        DeepScenarioSnapshot s = Priority2Signals.deepScenario.get();
+        if (s != null) {
+            cachedScenario = "Scenario: dim=" + s.dimensionKey + " hostiles=" + s.hostileMobsNearby;
+            cachedBlocks = "Blocks/min: place=" + String.format(java.util.Locale.ROOT, "%.1f", s.blocksPlacedPerMin)
+                    + " break=" + String.format(java.util.Locale.ROOT, "%.1f", s.blocksBrokenPerMin);
+        } else {
+            cachedScenario = "";
+            cachedBlocks = "";
+        }
+
+        // 3. Pending
         int pendingN = pending.size();
         PendingSuggestionQueue.PendingSuggestion next = pending.peek();
         if (pendingN > 0 && next != null) {
-            ctx.drawTextWithShadow(client.textRenderer,
-                    "Pending(" + pendingN + "): " + next.id + "  [Press K]",
-                    x, y, 0xFFFFE08A);
-            y += dy;
-            if (next.reason != null && !next.reason.isBlank()) {
-                ctx.drawTextWithShadow(client.textRenderer, "Reason: " + next.reason, x, y, 0xFFD7D7D7);
-            }
+            cachedPendingTitle = "Pending(" + pendingN + "): " + next.id + "  [Press K]";
+            cachedReason = (next.reason != null && !next.reason.isBlank()) ? "Reason: " + next.reason : "";
+        } else {
+            cachedPendingTitle = "";
+            cachedReason = "";
         }
     }
 }

@@ -528,7 +528,10 @@ public class NozhConfigScreen extends Screen {
 
                 public TooltipButton(int x, int y, int width, int height, Text message, Text tooltip,
                                 PressAction onPress) {
-                        super(x, y, width, height, message, onPress, DEFAULT_NARRATION_SUPPLIER);
+                        super(x, y, width, height, message, button -> {
+                                onPress.onPress(button);
+                                dev.nozh.core.config.ConfigManager.saveAndNotify();
+                        }, DEFAULT_NARRATION_SUPPLIER);
                         this.tooltip = tooltip;
                 }
 
@@ -571,6 +574,7 @@ public class NozhConfigScreen extends Screen {
                 protected void applyValue() {
                         double val = min + value * (max - min);
                         onSet.accept(val);
+                        dev.nozh.core.config.ConfigManager.saveAndNotify();
                 }
 
                 @Override
