@@ -122,22 +122,18 @@ public class NozhHudRenderer implements HudRenderCallback {
         int scaledContentHeight = Math.round(totalContentHeight * scale);
 
         int x = resolveAnchorX(config, scaledMaxWidth, client.getWindow().getScaledWidth());
-        int y = resolveAnchorY(config, scaledContentHeight, 1, client.getWindow().getScaledHeight());
-        // Note: resolveAnchorY expects lines count but we have dynamic height now.
-        // We'll trust it works for top-left but for bottom might need adjustment.
-        // For simplicity, we use the total height logic manually if needed, but
-        // existing method uses line count.
-        // Let's hotfix: Y logic for bottom relies on height.
-        if ("BOTTOM_LEFT".equals(config.hudAnchor) || "BOTTOM_RIGHT".equals(config.hudAnchor)) {
-            y = client.getWindow().getScaledHeight() - scaledContentHeight - PADDING_Y + config.hudOffsetY;
-        }
 
         // Apply visual slide-in
         int slideOffset = Math.round(20 * (1.0f - smoothedProgress));
-        // Slide up if bottom, slide down if top
+
+        int y;
         if ("BOTTOM_LEFT".equals(config.hudAnchor) || "BOTTOM_RIGHT".equals(config.hudAnchor)) {
+            // Bottom align: ScreenHeight - ContentHeight - Padding + OffsetY + SlideOffset
+            y = client.getWindow().getScaledHeight() - scaledContentHeight - PADDING_Y + config.hudOffsetY;
             y += slideOffset;
         } else {
+            // Top align: Padding + OffsetY - SlideOffset
+            y = resolveAnchorY(config, scaledContentHeight, 1, client.getWindow().getScaledHeight());
             y -= slideOffset;
         }
 

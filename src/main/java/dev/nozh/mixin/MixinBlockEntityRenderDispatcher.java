@@ -42,15 +42,15 @@ public class MixinBlockEntityRenderDispatcher {
             net.minecraft.client.MinecraftClient client = net.minecraft.client.MinecraftClient.getInstance();
             if (client.player != null) {
                 double distSq = blockEntity.getPos().getSquaredDistance(client.player.getPos());
-                // Threshold: 16 blocks (256 sq) for most things
-                if (distSq > 256.0) {
-                    // Exception: Beacons, End Gateways (keep them visible further)
-                    // Using check by class name string to avoid strict resizing triggers or imports
-                    // if possible,
-                    // but instanceof is faster.
-                    // BlockEntity is the type.
-                    String typeName = blockEntity.getClass().getSimpleName();
-                    if (!typeName.contains("Beacon") && !typeName.contains("Gateway") && !typeName.contains("Portal")) {
+                // Threshold: configurable blocks squared for culling
+                double thresholdSq = dev.nozh.core.config.ConfigManager.getConfig()
+                        .potatoModeBlockEntityCullDistanceSq();
+                if (distSq > thresholdSq) {
+                    // Exception: Beacons, End Gateways, Portals (keep visible further)
+                    // Using instanceof for faster type-safe checks
+                    if (!(blockEntity instanceof net.minecraft.block.entity.BeaconBlockEntity)
+                            && !(blockEntity instanceof net.minecraft.block.entity.EndGatewayBlockEntity)
+                            && !(blockEntity instanceof net.minecraft.block.entity.EndPortalBlockEntity)) {
                         if (perfManager != null)
                             perfManager.onRenderPhaseEnd(RenderPhase.BLOCK_ENTITIES);
                         ci.cancel();

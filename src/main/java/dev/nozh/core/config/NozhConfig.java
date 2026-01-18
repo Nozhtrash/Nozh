@@ -17,7 +17,7 @@ public class NozhConfig {
     public boolean showHud = true; // Controls HUD visibility in-game.
     public boolean showHudSuggestions = true; // Shows action suggestions in HUD for guidance.
     public String hudMode = "ANALYST"; // HUD density preset: COMPACT, ANALYST, EXPERT.
-    public String hudAnchor = "TOP_LEFT"; // HUD anchor position on screen edges.
+    public String hudAnchor = "TOP_RIGHT"; // HUD anchor position on screen edges.
     public int hudOffsetX = 0; // Horizontal offset (pixels) from anchor.
     public int hudOffsetY = 0; // Vertical offset (pixels) from anchor.
     public double hudScale = 1.0; // HUD scale factor for readability (1.0 = 100%).
@@ -79,6 +79,19 @@ public class NozhConfig {
 
     // Potato Mode 2.0 (Phase 3)
     public boolean potatoModeEnabled = false; // Enables deep culling and low-res hacks.
+    public int potatoModeBlockEntityCullDistance = 16; // Block entities beyond this distance (blocks) are culled in
+                                                       // potato mode.
+
+    // Background/Unfocused window settings
+    public int backgroundFpsLimit = 5; // FPS limit when game window is not focused (1-60).
+
+    /**
+     * Get the squared cull distance for block entities in potato mode.
+     * Used to avoid sqrt calculations per-entity.
+     */
+    public double potatoModeBlockEntityCullDistanceSq() {
+        return (double) potatoModeBlockEntityCullDistance * potatoModeBlockEntityCullDistance;
+    }
 
     // Limits & Cooldowns
     public int historyMaxEntries = 50; // Max telemetry/action history entries stored in-memory.
@@ -263,6 +276,18 @@ public class NozhConfig {
             corrected = true;
         }
 
+        // backgroundFpsLimit: 1-60
+        if (backgroundFpsLimit < 1 || backgroundFpsLimit > 60) {
+            backgroundFpsLimit = clamp(backgroundFpsLimit, 1, 60);
+            corrected = true;
+        }
+
+        // potatoModeBlockEntityCullDistance: 4-64
+        if (potatoModeBlockEntityCullDistance < 4 || potatoModeBlockEntityCullDistance > 64) {
+            potatoModeBlockEntityCullDistance = clamp(potatoModeBlockEntityCullDistance, 4, 64);
+            corrected = true;
+        }
+
         if (!isValidHudAnchor(hudAnchor)) {
             hudAnchor = "TOP_LEFT";
             corrected = true;
@@ -423,7 +448,7 @@ public class NozhConfig {
             case "showhud":
                 return showHud;
             case "show_hud_suggestions":
-            case "showhudsuggestio ns":
+            case "showhudsuggestions":
                 return showHudSuggestions;
             case "allow_auto_tuning":
             case "allowautotuning":

@@ -15,10 +15,8 @@ public class MixinGameRenderer {
     @Inject(method = "render", at = @At("HEAD"))
     private void nozh$recordFrame(float tickDelta, long startTime, boolean tick, CallbackInfo info) {
         RenderVisibilityDecider.recordGameRendererFrame();
-        PerfManager perfManager = NozhModClient.getPerfManager();
-        if (perfManager != null) {
-            perfManager.onRenderFrameStart();
-        }
+        // Note: onRenderFrameStart is called by WorldRenderEvents.START callback in
+        // NozhModClient
     }
 
     @Inject(method = "render", at = @At("TAIL"))

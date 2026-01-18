@@ -344,19 +344,7 @@ public class NozhConfigScreen extends Screen {
                 addDrawableChild(new SectionLabel(x, y, "nozh.config.section.calibration"));
                 y += 20;
 
-                // Rollback Toggle
-                addDrawableChild(new TooltipButton(x, y, 200, 20,
-                                Text.translatable("nozh.config.option.rollback_enabled",
-                                                config.rollbackEnabled ? Text.translatable("options.on")
-                                                                : Text.translatable("options.off")),
-                                Text.translatable("nozh.config.tooltip.rollback_enabled"),
-                                btn -> {
-                                        config.rollbackEnabled = !config.rollbackEnabled;
-                                        btn.setMessage(Text.translatable("nozh.config.option.rollback_enabled",
-                                                        config.rollbackEnabled ? Text.translatable("options.on")
-                                                                        : Text.translatable("options.off")));
-                                }));
-                y += 25;
+                // Rollback in General tab, removed here for redundancy
 
                 // Hybrid Model Toggle
                 addDrawableChild(new TooltipButton(x, y, 200, 20,
@@ -573,8 +561,15 @@ public class NozhConfigScreen extends Screen {
 
                 @Override
                 protected void renderButton(DrawContext context, int mouseX, int mouseY, float delta) {
-                        context.drawText(net.minecraft.client.MinecraftClient.getInstance().textRenderer,
-                                        this.getMessage(), this.getX(), this.getY(), 0x55FF55, false);
+                        // Draw just the text, centered, with a distinct color (Gold/Yellow)
+                        context.drawCenteredTextWithShadow(
+                                        net.minecraft.client.MinecraftClient.getInstance().textRenderer,
+                                        this.getMessage(), this.getX() + this.getWidth() / 2, this.getY() + 3,
+                                        0xFFAA00);
+                        // Do NOT call super.renderButton() to avoid drawing the button texture
+                        // Draw a small underline to emphasize it's a section
+                        context.fill(this.getX(), this.getY() + 14, this.getX() + this.getWidth(), this.getY() + 15,
+                                        0x40FFAA00);
                 }
 
                 @Override
