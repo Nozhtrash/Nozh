@@ -12,7 +12,6 @@
   "environment": "client",
   "entrypoints": {
     "client": [
-      "dev.nozh.NozhMod",
       "dev.nozh.client.NozhModClient",
       "dev.nozh.fabric.priority2.NozhPriority2Client"
     ],
@@ -24,7 +23,7 @@
     "nozh.mixins.json"
   ],
   "depends": {
-    "fabricloader": ">=0.15.11",
+    "fabricloader": ">=0.15.3",
     "fabric-api": "*",
     "minecraft": "1.20.1"
   }

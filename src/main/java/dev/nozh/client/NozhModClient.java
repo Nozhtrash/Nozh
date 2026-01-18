@@ -85,8 +85,16 @@ public class NozhModClient implements ClientModInitializer {
     private static final int TUTORIAL_STEP_EXPORT = 2;
     private static final int TUTORIAL_STEP_COMPLETE = 3;
 
+    private static boolean initialized = false;
+
     @Override
     public void onInitializeClient() {
+        if (initialized) {
+            NozhConstants.LOGGER.warn("NOZH Client already initialized! Skipping duplicate initialization.");
+            return;
+        }
+        initialized = true;
+
         NozhConstants.LOGGER.info("NOZH Client initializing...");
 
         // Initialize Config (ensures it's loaded before debug logger)

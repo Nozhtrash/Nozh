@@ -27,14 +27,15 @@ public class MixinMinecraftClient {
 
     /**
      * Dynamic FPS Limiter (Background Saver).
-     * Reduces FPS to 5 when the window is not focused to save system resources.
+     * Reduces FPS when the window is not focused to save system resources.
+     * Configurable via nozh config 'backgroundFpsLimit'.
      */
     @Inject(method = "getFramerateLimit", at = @At("HEAD"), cancellable = true)
-    private void nozh$getFramerateLimit(CallbackInfoReturnable<Integer> circles) {
+    private void nozh$getFramerateLimit(CallbackInfoReturnable<Integer> cir) {
         MinecraftClient client = (MinecraftClient) (Object) this;
         if (!client.isWindowFocused()) {
-            // Background FPS limit: 5 FPS
-            circles.setReturnValue(5);
+            int limit = dev.nozh.core.config.ConfigManager.getConfig().backgroundFpsLimit;
+            cir.setReturnValue(limit);
         }
     }
 }
