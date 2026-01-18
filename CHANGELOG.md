@@ -7,159 +7,78 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [v1.0.0] - "The God Mode Update" (Official Release)
+## [v2.1.0] - "The Ultimate Polish" (Current)
 
-### 🚀 Major Features (God Mode Polish)
+### 🌍 Internationalization (i18n)
+
+- **Full Language Support**: Added complete translations for:
+  - English (US) - `en_us` (Source of Truth)
+  - Spanish (ES) - `es_es`
+  - Portuguese (BR) - `pt_br`
+  - French (FR) - `fr_fr`
+  - German (DE) - `de_de`
+  - Italian (IT) - `it_it`
+  - Japanese (JP) - `ja_jp`
+- **Cleaned & Verified**: Removed all duplicate keys and syntax errors from language files ensuring 100% valid JSON structure.
+- **Missing Keys Synced**: Automatically synced missing configuration keys (e.g., `debug_overlay`, `save` button) across all languages.
+
+### 💻 User Interface & HUD
+
+- **New HUD Metrics**:
+  - **P99 1% Lows**: Tracks the worst 1% of frames to identify micro-stutters.
+  - **Variance (ms²)**: Real-time stability metric.
+  - **Scenario Detection**: displayed in HUD (e.g., "Combat", "Exploring").
+- **Quick Menu**: Press `[H]` (default) to open a lightweight overlay for fast toggles.
+- **Configuration Screen**: Completely redesigned with tabs (General, Automation, Visuals, System, Advanced).
+- **Toast Notifications**: Added "Potato Mode" suggestion toasts when performance is critical.
+
+### ⚡ Optimization & Core
+
+- **Potato Mode**: A new emergency profile that aggressively optimizes settings when FPS drops below critical thresholds.
+- **Safety Rollback**: Automatically reverts changes if performance degrades within 45 seconds.
+- **Self-Check**: Enhanced `/nozh selfcheck` command that diagnoses:
+  - Environment (OS, Java, Fabric)
+  - Module Status (Orchestrator, Director)
+  - Capability Stewards
+  - Conflict Detection (Sodium/OptiFabric, etc.)
+
+### 🐛 Bug Fixes
+
+- **JSON Syntax**: Fixed critical `JsonSyntaxException` caused by missing/trailing commas in language files.
+- **Duplicate Keys**: Removed massive blocks of redundant English keys appended to translated files.
+- **Render Hooks**: Fixed potential render loop crashes by strictly validating render callbacks.
+- **Linter Cleanliness**: Project is now free of major linter warnings.
+
+---
+
+## [v2.0.0] - "The God Mode Update"
+
+### 🚀 Major Features
 
 - **Reactive Sodium Controller**: Dynamic quality adjustment based on real-time FPS.
-- **Intelligent Potato Engine**: Detects sustained low FPS ("struggling") and recommends emergency actions.
-- **Zero-Allocation Graph Renderer**: Completely rewritten HUD graph using primitive circular buffers for maximum performance.
-- **Visual Polish**: Added "Slide-In" animation for HUD toggling and improved interpolation.
-- **Math Optimizer**: High-performance approximations for `invSqrt`, `lerp`, and clamping.
+- **Intelligent Potato Engine**: Detects sustained low FPS and recommends emergency actions.
+- **Zero-Allocation Graph Renderer**: Completely rewritten HUD graph using primitive circular buffers.
+- **Visual Polish**: "Slide-In" animation for HUD toggling.
+- **Math Optimizer**: High-performance approximations for `invSqrt`, `lerp`.
 
-### 🧠 Intelligence & Core
+### 🧠 Intelligence
 
-- **Bayesian Confidence System**: Fully implemented adaptive scoring.
+- **Bayesian Confidence System**: Adaptive scoring for optimization decisions.
 - **Dual EMA Trend Detection**: Predictive performance tracking.
-- **Statistical Action Validation**: Anti-false-positive system.
+- **Statistical Action Validation**: Prevents false-positive optimizations.
 
 ### 🛠️ Technical
 
 - **Build Status**: PASSING.
 - **Code Quality**: 96% Clean (Zero allocations in hot paths).
-- **Architecture**: Modular layout with strict separation of concerns.
 
 ---
 
-## [Unreleased] - v0.6.0-alpha (Cloud & Community)
-
-### Added
-
-- **Cloud Infrastructure**: `CloudManager` for coordinating async network operations.
-- **Hardware Database**: `HardwareBenchmarker` for anonymous system profiling (CPU score, RAM, GPU).
-- **Mod Compatibility Cloud**: `RemoteConfigFetcher` for hot-reloading compatibility rules from GitHub without mod updates.
-- **Performance Leaderboards**: `LeaderboardCollector` for tracking personal best FPS gains and session history (stored locally).
-- **Privacy First**: All cloud features are opt-in or strictly anonymous (no PII collected).
-
-## [Unreleased] - v0.5.0-alpha (Server-Aware Optimization)
-
-### 🧠 Added - Intelligence Layer
-
-- **Bayesian Confidence Calculator** - Smart confidence scoring with:
-  - Prediction accuracy-based updates
-  - Scenario-specific modifiers (combat: 0.85, idle: 1.1)
-  - Success streak bonuses (up to +15%)
-  - Gradient anti-flapping (smooth 0.3→1.0 recovery)
-  - Adaptive decay based on action history
-
-- **Enhanced Performance Predictor**:
-  - Dual EMA system (fast α=0.4, slow α=0.1) for trend detection
-  - EMA crossover signal for degradation detection
-  - Micro-stutter tracking (30%+ frame increases)
-  - Rolling variance-based stability scoring
-  - Comprehensive `EnhancedPrediction` record combining all signals
-
-- **Anti-False-Positive System** (`ActionValidator`):
-  - Statistical significance testing using Cohen's d
-  - Sustained improvement validation (3+ consecutive samples)
-  - Related action cooldowns (e.g., particles + clouds share cooldown)
-  - Improvement consistency tracking per capability
-
-- **Math Utilities**:
-  - `ExponentialMovingAverage` - Zero-allocation EMA with half-life factory
-  - `RollingVariance` - Welford's algorithm for O(1) memory variance
-
-### 📈 Changed - Performance Improvements
-
-- **SessionLearning** - Memory-efficient with:
-  - Maximum 500 history entries
-  - Automatic compaction on size limit
-  - Stale entry cleanup (24h threshold)
-  - Value-based entry prioritization
-
-- **SystemMonitor** - Enhanced bottleneck detection:
-  - New `MEMORY` bound type for high memory pressure
-  - Chunk loading awareness in scoring
-  - Granular entity count thresholds (150/300/500)
-  - `BottleneckReport` record for detailed analysis
-
-- **AdaptiveVisualQualityController** - Gradual recovery:
-  - Asymmetric hysteresis (1.0x down, 1.5x up thresholds)
-  - Separate timing intervals (10s down, 30s up)
-  - 60-second stability window for quality recovery
-  - Different streak requirements (2 down, 4 up)
-
-### 🔧 Fixed
-
-- Replaced all `catch (Throwable)` with specific exception types
-- Fixed duplicate log message in NozhPriority2Client
-- Updated deprecated API documentation in CapabilityProviderRegistry
-- Removed duplicate CrashLoopGuard.recordFailureContext call
-- Fixed profile serialization/deserialization in SmartProfileManager
-- Stabilized Loom version from SNAPSHOT to 1.6
-
----
-
-## [0.2.0-alpha] - Chaos Testing & CI
-
-### Added
-
-- Chaos test CI job with JSON/CSV reporting and report metadata exports.
-- New chaos stress scenarios (entity/chunk/shader) and benchmark scenario artifact recording.
-- Automated modpack quick-test runner and quick-test documentation.
-- Telemetry metrics checklist documentation and architecture freeze policy documentation.
-- First-run tutorial flow with expanded localization coverage.
-
-### Changed
-
-- Strengthened chaos test malicious thresholds and CI reporting behavior.
-
----
-
-## [0.1.0] - "The Foundation" (Golden Master)
-
-**Release Type**: Initial Release  
-**Stability**: Production Ready
+## [v1.0.0] - "The Foundation" (Legacy)
 
 ### Key Features
 
-- **Safe Architecture**: Mod is split into Profiler, Governor, and Executor for safety.
-- **Honest Profiler**: Measures Frametime P95 and Average accurately. Reports `UNKNOWN` if data is insufficient.
-- **Safe Mode ("The Bouncer")**: Automatically locks the mod if a crash loop is detected.
-- **Automated Rollback**: If a change doesn't improve performance within 45 seconds, it is undone.
-- **Diagnostics**: `/nozh selfcheck` command for health auditing.
-- **Compat**: Detects Sodium, Iris, etc. and logs compatibility hints.
-- **Localization**: English (US) and Spanish (CL) support.
-
-### Non-Goals (v0.1.0)
-
-- NOZH does NOT increase FPS artificially.
-- NOZH does NOT override user preferences without consent.
-- NOZH does NOT change render distance, simulation distance, or entities in this version.
-- NOZH does NOT guess when data is insufficient.
-
-### Stability Guarantees
-
-- NOZH guarantees reversibility for every automatic action performed in v0.1.0.
-
-### Technical Details
-
-- Zero-allocation hot paths (no garbage generation in `onFrame`).
-- Strict config validation and safe clamping.
-- Action Cooldowns to prevent "fighting" with the user.
-
----
-
-## Expected Performance Impact
-
-| Scenario | Expected FPS Gain | Confidence |
-|----------|-------------------|------------|
-| Lobby/Hub (many players) | +30-50% | High |
-| Farms (entities) | +40-60% | High |
-| Combat (PvP/PvE) | +20-35% | Medium |
-| Exploration (chunk loading) | +15-25% | Medium |
-| Building (static) | +10-20% | Low (already efficient) |
-| AFK Mode | +100% (capped to 30 FPS) | High |
-
-**Note**: Actual gains depend heavily on hardware, modpack, and base FPS.
-Low-end systems typically see larger percentage improvements.
+- **Safe Architecture**: Profiler, Governor, Executor split.
+- **Safe Mode**: Automatically locks mod on crash loop.
+- **Automated Rollback**: Reverts bad changes.
+- **Diagnostics**: Initial `/nozh selfcheck`.

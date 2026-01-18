@@ -80,6 +80,7 @@ public class NozhConfig {
 
     // Potato Mode 2.0 (Phase 3)
     public boolean potatoModeEnabled = false; // Enables deep culling and low-res hacks.
+    public boolean autoEngageEmergency = false; // Automatically engages Potato Mode if FPS is critical.
     public int potatoModeBlockEntityCullDistance = 16; // Block entities beyond this distance (blocks) are culled in
                                                        // potato mode.
 

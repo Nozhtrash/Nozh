@@ -1,7 +1,6 @@
 package dev.nozh.core.potato;
 
 import dev.nozh.NozhConstants;
-import dev.nozh.core.config.HardwareProfiler;
 
 import java.lang.management.ManagementFactory;
 import com.sun.management.OperatingSystemMXBean;
@@ -223,6 +222,15 @@ public final class PotatoModeEngine {
     private static final int STRUGGLE_THRESHOLD = 100; // 5 seconds of low FPS
     private boolean emergencyModeRecommended = false;
 
+    // Callback for frontend notification (e.g. Toast)
+    private Runnable emergencyTriggerCallback;
+    private long lastEmergencyTriggerTime = 0;
+    private static final long INTERACTION_COOLDOWN_MS = 60000; // 1 minute cooldown
+
+    public void setEmergencyTriggerCallback(Runnable callback) {
+        this.emergencyTriggerCallback = callback;
+    }
+
     /**
      * Update loop for periodic checks.
      * 
@@ -244,8 +252,25 @@ public final class PotatoModeEngine {
             emergencyModeRecommended = true;
             NozhConstants.LOGGER.warn("Potato Engine: System struggling ({} FPS). Emergency mode recommended.",
                     (int) currentFps);
-            // In a full implementation, we would trigger a toast or auto-apply if
-            // permission granted
+
+            long now = System.currentTimeMillis();
+            if (emergencyTriggerCallback != null && (now - lastEmergencyTriggerTime > INTERACTION_COOLDOWN_MS)) {
+                // Feature: Auto-Engage "Emergency Brake"
+                dev.nozh.core.config.NozhConfig config = dev.nozh.core.config.ConfigManager.getConfig();
+                if (config != null && config.autoEngageEmergency && !isActive()) {
+                    NozhConstants.LOGGER
+                            .warn("Auto-engaging Potato Mode due to critical performance (Struggle detected).");
+                    applyPotatoMode(getRecommendedLevel());
+
+                    // Notify user it happened (if callback supports it, or generic toast)
+                    if (emergencyTriggerCallback != null) {
+                        emergencyTriggerCallback.run(); // Still run callback to show toast/notification
+                    }
+                } else {
+                    emergencyTriggerCallback.run();
+                }
+                lastEmergencyTriggerTime = now;
+            }
         }
     }
 

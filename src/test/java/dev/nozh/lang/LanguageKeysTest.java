@@ -27,9 +27,9 @@ class LanguageKeysTest {
             "fr_fr.json",
             "de_de.json",
             "it_it.json",
-            "ja_jp.json"
-    );
-    private static final Type MAP_TYPE = new TypeToken<Map<String, String>>() {}.getType();
+            "ja_jp.json");
+    private static final Type MAP_TYPE = new TypeToken<Map<String, String>>() {
+    }.getType();
     private static final Gson GSON = new Gson();
 
     @Test

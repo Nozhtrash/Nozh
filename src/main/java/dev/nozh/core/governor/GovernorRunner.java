@@ -52,6 +52,7 @@ public final class GovernorRunner {
     private static final int REVERSE_IMPROVEMENT_STREAK = 3;
     private static final long SPIKE_PREDICTION_MIN_WINDOW_MS = 5_000L;
     private static final int DECISION_LATENCY_TARGET_MS = 2;
+    private static final int CROWD_CONTROL_THRESHOLD = 300;
 
     private final HybridGovernor governor;
     private final ActionMatrix actionMatrix;
@@ -232,6 +233,10 @@ public final class GovernorRunner {
 
         if (systemMonitor.isMemoryCritical()) {
             logger.warn("Skipping governor decision - memory critical");
+            return;
+        }
+
+        if (manageCrowdControl(state, config, now)) {
             return;
         }
 
@@ -503,6 +508,119 @@ public final class GovernorRunner {
                     config.historyMaxEntries));
         } catch (Exception e) {
             logger.warn("Failed to update state after adaptive visual action: " + e.getMessage());
+        }
+        return true;
+    }
+
+    private boolean manageCrowdControl(RuntimeState state, NozhConfig config, long now) {
+        if (!config.enabled) {
+            return false;
+        }
+
+        int visible = state.visibleEntityCount();
+        if (visible <= 0) {
+            return false;
+        }
+
+        Optional<dev.nozh.core.capability.CapabilityProvider> providerOpt = providerRegistry
+                .get(CapabilityId.ENTITY_DISTANCE);
+        if (providerOpt.isEmpty()) {
+            return false;
+        }
+        dev.nozh.core.capability.CapabilityProvider provider = providerOpt.get();
+
+        Optional<CapabilityValue> currentOpt = provider.getCurrentValueSafe();
+        if (currentOpt.isEmpty() || !(currentOpt.get() instanceof CapabilityValue.IntValue)) {
+            return false;
+        }
+        int currentDist = ((CapabilityValue.IntValue) currentOpt.get()).value();
+
+        // Rule 1: High density -> Reduce distance
+        if (visible > CROWD_CONTROL_THRESHOLD) {
+            if (currentDist > 50) {
+                // Apply 50%
+                return dispatchCrowdControlAction(state, config, now, 50,
+                        "crowd_control_high_density (visible=" + visible + ")");
+            }
+        }
+        // Rule 2: Low density -> Restore distance
+        else if (visible < (CROWD_CONTROL_THRESHOLD / 2)) {
+            if (currentDist < 100) {
+                // Restore to 100%
+                return dispatchCrowdControlAction(state, config, now, 100,
+                        "crowd_control_restore (visible=" + visible + ")");
+            }
+        }
+        return false;
+    }
+
+    private boolean dispatchCrowdControlAction(RuntimeState state, NozhConfig config, long now, int targetVal,
+            String reason) {
+        CapabilityValue targetValue = new CapabilityValue.IntValue(targetVal);
+        CapabilityId capId = CapabilityId.ENTITY_DISTANCE;
+
+        PerfSnapshot baselineSnapshot = captureSnapshot();
+        int observationWindowSeconds = resolveObservationWindowSeconds(config, baselineSnapshot);
+        Optional<CapabilityValue> previousValue = providerRegistry.get(capId)
+                .flatMap(provider -> provider.getCurrentValueSafe());
+
+        Command cmd = new Command.ApplyCapability(capId, targetValue);
+
+        PendingAction pending = new PendingAction(
+                now,
+                totalTicks,
+                capId,
+                cmd,
+                previousValue,
+                targetValue,
+                state.avgFrametimeMs(),
+                state.p95FrametimeMs(),
+                state.currentScenario(),
+                state.scenarioConfidence(),
+                baselineSnapshot);
+
+        ActionHistoryEntry actionEntry = new ActionHistoryEntry(
+                now,
+                reason,
+                state.currentScenario(),
+                state.scenarioConfidence(),
+                baselineSnapshot,
+                PerfSnapshot.empty(),
+                0.0,
+                0,
+                observationWindowSeconds,
+                ActionOutcome.NEUTRAL,
+                false);
+
+        try {
+            stateStore.update(currentState -> currentState.withDecision(reason, now));
+        } catch (Exception e) {
+            logger.warn("Failed to update state decision: " + e.getMessage());
+        }
+
+        actionBus.dispatch(cmd, report -> {
+            if (report.succeeded()) {
+                logger.info("Crowd control action succeeded: " + reason);
+                predictiveAnalyzer.reset();
+                refreshCurrentSettings();
+            } else {
+                logger.warn("Crowd control action failed: " + report.error().orElse("unknown"));
+                try {
+                    stateStore.update(RuntimeState::withPendingActionCleared);
+                } catch (Exception e) {
+                    logger.error("Failed to clear pending action after crowd control failure");
+                }
+            }
+        });
+
+        try {
+            stateStore.update(currentState -> currentState.withGovernorAction(
+                    now,
+                    pending,
+                    actionEntry,
+                    config.historyMaxEntries));
+        } catch (Exception e) {
+            logger.warn("Failed to update state after crowd control action: " + e.getMessage());
         }
         return true;
     }

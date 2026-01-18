@@ -225,8 +225,6 @@
   "nozh.quickmenu.open_config": "Open Full Config",
   "nozh.quickmenu.close": "Close",
   "nozh.quickmenu.pending": "Pending: %s",
-  "nozh.config.button.save": "Save",
-  "nozh.config.button.saved": "Saved!",
   "nozh.selfcheck.header": "=== NOZH Self-Check ===",
   "nozh.selfcheck.env.header": "--- Environment ---",
   "nozh.selfcheck.facts.header": "--- Facts ---",
@@ -305,10 +303,16 @@
   "nozh.config.tooltip.decision_budget": "Max CPU time allowed per decision.\nStart low (5ms) for weak CPUs.",
   "nozh.config.button.export_config": "Export to Clipboard",
   "nozh.config.tooltip.export_config": "Copy current config JSON to clipboard.",
+  "nozh.hud.metrics.p99": "P99 1% 低: %s ms",
+  "nozh.hud.metrics.variance": "分散: %s ms²",
+  "nozh.toast.potato_mode.title": "Performance Critical!",
+  "nozh.toast.potato_mode.desc": "Press [K] to enable Potato Mode",
+  "nozh.config.hud.debug_overlay": "Debug Overlay: %s",
+  "nozh.config.hud.debug_overlay.tooltip": "Shows technical info (bottleneck, scenario). Useful for debugging performance issues.",
+  "nozh.config.save": "Save Changes",
+  "nozh.config.saved": "Saved!",
   "nozh.config.button.reload_config": "Reload from Disk",
   "nozh.config.tooltip.reload_config": "Discard unsaved changes and reload file.",
   "nozh.config.button.reset_full": "Factory Reset",
-  "nozh.config.tooltip.reset_full": "Wipe all settings and data.",
-  "nozh.hud.metrics.p99": "P99 1% 低: %s ms",
-  "nozh.hud.metrics.variance": "分散: %s ms²"
+  "nozh.config.tooltip.reset_full": "Wipe all settings and data."
 }

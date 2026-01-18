@@ -770,6 +770,7 @@ public final class ChaosTestRunner {
                 state.stateVersion(),
                 state.currentScenario(),
                 state.scenarioConfidence(),
+                state.visibleEntityCount(), // Added
                 state.lastScenarioChangeTimestamp(),
                 state.scenarioChangeCount(),
                 state.rapidScenarioChangeCount(),

@@ -210,6 +210,7 @@ public final class ManualConfirmationHandler {
                 currentState.stateVersion(),
                 currentState.currentScenario(),
                 currentState.scenarioConfidence(),
+                currentState.visibleEntityCount(), // Added
                 currentState.lastScenarioChangeTimestamp(),
                 currentState.scenarioChangeCount(),
                 currentState.rapidScenarioChangeCount(),

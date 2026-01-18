@@ -1,88 +1,101 @@
-# NOZH: Intelligent Frame Pacing Engine
+# NOZH: Intelligent Frame Pacing Engine (God Mode)
 
 > **[LEER EN ESPAÑOL / READ IN SPANISH](README_ES.md)**
 
-**NOZH** is a client-side optimization mod for Minecraft Fabric 1.20.1. It is designed to stabilize frame times by dynamically adjusting render settings based on real-time performance telemetry.
+**NOZH** is a next-generation client-side optimization mod for **Minecraft Fabric 1.20.1**. Unlike traditional FPS boosters that blindly lower settings, NOZH uses a **neural-hybrid engine** to stabilize frame times, eradicate micro-stutters (`1% lows`), and dynamically balance visual quality against performance.
 
-Unlike general optimization mods that aim for "maximum FPS" (often at the cost of stability), NOZH prioritizes **consistency** (P99 frametimes). It achieves this by selectively reducing graphical fidelity during high-load scenarios and restoring it when the load decreases.
-
-## 🛠 How It Works (Technical Deep Dive)
-
-NOZH does not perform magic. It manages a trade-off: **Visual Fidelity vs. Input Latency**.
-
-### 1. The Perceptron Predictor
-
-NOZH uses a single-layer neural network (Perceptron) to forecast the probability of a lag spike in the *next* frame.
-
-- **Inputs:** Entity Density (normalized), Particle Count, Chunk Updates, Player Velocity.
-- **Output:** A strict probability (0.0 to 1.0) of the next frame exceeding the target frametime (e.g., >8.33ms for 120 FPS).
-- **Training:** The model learns online. If it predicts a spike and one occurs, weights are reinforced. If it predicts a spike but the frame is smooth, it penalizes the weight. This allows it to adapt to *your* specific hardware over time (approx. 30-120 seconds of gameplay).
-
-### 2. Transactional Governor
-
-Any change made to your game settings (e.g., "Set Sodium Clouds to Fast") is executed as a **Transaction**.
-
-1. **Capture:** The current state of Sodium is recorded.
-2. **Execute:** The setting is changed.
-3. **Audit:** The system monitors performance for the next 40-200 ticks.
-4. **Rollback:** If the change does not statistically improve P99 frametimes (or makes them worse), the transaction is **rolled back**, restoring your original setting.
-
-This ensures NOZH doesn't just "turn everything off" blindly. It only keeps changes that actually help your specific situation.
-
-### 3. Integrated Ring Buffer
-
-We store the last 600 frames of telemetry in a zero-allocation ring buffer. This allows us to calculate Standard Deviation and Mean in O(1) time, providing a statistically significant view of "smoothness" rather than reacting to single noise spikes.
+If your game stutters during combat or chunk loading, NOZH fixes it by sacrificing visuals *only when necessary* and restoring them instantly when the load clears.
 
 ---
 
-## ⚠️ Realistic Expectations
+## 🚀 Key Features (v2.1.0)
 
-**NOZH is NOT for you if:**
+### 🧠 Intelligent Optimization
 
-- You want 2000 FPS for screenshots.
-- You play vanilla Minecraft on a high-end PC (you likely don't need dynamic adjustment).
-- You want a mod that "just boosts FPS" without changing visuals. NOZH *will* change visuals (clouds, particles) to save frames.
+- **Perceptron Predictor**: A lightweight neural network that predicts frame time spikes before they happen.
+- **Dynamic Quality**: Automatically adjusts Sodium settings (render distance, particles, entity culling) in real-time.
+- **Scenario Detection**: Identifies what you are doing (Combat, exploring, AFK, Building) and switches profiles automatically.
 
-**NOZH IS for you if:**
+### 🥔 Potato Mode (New!)
 
-- You experience "micro-stutter" or "hitching" when loading chunks or fighting mobs.
-- You play heavily modded packs where entity counts fluctuate wildly.
-- You prefer a consistent 60/120/144 FPS over a fluctuating 400 FPS.
+- **Emergency Protocol**: If your FPS drops below a critical threshold (e.g., <20 FPS), NOZH activates "Potato Mode".
+- **Aggressive Tactics**: Instantly minimizes particles, shadows, and unnecessary rendering to restore playability.
+- **One-Key Toggle**: Manually toggle manually with `[K]` (configurable).
+
+### 🛡️ Safety Systems
+
+- **Crisis Rollback**: If NOZH makes a change and your FPS gets *worse*, it automatically reverts that change within 45 seconds.
+- **Safe Mode**: If the game crashes or becomes unstable, NOZH locks itself into a "Safe Mode" to prevent loops.
+- **Self-Check**: Run `/nozh selfcheck` to audit your installation, detect mod conflicts (e.g., Sodium + OptiFabric), and verify system health.
+
+### 📊 Professional HUD 2.0
+
+- **Advanced Metrics**:
+  - **P99 Lows**: The true measure of stutter.
+  - **Variance (ms²)**: How "jittery" your game feels.
+  - **Bottleneck**: Tells you if you are CPU-bound or GPU-bound.
+- **Visual Graph**: Zero-allocation real-time frametime graph.
+- **Quick Menu**: Press `[H]` to open a fast overlay for toggles and profiles.
+
+### 🌍 Global Language Support
+
+Fully translated into:
+
+- 🇺🇸 English (US)
+- 🇪🇸 Spanish (ES)
+- 🇧🇷 Portuguese (BR)
+- 🇫🇷 French (FR)
+- 🇩🇪 German (DE)
+- 🇮🇹 Italian (IT)
+- 🇯🇵 Japanese (JP)
 
 ---
 
-## 🎮 Usage Guide
+## 🛠️ Installation
 
-### Installation
+1. **Install Fabric Loader** for Minecraft 1.20.1.
+2. **Install Sodium** (Required). NOZH acts as an intelligent "conductor" for Sodium's rendering engine.
+3. Download the latest `nozh-x.x.x.jar` release.
+4. Drop it into your `.minecraft/mods` folder.
 
-1. Install **Fabric Loader**.
-2. Install **Sodium** (Required). NOZH orchestrates Sodium settings; without it, NOZH does very little.
-3. Drop `nozh-2.0.0.jar` into your `mods` folder.
+**Recommended:** Pair with `Indium` and `Lithium` for best results.
 
-### Configuration
+---
 
-The mod works out-of-the-box (`config/nozh.json`).
+## ⚙️ Configuration
 
-- `targetFps`: Set this to your monitor's refresh rate (e.g., 60, 144).
-- `allowedDegradations`: List of features NOZH is allowed to touch. If you *really* love clouds, remove `"CLOUDS"` from this list, and NOZH will never touch them, even if you lag.
+Press `[K]` or use ModMenu to open the **NOZH Dashboard**.
+
+### Tabs
+
+1. **General**: Master switch, target FPS, and Preset Profiles (Potato, Low, Mid, Ultra).
+2. **Automation**: Configure how aggressive the neural network should be (`Decision Budget`, `History Size`).
+3. **Visuals**: Fine-tune what NOZH is allowed to downgrade (e.g., only particles, but keep render distance).
+4. **System**: View logs, export telemetry, or Factory Reset the mod.
 
 ### Commands
 
-- `/nozh status` - View current neural weights and Governor state.
-- `/nozh profile` - Run a distinct 10-second benchmark.
-- `/nozh toggle` - Disable/Enable the mod on the fly.
+- `/nozh status`: View current AI confidence and active profile.
+- `/nozh selfcheck`: Run a system diagnostic.
+- `/nozh profile`: Run a 10-second benchmark to calibrate the engine.
+- `/nozh toggle`: Enable/Disable the mod on the fly.
 
 ---
 
-## 🤝 Compatibility
+## ❓ FAQ
 
-- **Compatible:** Sodium, Lithium, ImmediatelyFast, FerriteCore, ModernFix.
-- **Incompatible:** Any other "dynamic settings" mod (e.g., Dynamic FPS, Adrenalin). Using two dynamic optimizers will cause them to fight over settings, resulting in flickering.
+**Q: Will this increase my maximum FPS?**
+A: Maybe. But NOZH's goal is **consistency**, not peak numbers. 60 FPS with 0 stutters feels smoother than 400 FPS that drops to 20 every few seconds.
+
+**Q: Is it compatible with shaders?**
+A: Yes! NOZH detects Iris/Shaders and switches to a "Conservative Mode" to avoid breaking visual effects.
+
+**Q: Can I use it on a server?**
+A: Yes. NOZH is strictly client-side. It works on any server (Vanilla, Spigot, Modded) without needing to be installed on the server.
 
 ---
 
-## Open Source & Transparency
+## 📝 License
 
-This project is open source. There is no telemetry sent to external servers. All learning data (weights) is stored locally on your machine and deleted when you restart the game (unless persisted in future updates).
-
-We believe in honest optimization. NOZH trades visual quality for performance *only when necessary*, and strictly validates that trade-off.
+This project is licensed under the MIT License.
+NOZH is open-source and free forever.

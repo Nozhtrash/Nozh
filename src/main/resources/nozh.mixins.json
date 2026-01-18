@@ -16,7 +16,8 @@
         "MixinBlockEntityRenderDispatcher",
         "MixinClientChunkManager",
         "MixinParticleManager",
-        "MixinClientPlayNetworkHandler"
+        "MixinClientPlayNetworkHandler",
+        "WorldRendererAccessor"
     ],
     "injectors": {
         "defaultRequire": 1

@@ -184,6 +184,18 @@ public class NozhModClient implements ClientModInitializer {
             }
         });
 
+        // Register Emergency Callback (Active Potato Mode)
+        potatoModeEngine.setEmergencyTriggerCallback(() -> {
+            MinecraftClient mc = MinecraftClient.getInstance();
+            if (mc != null && mc.getToastManager() != null) {
+                mc.getToastManager().add(new dev.nozh.client.gui.toast.PotatoModeSuggestionToast());
+                // Also play a sound for attention
+                if (mc.player != null) {
+                    mc.player.playSound(net.minecraft.sound.SoundEvents.BLOCK_NOTE_BLOCK_PLING.value(), 1.0f, 0.5f);
+                }
+            }
+        });
+
         // 8. Create ActionProcessor bridge
         StandardActionProcessor actionProcessor = new StandardActionProcessor(
                 capabilityExecutor,
@@ -378,7 +390,10 @@ public class NozhModClient implements ClientModInitializer {
 
             // High frequency updates
             if (memoryOptimizer != null) {
-                memoryOptimizer.tick();
+                dev.nozh.core.context.Scenario currentScenario = stateStore != null
+                        ? stateStore.snapshotSafe().currentScenario()
+                        : dev.nozh.core.context.Scenario.STANDARD;
+                memoryOptimizer.tick(currentScenario);
                 // Feed memory pressure to resource allocator
                 if (resourceAllocator != null) {
                     resourceAllocator.setMemoryPressure(memoryOptimizer.getMemoryPressure());
@@ -462,6 +477,7 @@ public class NozhModClient implements ClientModInitializer {
             var frameSnapshot = perfManager.getSnapshot();
             var tickSnapshot = tickTimeSampler.getSnapshot();
             if (frameSnapshot.sufficientData() || tickSnapshot.sufficientData()) {
+                int visibleEntities = resolveVisibleEntityCount();
                 stateStore.update(state -> state.withTelemetry(
                         frameSnapshot.sufficientData() ? frameSnapshot.avgFrametimeMs() : state.avgFrametimeMs(),
                         frameSnapshot.sufficientData() ? frameSnapshot.p95FrametimeMs() : state.p95FrametimeMs(),
@@ -470,7 +486,8 @@ public class NozhModClient implements ClientModInitializer {
                                 : state.frametimeStddevMs(),
                         frameSnapshot.sufficientData() ? frameSnapshot.spikeCount() : state.spikeCount(),
                         tickSnapshot.sufficientData() ? tickSnapshot.avgFrametimeMs() : state.tickTimeAvg(),
-                        tickSnapshot.sufficientData() ? tickSnapshot.p95FrametimeMs() : state.tickTimeP95()));
+                        tickSnapshot.sufficientData() ? tickSnapshot.p95FrametimeMs() : state.tickTimeP95(),
+                        visibleEntities));
             }
         } catch (Exception e) {
             // Never crash telemetry update
@@ -646,6 +663,14 @@ public class NozhModClient implements ClientModInitializer {
             return "remote:" + handler.getConnection().getAddress().toString();
         }
         return "unknown";
+    }
+
+    private int resolveVisibleEntityCount() {
+        MinecraftClient client = MinecraftClient.getInstance();
+        if (client == null || client.worldRenderer == null) {
+            return 0;
+        }
+        return ((dev.nozh.mixin.WorldRendererAccessor) client.worldRenderer).getRegularEntityCount();
     }
 
 }

@@ -270,19 +270,47 @@ public final class MemoryOptimizer {
      * <li>Logs warnings</li>
      * </ul>
      */
-    public void tick() {
+    /**
+     * Monitors memory and performs automatic actions if needed.
+     * 
+     * @param currentScenario The current gameplay scenario (context)
+     */
+    public void tick(dev.nozh.core.context.Scenario currentScenario) {
+        // 1. Critical Emergency (Ignore Context)
         if (isCriticalMemory()) {
-            NozhConstants.LOGGER.error("CRITICAL MEMORY: {}%",
+            NozhConstants.LOGGER.error("CRITICAL MEMORY: {}% - Forcing Emergency Cleanup",
                     (int) (getMemoryUsagePercent() * 100));
             emergencyCleanup();
-        } else if (isMemoryPressure()) {
-            if (!lowMemoryMode) {
-                NozhConstants.LOGGER.warn("Memory pressure detected: {}%",
-                        (int) (getMemoryUsagePercent() * 100));
-                enableLowMemoryMode();
+            return;
+        }
+
+        // 2. High Pressure (Smart Context Check)
+        if (isMemoryPressure()) {
+            // Only run "Smart GC" if we are in a SAFE state
+            boolean isSafeState = (currentScenario == dev.nozh.core.context.Scenario.MENU ||
+                    currentScenario == dev.nozh.core.context.Scenario.AFK);
+
+            // If we are safe, run cleanup. If not, just warn and enable Low Memory Mode.
+            if (isSafeState) {
+                long now = System.currentTimeMillis();
+                // Use a longer cooldown for Smart GC (60s) to be less annoying than Emergency
+                // GC
+                if (now - lastCleanupTime > 60000) {
+                    NozhConstants.LOGGER.info("Smart GC: Safe state detected ({}) with high memory ({}%). Cleaning...",
+                            currentScenario, (int) (getMemoryUsagePercent() * 100));
+                    emergencyCleanup();
+                }
+            } else {
+                // Not safe to GC (e.g. Combat), but pressure is high -> Low Memory Mode
+                if (!lowMemoryMode) {
+                    NozhConstants.LOGGER.warn(
+                            "Memory pressure detected ({}%) during {}, engaging Low Memory Mode instead of GC.",
+                            (int) (getMemoryUsagePercent() * 100), currentScenario);
+                    enableLowMemoryMode();
+                }
             }
         } else {
-            // Memory is fine, can disable low memory mode
+            // Memory is fine
             if (lowMemoryMode && getMemoryUsagePercent() < 0.7) {
                 disableLowMemoryMode();
             }

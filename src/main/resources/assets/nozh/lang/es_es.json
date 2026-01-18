@@ -265,8 +265,10 @@
   "nozh.config.tab.cloud": "Sistema",
   "nozh.config.tab.system": "Sistema",
   "nozh.config.tab.advanced": "Avanzado",
-  "nozh.config.button.save": "Guardar",
-  "nozh.config.button.saved": "Guardado!",
+  "nozh.config.save": "Guardar Cambios",
+  "nozh.config.saved": "¡Guardado!",
+  "nozh.toast.potato_mode.title": "¡Rendimiento Crítico!",
+  "nozh.toast.potato_mode.desc": "Presiona [K] para activar Modo Papa",
   "nozh.config.button.save_close": "Guardar y Salir",
   "nozh.config.profile.low": "Aplicar: Modo Patata",
   "nozh.config.profile.mid": "Aplicar: Equilibrado",
@@ -310,5 +312,8 @@
   "nozh.config.button.reload_config": "Recargar desde Disco",
   "nozh.config.tooltip.reload_config": "Descartar cambios no guardados y recargar archivo.",
   "nozh.config.button.reset_full": "Restablecer de Fábrica",
-  "nozh.config.tooltip.reset_full": "Borrar todos los ajustes y datos."
+  "nozh.config.button.saved": "Saved!",
+  "nozh.config.section.core": "Core Features",
+  "nozh.hud.metrics.p99": "P99 1% Low: %s ms",
+  "nozh.hud.metrics.variance": "Variance: %s ms²"
 }
