@@ -29,7 +29,11 @@ public final class RenderVisibilityDecider {
     }
 
     public static void recordGameRendererFrame() {
-        safeRun(() -> lastGameRendererFrameNanos.set(System.nanoTime()), "game renderer frame");
+        try {
+            lastGameRendererFrameNanos.set(System.nanoTime());
+        } catch (RuntimeException ex) {
+            warnOnce("game renderer frame", ex);
+        }
     }
 
     public static boolean resolveVisibility(BooleanSupplier supplier, String label) {
@@ -38,14 +42,6 @@ public final class RenderVisibilityDecider {
         } catch (RuntimeException ex) {
             warnOnce(label, ex);
             return true;
-        }
-    }
-
-    private static void safeRun(Runnable runnable, String label) {
-        try {
-            runnable.run();
-        } catch (RuntimeException ex) {
-            warnOnce(label, ex);
         }
     }
 

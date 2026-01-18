@@ -106,7 +106,8 @@ public class PerfManager implements CriticalEventSink {
         stats = new RollingWindowStats(capacity, newWindowSeconds);
         sampler = new FrameTimeSampler(stats);
         lastWindowAdjustMillis = System.currentTimeMillis();
-        NozhConstants.LOGGER.debug("PerfManager observation window set to {}s (capacity={})", newWindowSeconds, capacity);
+        NozhConstants.LOGGER.debug("PerfManager observation window set to {}s (capacity={})", newWindowSeconds,
+                capacity);
     }
 
     public Path exportTelemetry(Path outputDir, TelemetryExportFormat format) throws Exception {
@@ -176,12 +177,18 @@ public class PerfManager implements CriticalEventSink {
         renderPipelineTracer.beginPhase(phase);
     }
 
+    private static final double TRACE_THRESHOLD_MS = 0.5;
+
     public void onRenderPhaseEnd(RenderPhase phase) {
-        long duration = renderPipelineTracer.endPhase(phase);
-        if (duration > 0L) {
+        long durationNanos = renderPipelineTracer.endPhase(phase);
+        double durationMs = durationNanos / 1_000_000.0;
+
+        // OPTIMIZATION: Only trace significant events (>0.5ms) to avoid GC thrashing
+        // 500 entities @ 0.01ms each = 500 allocations/frame vs 0 allocations
+        if (durationMs >= TRACE_THRESHOLD_MS) {
             traceBuffer.record(PerfTraceEvent.render(
                     System.currentTimeMillis(),
-                    duration / 1_000_000.0,
+                    durationMs,
                     phase != null ? phase.name() : "UNKNOWN"));
         }
     }
