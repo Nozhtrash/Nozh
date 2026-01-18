@@ -131,9 +131,30 @@ public class NozhQuickMenu extends Screen {
         // Semi-transparent background
         this.renderBackground(context);
 
-        // Draw title
+        int centerX = this.width / 2;
+        int panelWidth = MENU_WIDTH + 40;
+        int panelHeight = 180;
+        int panelX = centerX - panelWidth / 2;
+        int panelY = this.height / 2 - 110;
+
+        // Draw panel background
+        context.fill(panelX, panelY, panelX + panelWidth, panelY + panelHeight, 0xCC1A1A1A);
+        // Panel border
+        context.drawHorizontalLine(panelX, panelX + panelWidth - 1, panelY, 0xFF4CAF50);
+        context.drawHorizontalLine(panelX, panelX + panelWidth - 1, panelY + panelHeight - 1, 0xFF4CAF50);
+        context.drawVerticalLine(panelX, panelY, panelY + panelHeight - 1, 0xFF4CAF50);
+        context.drawVerticalLine(panelX + panelWidth - 1, panelY, panelY + panelHeight - 1, 0xFF4CAF50);
+
+        // Draw title with color
         context.drawCenteredTextWithShadow(this.textRenderer, this.title,
-                this.width / 2, this.height / 2 - 100, 0xFFFFFF);
+                centerX, panelY + 8, 0x4CAF50);
+
+        // Draw mod status
+        NozhConfig config = ConfigManager.getConfig();
+        String statusText = config.enabled ? "[ACTIVE]" : "[DISABLED]";
+        int statusColor = config.enabled ? 0x00FF00 : 0xFF5555;
+        context.drawCenteredTextWithShadow(this.textRenderer, Text.literal(statusText),
+                centerX, panelY + 20, statusColor);
 
         // Draw suggestion info if available
         if (stateStore != null) {
@@ -143,7 +164,7 @@ public class NozhQuickMenu extends Screen {
                 String suggestionText = next.capability().name() + " -> " + next.newValue();
                 context.drawCenteredTextWithShadow(this.textRenderer,
                         Text.translatable("nozh.quickmenu.pending", suggestionText),
-                        this.width / 2, this.height / 2 - 88, 0xFFFF00);
+                        centerX, this.height / 2 - 88, 0xFFFF00);
             }
         }
 

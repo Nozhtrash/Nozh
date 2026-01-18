@@ -1,4 +1,4 @@
-{
+﻿{
   "nozh.hud.title": "HUD NOZH (%s)",
   "nozh.hud.mode": "Modo: %s",
   "nozh.hud.mode.auto": "Auto",
@@ -214,8 +214,8 @@
   "nozh.tutorial.complete.message": "¡Todo listo! Usa /nozh status para un resumen rápido.",
   "key.nozh.toggle_hud": "Alternar HUD",
   "key.nozh.apply_suggestion": "Aplicar sugerencia",
-  "key.nozh.confirm_suggestion": "Confirmar sugerencia (K)",
-  "key.nozh.dismiss_suggestion": "Descartar sugerencia (N)",
+  "key.nozh.confirm_suggestion": "Confirmar sugerencia ",
+  "key.nozh.dismiss_suggestion": "Descartar sugerencia ",
   "key.nozh.export_report": "Exportar reporte de telemetría",
   "key.nozh.quick_menu": "Menu Rapido NOZH",
   "category.nozh": "Optimización NOZH",

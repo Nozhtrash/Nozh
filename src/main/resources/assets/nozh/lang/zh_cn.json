@@ -1,4 +1,4 @@
-{
+﻿{
   "nozh.hud.title": "NOZH HUD (%s)",
   "nozh.hud.mode": "模式：%s",
   "nozh.hud.mode.auto": "自动",
@@ -43,7 +43,7 @@
   "nozh.hud.hud_time.ok": "正常",
   "nozh.hud.hud_time.slow": "慢",
   "nozh.hud.hud_time.unknown": "未知",
-  "nozh.hud.suggestion": "⚡ 建议：%s（按K）",
+  "nozh.hud.suggestion": "[!] 建议：%s（按K）",
   "nozh.hud.suggestion.none": "无",
   "nozh.hud.suggestion.apply_hint": "应用：%s",
   "nozh.hud.suggestion.apply_hint_many": "应用：%s（+%d更多）",
@@ -90,7 +90,7 @@
   "nozh.command.safemode.enabled": "安全模式已启用",
   "nozh.command.safemode.reset_success": "安全模式已重置",
   
-  "nozh.enable.success": "✓ NOZH已启用。自动调整已激活。",
+  "nozh.enable.success": "[OK] NOZH已启用。自动调整已激活。",
   "nozh.disable.success": "NOZH已禁用。",
   "nozh.status.header": "NOZH状态：",
   "nozh.status.mode.active": "活跃",

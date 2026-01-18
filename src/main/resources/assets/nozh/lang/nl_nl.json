@@ -1,4 +1,4 @@
-{
+﻿{
   "nozh.hud.title": "NOZH HUD (%s)",
   "nozh.hud.mode": "Modus: %s",
   "nozh.hud.mode.auto": "Auto",
@@ -43,7 +43,7 @@
   "nozh.hud.hud_time.ok": "OK",
   "nozh.hud.hud_time.slow": "Langzaam",
   "nozh.hud.hud_time.unknown": "Onbekend",
-  "nozh.hud.suggestion": "⚡ Suggestie: %s (Druk op K)",
+  "nozh.hud.suggestion": "[!] Suggestie: %s (Druk op K)",
   "nozh.hud.suggestion.none": "Geen",
   "nozh.hud.suggestion.apply_hint": "Toepassen: %s",
   "nozh.hud.suggestion.apply_hint_many": "Toepassen: %s (+%d meer)",
@@ -90,7 +90,7 @@
   "nozh.command.safemode.enabled": "Veilige modus ingeschakeld",
   "nozh.command.safemode.reset_success": "Veilige modus gereset",
   
-  "nozh.enable.success": "✓ NOZH ingeschakeld. Auto-tuning is actief.",
+  "nozh.enable.success": "[OK] NOZH ingeschakeld. Auto-tuning is actief.",
   "nozh.disable.success": "NOZH uitgeschakeld.",
   "nozh.status.header": "NOZH Status: ",
   "nozh.status.mode.active": "ACTIEF",

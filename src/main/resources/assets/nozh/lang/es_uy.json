@@ -1,4 +1,4 @@
-{
+﻿{
   "nozh.hud.title": "HUD NOZH (%s)",
   "nozh.hud.mode": "Modo: %s",
   "nozh.hud.mode.auto": "Auto",
@@ -43,7 +43,7 @@
   "nozh.hud.hud_time.ok": "OK",
   "nozh.hud.hud_time.slow": "Lento",
   "nozh.hud.hud_time.unknown": "Desconocido",
-  "nozh.hud.suggestion": "⚡ Sugerencia: %s (Presiona K)",
+  "nozh.hud.suggestion": "[!] Sugerencia: %s (Presiona K)",
   "nozh.hud.suggestion.none": "Ninguna",
   "nozh.hud.suggestion.apply_hint": "Aplicar: %s",
   "nozh.hud.suggestion.apply_hint_many": "Aplicar: %s (+%d más)",
@@ -90,7 +90,7 @@
   "nozh.command.safemode.enabled": "Modo seguro activado",
   "nozh.command.safemode.reset_success": "Modo seguro restablecido",
 
-  "nozh.enable.success": "✓ NOZH activado. Autoajuste activo.",
+  "nozh.enable.success": "[OK] NOZH activado. Autoajuste activo.",
   "nozh.disable.success": "NOZH desactivado.",
   "nozh.status.header": "Estado de NOZH: ",
   "nozh.status.mode.active": "ACTIVO",
@@ -222,8 +222,8 @@
 
   "key.nozh.toggle_hud": "Alternar HUD",
   "key.nozh.apply_suggestion": "Aplicar sugerencia",
-  "key.nozh.confirm_suggestion": "Confirmar sugerencia (K)",
-  "key.nozh.dismiss_suggestion": "Descartar sugerencia (N)",
+  "key.nozh.confirm_suggestion": "Confirmar sugerencia ",
+  "key.nozh.dismiss_suggestion": "Descartar sugerencia ",
   "key.nozh.export_report": "Exportar reporte de telemetría",
   "category.nozh": "Optimización NOZH"
 }
