@@ -108,17 +108,20 @@ public class NozhConfigScreen extends Screen {
                 // Quick Profiles
                 addDrawableChild(ButtonWidget.builder(Text.translatable("nozh.config.profile.low"), btn -> {
                         ConfigPresets.applyLowEnd();
-                        ConfigManager.saveAndNotify();
+                        this.config = ConfigManager.getConfig();
+                        this.clearAndInit();
                 }).dimensions(x, y, 150, 20).build());
 
                 addDrawableChild(ButtonWidget.builder(Text.translatable("nozh.config.profile.mid"), btn -> {
                         ConfigPresets.applyMidRange();
-                        ConfigManager.saveAndNotify();
+                        this.config = ConfigManager.getConfig();
+                        this.clearAndInit();
                 }).dimensions(x + 160, y, 150, 20).build());
 
                 addDrawableChild(ButtonWidget.builder(Text.translatable("nozh.config.profile.high"), btn -> {
                         ConfigPresets.applyHighEnd();
-                        ConfigManager.saveAndNotify();
+                        this.config = ConfigManager.getConfig();
+                        this.clearAndInit();
                 }).dimensions(x + 320, y, 150, 20).build());
 
                 // EXTREME Mode
@@ -126,7 +129,8 @@ public class NozhConfigScreen extends Screen {
                 addDrawableChild(ButtonWidget.builder(Text.translatable("nozh.config.profile.extreme"), btn -> {
                         // Manually set config to EXTREME profile
                         ConfigPresets.applyExtreme();
-                        ConfigManager.saveAndNotify();
+                        this.config = ConfigManager.getConfig();
+                        this.clearAndInit();
                 }).dimensions(x, y, 310, 20).build());
         }
 
