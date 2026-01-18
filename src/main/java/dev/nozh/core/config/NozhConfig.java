@@ -16,6 +16,7 @@ public class NozhConfig {
     public String language = "auto"; // UI language override: "auto", "en_us", "es_cl".
     public boolean showHud = true; // Controls HUD visibility in-game.
     public boolean showHudSuggestions = true; // Shows action suggestions in HUD for guidance.
+    public boolean showDebugOverlay = false; // Shows debug overlay with bottleneck/scenario info (requires showHud).
     public String hudMode = "ANALYST"; // HUD density preset: COMPACT, ANALYST, EXPERT.
     public String hudAnchor = "TOP_RIGHT"; // HUD anchor position on screen edges.
     public int hudOffsetX = 0; // Horizontal offset (pixels) from anchor.

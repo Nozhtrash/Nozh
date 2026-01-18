@@ -69,6 +69,7 @@ public class NozhModClient implements ClientModInitializer {
     private static KeyBinding toggleHudKey;
     private static KeyBinding applySuggestionKey;
     private static KeyBinding exportReportKey;
+    private static KeyBinding openConfigKey;
     private static ManualConfirmationHandler manualConfirmationHandler;
     private static TelemetryManager telemetryManager;
     private static boolean safeModeNotified = false;
@@ -228,6 +229,12 @@ public class NozhModClient implements ClientModInitializer {
                 GLFW.GLFW_KEY_P,
                 "category.nozh"));
 
+        openConfigKey = KeyBindingHelper.registerKeyBinding(new KeyBinding(
+                "key.nozh.open_config",
+                InputUtil.Type.KEYSYM,
+                GLFW.GLFW_KEY_O,
+                "category.nozh"));
+
         manualConfirmationHandler = new ManualConfirmationHandler(
                 stateStore,
                 actionBus,
@@ -316,6 +323,12 @@ public class NozhModClient implements ClientModInitializer {
                 while (exportReportKey.wasPressed()) {
                     exportHudReport(clientInstance);
                     advanceTutorialIfExpected(clientInstance, TUTORIAL_STEP_EXPORT);
+                }
+            }
+
+            if (openConfigKey != null) {
+                while (openConfigKey.wasPressed()) {
+                    clientInstance.setScreen(new dev.nozh.client.gui.NozhConfigScreen(clientInstance.currentScreen));
                 }
             }
 

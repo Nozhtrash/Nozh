@@ -1,5 +1,7 @@
 package dev.nozh.fabric.priority2;
 
+import dev.nozh.core.config.ConfigManager;
+import dev.nozh.core.config.NozhConfig;
 import dev.nozh.core.manual.PendingSuggestionQueue;
 import dev.nozh.core.priority2.Priority2Signals;
 import dev.nozh.core.scenario.DeepScenarioSnapshot;
@@ -10,6 +12,7 @@ import net.minecraft.client.gui.DrawContext;
 
 /**
  * v0.2: HUD overlay for Priority2 signals and manual suggestions.
+ * Only renders when config.showHud AND config.showDebugOverlay are both true.
  */
 public final class Priority2HudOverlay implements HudRenderCallback {
 
@@ -17,8 +20,10 @@ public final class Priority2HudOverlay implements HudRenderCallback {
     private final PendingSuggestionQueue pending;
 
     public Priority2HudOverlay(MinecraftClient client, PendingSuggestionQueue pending) {
-        if (client == null) throw new NullPointerException("client");
-        if (pending == null) throw new NullPointerException("pending");
+        if (client == null)
+            throw new NullPointerException("client");
+        if (pending == null)
+            throw new NullPointerException("pending");
         this.client = client;
         this.pending = pending;
     }
@@ -29,8 +34,16 @@ public final class Priority2HudOverlay implements HudRenderCallback {
 
     @Override
     public void onHudRender(DrawContext ctx, float tickDelta) {
-        if (client == null || client.options == null || client.textRenderer == null) return;
-        if (client.player == null) return;
+        // Respect unified HUD toggle
+        NozhConfig config = ConfigManager.getConfig();
+        if (config == null || !config.showHud || !config.showDebugOverlay) {
+            return;
+        }
+
+        if (client == null || client.options == null || client.textRenderer == null)
+            return;
+        if (client.player == null)
+            return;
 
         int x = 6;
         int y = 6;
@@ -41,7 +54,8 @@ public final class Priority2HudOverlay implements HudRenderCallback {
 
         String bottleneckLine = "NOZH v0.2: bottleneck=unknown";
         if (b != null) {
-            bottleneckLine = "NOZH v0.2: bottleneck=" + b.kind + " (conf=" + String.format(java.util.Locale.ROOT, "%.2f", b.confidence01) + ")";
+            bottleneckLine = "NOZH v0.2: bottleneck=" + b.kind + " (conf="
+                    + String.format(java.util.Locale.ROOT, "%.2f", b.confidence01) + ")";
         }
 
         ctx.drawTextWithShadow(client.textRenderer, bottleneckLine, x, y, 0xE6FFFFFF);

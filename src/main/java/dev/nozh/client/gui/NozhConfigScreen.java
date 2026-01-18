@@ -299,6 +299,21 @@ public class NozhConfigScreen extends Screen {
                                         }));
                         y += 25;
 
+                        // HUD: Debug Overlay Toggle
+                        addDrawableChild(new TooltipButton(x, y, 200, 20,
+                                        Text.translatable("nozh.config.hud.debug_overlay",
+                                                        config.showDebugOverlay ? Text.translatable("options.on")
+                                                                        : Text.translatable("options.off")),
+                                        Text.translatable("nozh.config.hud.debug_overlay.tooltip"),
+                                        btn -> {
+                                                config.showDebugOverlay = !config.showDebugOverlay;
+                                                btn.setMessage(Text.translatable("nozh.config.hud.debug_overlay",
+                                                                config.showDebugOverlay
+                                                                                ? Text.translatable("options.on")
+                                                                                : Text.translatable("options.off")));
+                                        }));
+                        y += 25;
+
                         // HUD: Anchor Cycle
                         addDrawableChild(new TooltipButton(x, y, 200, 20,
                                         Text.translatable("nozh.config.hud.anchor",
