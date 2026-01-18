@@ -14,7 +14,7 @@ public class NozhConfig {
     public boolean enabled = true; // Master switch: enables/disables the entire governor runtime.
     public boolean debugLogs = false; // Verbose logs for diagnosis; increases log volume.
     public String language = "auto"; // UI language override: "auto", "en_us", "es_cl".
-    public boolean showHud = true; // Controls HUD visibility in-game.
+    public boolean showHud = false; // Controls HUD visibility in-game (OFF by default).
     public boolean showHudSuggestions = true; // Shows action suggestions in HUD for guidance.
     public boolean showDebugOverlay = false; // Shows debug overlay with bottleneck/scenario info (requires showHud).
     public String hudMode = "ANALYST"; // HUD density preset: COMPACT, ANALYST, EXPERT.
